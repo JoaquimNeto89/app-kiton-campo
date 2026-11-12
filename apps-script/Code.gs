@@ -7,6 +7,7 @@
 const PIN_PADRAO = '123456';
 const VALIDADE_SESSAO_DIAS = 90;
 const TZ = 'America/Sao_Paulo';
+const TOLERANCIA_MIN = 15; // lançamento feito mais de 15 min depois do horário informado = lançamento tardio
 
 const ABA = {
   itens: 'Itens',
@@ -120,6 +121,21 @@ function data_(v) {
 function fmt_(v) {
   const d = data_(v);
   return d ? Utilities.formatDate(d, TZ, 'dd/MM/yyyy HH:mm') : '';
+}
+
+/** Horário informado pelo colaborador (yyyy-MM-ddTHH:mm). Vazio = agora. */
+function horarioInformado_(valor, agora) {
+  const t = txt_(valor);
+  if (!t) return agora;
+  const d = Utilities.parseDate(t.replace('T', ' ').slice(0, 16), TZ, 'yyyy-MM-dd HH:mm');
+  if (isNaN(d)) throw new Error('Horário inválido.');
+  if (d.getTime() > agora.getTime() + 5 * 60000) throw new Error('O horário não pode ser no futuro.');
+  if (agora.getTime() - d.getTime() > 31 * 864e5) throw new Error('Horário com mais de 30 dias. Fale com a administração.');
+  return d;
+}
+
+function tardio_(informado, lancado) {
+  return lancado.getTime() - informado.getTime() > TOLERANCIA_MIN * 60000;
 }
 
 function mapa_(g) {
@@ -290,6 +306,8 @@ function resumoSaida_(l, isaida) {
     motivo: txt_(l.get('Motivo')),
     destino: txt_(l.get('Destino')),
     veiculo: txt_(l.get('Veículo')),
+    tardio: txt_(l.get('Lançamento tardio')),
+    lancadoEm: fmt_(l.get('Saída lançada em')),
     itens: isaida.linhas.filter(x => txt_(x.get('Nº da saída')) === n)
       .map(x => ({ pat: txt_(x.get('Patrimônio')), desc: txt_(x.get('Descrição')), qtd: x.get('Quantidade'), situacao: txt_(x.get('Situação')) }))
   };
@@ -322,10 +340,14 @@ function registrarSaida_(u, req) {
   const saidas = ler_(ABA.saidas);
   const n = saidas.linhas.reduce((m, l) => Math.max(m, Number(l.get('Nº')) || 0), 0) + 1;
   const agora = new Date();
+  const quando = horarioInformado_(req.horario, agora);
+  const atrasado = tardio_(quando, agora);
   const g = req.geo || null;
   anexar_(saidas, {
     'Nº': n,
-    'Data e hora de saída': agora,
+    'Data e hora de saída': quando,
+    'Saída lançada em': agora,
+    'Lançamento tardio': atrasado ? 'Saída' : '',
     'Colaborador': u.nome,
     'Equipe': (req.equipe || []).join(', '),
     'Motivo': txt_(req.motivo),
@@ -347,7 +369,7 @@ function registrarSaida_(u, req) {
   });
   componentes.forEach(l => set_(itensT, l._linha, 'Situação', 'Fora'));
 
-  return { ok: true, n, quando: fmt_(agora), semLocalizacao: !g };
+  return { ok: true, n, quando: fmt_(quando), tardio: atrasado, semLocalizacao: !g };
 }
 
 // ---------- retorno ----------
@@ -359,8 +381,14 @@ function registrarRetorno_(u, req) {
   if (txt_(l.get('Data e hora de retorno'))) throw new Error('Esta saída já tem retorno registrado.');
   if (txt_(l.get('Colaborador')) !== u.nome && u.perfil !== 'Administrador') throw new Error('Só quem registrou a saída pode registrar o retorno.');
   const agora = new Date();
+  const quando = horarioInformado_(req.horario, agora);
+  const saiu = data_(l.get('Data e hora de saída'));
+  if (saiu && quando.getTime() < saiu.getTime()) throw new Error('O retorno não pode ser antes da saída (' + fmt_(saiu) + ').');
+  const atrasado = tardio_(quando, agora);
   const g = req.geo || null;
-  set_(saidas, l._linha, 'Data e hora de retorno', agora);
+  set_(saidas, l._linha, 'Data e hora de retorno', quando);
+  set_(saidas, l._linha, 'Retorno lançado em', agora);
+  if (atrasado) set_(saidas, l._linha, 'Lançamento tardio', txt_(l.get('Lançamento tardio')) ? 'Saída e retorno' : 'Retorno');
   set_(saidas, l._linha, 'Lat. retorno', g ? g.lat : '');
   set_(saidas, l._linha, 'Long. retorno', g ? g.lng : '');
   set_(saidas, l._linha, 'Precisão retorno (m)', g ? Math.round(g.acc) : '');
@@ -390,7 +418,7 @@ function registrarRetorno_(u, req) {
       }
     }
   });
-  return { ok: true, quando: fmt_(agora), semLocalizacao: !g };
+  return { ok: true, quando: fmt_(quando), tardio: atrasado, semLocalizacao: !g };
 }
 
 // ---------- administração ----------
@@ -418,8 +446,15 @@ function emAberto_() {
         quem: infoSaida[n] ? infoSaida[n].quem : '', destino: infoSaida[n] ? infoSaida[n].destino : ''
       };
     });
+  const limite = Date.now() - 30 * 864e5;
+  const tardios = saidas.linhas.filter(l => txt_(l.get('Lançamento tardio')) && (data_(l.get('Data e hora de saída')) || new Date(0)).getTime() > limite)
+    .map(l => ({
+      n: txt_(l.get('Nº')), colaborador: txt_(l.get('Colaborador')), destino: txt_(l.get('Destino')), qual: txt_(l.get('Lançamento tardio')),
+      saida: fmt_(l.get('Data e hora de saída')), saidaLancada: fmt_(l.get('Saída lançada em')),
+      retorno: fmt_(l.get('Data e hora de retorno')), retornoLancado: fmt_(l.get('Retorno lançado em'))
+    })).reverse();
   const semLocal = saidas.linhas.filter(l => txt_(l.get('Mapa saída')) === 'sem localização' || txt_(l.get('Mapa retorno')) === 'sem localização').length;
-  return { ok: true, semRetorno, pendentes, semLocal };
+  return { ok: true, semRetorno, pendentes, semLocal, tardios };
 }
 
 function conferir_(u, req) {
@@ -452,13 +487,14 @@ function fechamento_(req) {
     const d = data_(l.get('Data e hora de saída'));
     if (!d || Utilities.formatDate(d, TZ, 'yyyy-MM') !== mes) return;
     const quem = txt_(l.get('Colaborador'));
-    const p = porPessoa[quem] || (porPessoa[quem] = { nome: quem, saidas: 0, particular: 0, abastKiton: 0, abastColab: 0, valorColab: 0, semRetorno: 0 });
+    const p = porPessoa[quem] || (porPessoa[quem] = { nome: quem, saidas: 0, particular: 0, abastKiton: 0, abastColab: 0, valorColab: 0, semRetorno: 0, tardios: 0 });
     p.saidas++;
     if (txt_(l.get('Veículo')) === 'Particular') p.particular++;
     const ab = txt_(l.get('Abastecimento'));
     if (ab === 'Pago pela Kiton') p.abastKiton++;
     if (ab.indexOf('Pago pelo colaborador') === 0) { p.abastColab++; p.valorColab += Number(l.get('Valor abastecimento (R$)')) || 0; }
     if (!txt_(l.get('Data e hora de retorno'))) p.semRetorno++;
+    if (txt_(l.get('Lançamento tardio'))) p.tardios++;
   });
   return { ok: true, mes, pessoas: Object.keys(porPessoa).sort().map(k => porPessoa[k]) };
 }

@@ -8,357 +8,567 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <style>
-:root{--red:#CD0000;--yellow:#FFAF1F;--ink:#111;--muted:#5A6472;--line:#D9DDE3;--bg:#F4F5F7;--card:#fff;--ok:#1B7F3B;--warn:#B26A00}
+:root{
+  --vermelho:#CD0000; --vermelho-esc:#A30000; --amarelo:#FFAF1F; --amarelo-claro:#FFF3DA;
+  --preto:#000; --aco:#E6E9ED; --aco-esc:#C7CCD3; --texto:#1C1F23; --cinza:#5D6670;
+  --verde:#1F8A4C; --verde-claro:#E2F3E8; --branco:#fff;
+  --tit:"Barlow Semi Condensed","Arial Narrow",Arial,sans-serif;
+  --corpo:"Barlow",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
-header{position:sticky;top:0;z-index:5;background:#000;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:4px solid var(--red)}
-header img{height:28px;background:#fff;border-radius:6px;padding:2px}
-header .t{font-weight:700;flex:1}
-header button{background:none;border:1px solid #555;color:#fff;border-radius:8px;padding:6px 10px;font-size:14px}
-main{max-width:560px;margin:0 auto;padding:16px 16px 96px}
-h2{font-size:20px;margin:8px 0 12px}
-h3{font-size:16px;margin:20px 0 8px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
-.big{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--red);border-radius:12px;padding:18px 16px;margin-bottom:12px;font-size:18px;font-weight:700;color:var(--ink)}
-.big small{display:block;font-weight:400;font-size:14px;color:var(--muted);margin-top:2px}
-.big.alt{border-left-color:#000}
-label{display:block;font-weight:600;margin:14px 0 6px}
-input,select,textarea{width:100%;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
-textarea{min-height:70px}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 14px;font-size:15px}
-.chip.on{background:#000;color:#fff;border-color:#000}
-.btn{display:block;width:100%;padding:16px;border:0;border-radius:12px;font-size:17px;font-weight:700;background:var(--red);color:#fff;margin-top:18px}
-.btn.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
-.btn:disabled{opacity:.5}
-.item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
-.item:last-child{border-bottom:0}
-.item input[type=checkbox]{width:22px;height:22px;margin-top:2px;flex:none}
-.item .d{flex:1}
-.item .s{font-size:13px;color:var(--muted)}
-.item.off{opacity:.55}
-.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:#eee;margin-right:4px}
-.tag.red{background:#FDE7E7;color:var(--red)}
-.tag.ok{background:#E3F4E8;color:var(--ok)}
-.tag.warn{background:#FFF1D6;color:var(--warn)}
-.row3{display:flex;gap:6px;margin-top:8px}
-.row3 button{flex:1;padding:10px 4px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px}
-.row3 button.on{background:#000;color:#fff}
-.msg{padding:12px 14px;border-radius:10px;margin:10px 0;font-size:15px}
-.msg.err{background:#FDE7E7;color:#8A0000}
-.msg.ok{background:#E3F4E8;color:#0F5A27}
-.msg.info{background:#EEF0F3;color:var(--muted)}
-.tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
-.tabs button{flex:none;padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:15px}
-.tabs button.on{background:#000;color:#fff}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
-th{font-size:12px;color:var(--muted);text-transform:uppercase}
-.muted{color:var(--muted);font-size:14px}
-.spin{position:fixed;inset:0;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;z-index:20;font-weight:700}
-.hidden{display:none}
+html,body{margin:0;background:var(--aco);color:var(--texto);font:17px/1.4 var(--corpo);-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--amarelo);outline-offset:2px}
+.topo{position:sticky;top:0;z-index:10;background:var(--preto);color:#fff;display:flex;align-items:center;gap:10px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top))}
+.topo img{width:34px;height:34px;border-radius:8px;background:#fff}
+.topo .marca{font:700 19px/1 var(--tit);letter-spacing:.2px;flex:1}
+.topo .marca span{display:block;font:500 13px/1.3 var(--corpo);color:#B9C0C8;letter-spacing:0}
+.topo .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center}
+.faixa{height:4px;background:var(--vermelho)}
+main{max-width:560px;margin:0 auto;padding:18px 16px 120px}
+h1{font:700 26px/1.15 var(--tit);margin:4px 0 14px}
+h2{font:700 20px/1.2 var(--tit);margin:22px 0 10px}
+p{margin:0 0 10px}
+.suave{color:var(--cinza);font-size:15px}
+svg.i{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* Etiqueta de status: o elemento principal da tela inicial */
+.etiqueta{position:relative;background:var(--branco);border-radius:16px;padding:18px 18px 20px 26px;overflow:hidden;box-shadow:0 1px 0 var(--aco-esc)}
+.etiqueta::before{content:"";position:absolute;left:0;top:0;bottom:0;width:10px;background:var(--preto)}
+.etiqueta.campo::before{background:repeating-linear-gradient(-45deg,var(--amarelo) 0 12px,var(--preto) 12px 24px)}
+.etiqueta .furo{position:absolute;right:18px;top:18px;width:18px;height:18px;border-radius:50%;border:3px solid var(--aco-esc);background:var(--aco)}
+.etiqueta .estado{font:700 15px/1 var(--tit);display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--aco);color:var(--texto)}
+.etiqueta.campo .estado{background:var(--amarelo);color:#000}
+.etiqueta .onde{font:700 30px/1.08 var(--tit);margin:12px 0 6px;padding-right:30px}
+.etiqueta .det{color:var(--cinza);font-size:16px}
+.etiqueta .det b{color:var(--texto);font-weight:600}
+
+.acao{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:0;border-radius:14px;padding:18px;font:700 20px/1 var(--tit);background:var(--vermelho);color:#fff;margin-top:16px;min-height:62px}
+.acao:active{background:var(--vermelho-esc)}
+.acao.leve{background:var(--branco);color:var(--texto);border:2px solid var(--aco-esc)}
+.acao.preta{background:var(--preto)}
+.acao:disabled{opacity:.45}
+.acao svg.i{width:24px;height:24px}
+
+.atalhos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.atalho{background:var(--branco);border:0;border-radius:14px;padding:16px;text-align:left;display:flex;flex-direction:column;gap:10px;min-height:104px}
+.atalho b{font:700 18px/1.1 var(--tit)}
+.atalho span{font-size:14px;color:var(--cinza)}
+.regra{margin-top:20px;font-size:14px;color:var(--cinza);display:flex;gap:8px}
+
+/* Passos da saída */
+.passos{display:flex;gap:6px;margin:2px 0 6px}
+.passos i{flex:1;height:6px;border-radius:3px;background:var(--aco-esc)}
+.passos i.feito{background:var(--preto)}
+.passos i.atual{background:var(--vermelho)}
+.passo-nome{font-size:14px;color:var(--cinza);margin-bottom:6px}
+.grade{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opcao{background:var(--branco);border:2px solid transparent;border-radius:14px;padding:16px 14px;text-align:left;display:flex;flex-direction:column;gap:10px;min-height:96px;font-weight:600;font-size:16px;line-height:1.2}
+.opcao.larga{grid-column:1/-1;flex-direction:row;align-items:center;min-height:64px}
+.opcao.sel{border-color:var(--preto);box-shadow:inset 0 0 0 1px var(--preto)}
+.opcao.sel svg.i{color:var(--vermelho)}
+.linha{display:flex;align-items:center;gap:12px;width:100%;background:var(--branco);border:0;border-radius:12px;padding:14px;margin-bottom:8px;text-align:left;font-weight:600;min-height:56px}
+.linha small{display:block;font-weight:400;color:var(--cinza);font-size:14px}
+.linha .fim{margin-left:auto;color:var(--cinza)}
+.linha.sel{box-shadow:inset 0 0 0 2px var(--preto)}
+.campo-txt{width:100%;font:inherit;padding:14px;border:2px solid var(--aco-esc);border-radius:12px;background:#fff;color:var(--texto)}
+.campo-txt:focus{border-color:var(--preto);outline:none}
+textarea.campo-txt{min-height:84px;resize:vertical}
+.rotulo{font-weight:600;margin:16px 0 8px;display:block}
+
+.pessoas{display:flex;flex-wrap:wrap;gap:8px}
+.pessoa{border:2px solid var(--aco-esc);background:#fff;border-radius:999px;padding:10px 14px;font-weight:500}
+.pessoa.sel{background:var(--preto);border-color:var(--preto);color:#fff}
+
+/* Itens */
+.busca{position:sticky;top:64px;z-index:5;background:var(--aco);padding:6px 0 10px}
+.grupo{font:700 16px/1.2 var(--tit);color:var(--cinza);margin:16px 0 8px}
+.item{display:flex;gap:12px;align-items:center;background:var(--branco);border-radius:12px;padding:12px 14px;margin-bottom:8px;width:100%;border:2px solid transparent;text-align:left}
+.item .caixa{width:28px;height:28px;border-radius:8px;border:2px solid var(--aco-esc);display:grid;place-items:center;flex:none}
+.item.sel{border-color:var(--preto)}
+.item.sel .caixa{background:var(--preto);border-color:var(--preto);color:#fff}
+.item .nome{font-weight:600}
+.item .sub{font-size:14px;color:var(--cinza)}
+.item.ocupado{opacity:.6}
+.item.ocupado .caixa{border-style:dashed}
+.pat{display:inline-block;font-size:13px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--aco);margin-left:6px;vertical-align:1px}
+.aviso-item{display:inline-block;margin-top:4px;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--amarelo-claro);color:#7A4A00}
+
+/* Barra fixa inferior */
+.barra{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--branco);box-shadow:0 -1px 0 var(--aco-esc);padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+.barra .dentro{max-width:560px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.barra .acao{margin:0;flex:1}
+.barra .voltar{flex:none;width:62px;padding:0;background:var(--aco);color:var(--texto)}
+.contador{font-weight:600;font-size:15px;color:var(--cinza);margin-bottom:8px;max-width:560px;margin-left:auto;margin-right:auto}
+
+/* Resumo e confirmação */
+.resumo{background:var(--branco);border-radius:14px;padding:4px 16px}
+.resumo div{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--aco)}
+.resumo div:last-child{border-bottom:0}
+.resumo dt{color:var(--cinza)}
+.resumo dd{margin:0;font-weight:600;text-align:right}
+.feito-tela{text-align:center;padding-top:40px}
+.feito-tela .selo{width:96px;height:96px;border-radius:50%;background:var(--verde);color:#fff;display:grid;place-items:center;margin:0 auto 18px;animation:pop .35s ease-out}
+.feito-tela .selo svg.i{width:52px;height:52px;stroke-width:2.6}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.feito-tela .selo{animation:none}}
+
+.segmento{display:flex;background:var(--aco-esc);border-radius:12px;padding:4px;gap:4px;margin-top:8px}
+.segmento button{flex:1;border:0;background:transparent;border-radius:9px;padding:10px 6px;font-weight:600;font-size:15px}
+.segmento button.sel{background:#fff}
+.segmento button.sel.ruim{background:var(--vermelho);color:#fff}
+
+.cartao{background:var(--branco);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.cartao .t{font-weight:600}
+.selo-txt{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-right:6px}
+.selo-txt.amarelo{background:var(--amarelo-claro);color:#7A4A00}
+.selo-txt.vermelho{background:#FCE4E4;color:var(--vermelho-esc)}
+.selo-txt.laranja{background:#FFE2C2;color:#8A3B00}
+.cartao.tardio{box-shadow:inset 4px 0 0 #E8730C}
+.selo-txt.verde{background:var(--verde-claro);color:var(--verde)}
+.abas{display:flex;gap:8px;margin-bottom:14px}
+.abas button{flex:1;border:0;border-radius:12px;padding:12px 6px;background:#fff;font-weight:600}
+.abas button.sel{background:var(--preto);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:10px 6px;border-bottom:1px solid var(--aco)}
+th{font-size:13px;color:var(--cinza);font-weight:600}
+td.n{text-align:right}
+
+.msg{padding:12px 14px;border-radius:12px;margin:0 0 12px;font-size:15px;font-weight:500}
+.msg.erro{background:#FCE4E4;color:#7E0000}
+.msg.ok{background:var(--verde-claro);color:#105A30}
+.msg.info{background:#fff;color:var(--cinza)}
+.carregando{position:fixed;inset:0;z-index:30;background:rgba(230,233,237,.75);display:grid;place-items:center}
+.carregando div{background:#000;color:#fff;font-weight:600;padding:14px 20px;border-radius:12px}
+.oculto{display:none!important}
+.login-marca{text-align:center;margin:26px 0 22px}
+.login-marca img{width:84px;height:84px;border-radius:20px;background:#fff}
+.login-marca h1{margin:12px 0 4px}
+.pin{letter-spacing:10px;font-size:24px;text-align:center}
 </style>
 </head>
 <body>
-<header>
+<header class="topo">
   <img src="icon-192.png" alt="">
-  <div class="t">App Kiton Campo</div>
-  <button id="btnSair" class="hidden" type="button">Sair</button>
+  <div class="marca" id="marca">Kiton Campo</div>
+  <button class="icone-btn oculto" id="btnSair" type="button" aria-label="Sair do app"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg></button>
 </header>
+<div class="faixa"></div>
 <main id="app"></main>
-<div id="spin" class="spin hidden">Aguarde…</div>
+<div id="barra"></div>
+<div id="carregando" class="carregando oculto"><div>Aguarde…</div></div>
 <script src="config.js"></script>
 <script>
 'use strict';
-const $app = document.getElementById('app');
+const $app = document.getElementById('app'), $barra = document.getElementById('barra');
 const est = { token: null, usuario: null, dados: null };
 
-// ---------- armazenamento local (só o token) ----------
-const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
-const lerLocal = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+// ---------- ícones ----------
+const IC = {
+  cliente:'<path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-5h6v5M9 11h.01M15 11h.01"/>',
+  copel:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  compra:'<path d="M3 4h2l2.4 11h11.2L21 7H6.2M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>',
+  banco:'<path d="M3 10h18L12 4zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/>',
+  interno:'<path d="M3 11 12 4l9 7M5 10v10h14V10M10 20v-6h4v6"/>',
+  outro:'<path d="M5 12h.01M12 12h.01M19 12h.01"/>',
+  van:'<path d="M2 17V7a1 1 0 0 1 1-1h11l5 5h2a1 1 0 0 1 1 1v5h-2M2 17h2M9 17h6M14 6v5h5"/><circle cx="6.5" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+  carro:'<path d="M5 17H3v-4l2-5h11l3 5h2v4h-2M8 17h7M5 13h14"/><circle cx="6.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/>',
+  pe:'<circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 3v4M7 12l3-4 4 1 2 4 3 1"/>',
+  ferr:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
+  comb:'<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M15 9h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V8l-3-3M7 8h5"/>',
+  sem:'<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+  ok:'<path d="m5 12 5 5 9-10"/>',
+  seta:'<path d="m9 6 6 6-6 6"/>',
+  voltar:'<path d="m15 6-6 6 6 6"/>',
+  saida:'<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M9 8l4 4-4 4M13 12H3"/>',
+  retorno:'<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l-4 4 4 4M11 12h10"/>',
+  admin:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2zM9 13l2 2 4-4"/>',
+  pessoas:'<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6"/>'
+};
+const ic = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[n] || IC.outro}</svg>`;
+const icMotivo = m => /cliente/i.test(m) ? 'cliente' : /copel|concession/i.test(m) ? 'copel' : /compra|material/i.test(m) ? 'compra' : /banco|órgão|orgao/i.test(m) ? 'banco' : /interno/i.test(m) ? 'interno' : 'outro';
+const icVeiculo = v => /kiton|dobl/i.test(v) ? 'van' : /partic/i.test(v) ? 'carro' : 'pe';
+const icAbast = a => /não|nao/i.test(a) ? 'sem' : 'comb';
 
 // ---------- utilidades ----------
+const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+const lerLocal = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const spin = on => document.getElementById('spin').classList.toggle('hidden', !on);
-const msg = (tipo, texto) => `<div class="msg ${tipo}">${esc(texto)}</div>`;
+const carregando = on => document.getElementById('carregando').classList.toggle('oculto', !on);
+const msg = (tipo, t) => `<div class="msg ${tipo}" role="status">${esc(t)}</div>`;
+const hora = s => String(s || '').slice(-5);
+const primeiroNome = n => String(n || '').replace(/^Eng\.\s*/, '').split(' ')[0];
+const barra = html => { $barra.innerHTML = html ? `<div class="barra">${html}</div>` : ''; };
+const topo = (sub) => { document.getElementById('marca').innerHTML = `Kiton Campo${sub ? `<span>${esc(sub)}</span>` : ''}`; };
 
 async function api(acao, dados = {}) {
   if (!window.API_URL || API_URL.indexOf('http') !== 0) throw new Error('O endereço do Apps Script ainda não foi configurado (config.js).');
-  const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: est.token, ...dados }) });
+  let r;
+  try {
+    r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: est.token, ...dados }) });
+  } catch (e) { throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'); }
   const j = await r.json();
   if (!j.ok) {
     if (j.erro === 'SESSAO_INVALIDA') { sair(); throw new Error('Sua sessão expirou. Entre de novo.'); }
     if (j.erro === 'TROCAR_PIN') { telaTrocarPin(); throw new Error('Crie o seu PIN para continuar.'); }
-    throw new Error(j.erro || 'Erro desconhecido.');
+    throw new Error(j.erro || 'Algo deu errado. Tente de novo.');
   }
   return j;
 }
-
 function localizacao() {
   return new Promise(res => {
     if (!navigator.geolocation) return res(null);
     navigator.geolocation.getCurrentPosition(
       p => res({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: p.coords.accuracy }),
-      () => res(null),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+      () => res(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
   });
 }
-
 async function executar(fn) {
-  spin(true);
-  try { return await fn(); }
-  catch (e) { erroTela(e.message); }
-  finally { spin(false); }
+  carregando(true);
+  try { return await fn(); } catch (e) { erroTela(e.message); } finally { carregando(false); }
 }
 function erroTela(t) {
   const box = document.getElementById('erro');
-  if (box) { box.innerHTML = msg('err', t); box.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-  else alert(t);
+  if (box) { box.innerHTML = msg('erro', t); box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } else alert(t);
 }
-
 function sair() {
-  est.token = null; est.usuario = null; est.dados = null;
-  guardar('kc_token', null);
-  telaLogin();
+  est.token = null; est.usuario = null; est.dados = null; guardar('kc_token', null); telaLogin();
 }
 document.getElementById('btnSair').onclick = () => { if (confirm('Sair do app neste celular?')) sair(); };
 
-// ---------- login ----------
-async function telaLogin() {
-  document.getElementById('btnSair').classList.add('hidden');
-  $app.innerHTML = `<h2>Entrar</h2><div id="erro"></div>
-    <div class="card">
-      <label for="nome">Seu nome</label><select id="nome"><option value="">Carregando…</option></select>
-      <label for="pin">PIN (6 números)</label><input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
-      <button class="btn" id="entrar" type="button">Entrar</button>
-      <p class="muted">No primeiro acesso o PIN é 123456 e o app pede para trocar.</p>
-    </div>`;
-  try {
-    const r = await api('nomes');
-    document.getElementById('nome').innerHTML = '<option value="">Selecione</option>' + r.nomes.map(n => `<option>${esc(n)}</option>`).join('');
-    const ult = lerLocal('kc_ultimo_nome'); if (ult) document.getElementById('nome').value = ult;
-  } catch (e) { erroTela(e.message); }
-  document.getElementById('entrar').onclick = () => executar(async () => {
-    const nome = document.getElementById('nome').value, pin = document.getElementById('pin').value;
-    if (!nome || !pin) throw new Error('Escolha o nome e digite o PIN.');
-    const r = await api('login', { nome, pin });
-    est.token = r.token; est.usuario = r.usuario;
-    guardar('kc_token', r.token); guardar('kc_ultimo_nome', nome);
-    r.usuario.trocaPendente ? telaTrocarPin() : carregarInicio();
+// ---------- horário: agora ou informado ----------
+const doisDig = n => String(n).padStart(2, '0');
+const agoraLocal = () => { const d = new Date(); return `${d.getFullYear()}-${doisDig(d.getMonth() + 1)}-${doisDig(d.getDate())}T${doisDig(d.getHours())}:${doisDig(d.getMinutes())}`; };
+function blocoHorario(id, pergunta) {
+  return `<label class="rotulo">${esc(pergunta)}</label>
+    <div class="segmento" id="${id}-seg"><button type="button" class="sel" data-v="agora">Agora</button><button type="button" data-v="outro">Outro horário</button></div>
+    <div id="${id}-box" class="oculto" style="margin-top:10px"><input class="campo-txt" id="${id}" type="datetime-local" max="${agoraLocal()}">
+    <p class="suave" style="margin-top:6px">Use quando esqueceu de registrar na hora. A administração vê que o lançamento foi feito depois.</p></div>`;
+}
+function ligarHorario(id) {
+  document.querySelectorAll(`#${id}-seg button`).forEach(b => b.onclick = () => {
+    document.querySelectorAll(`#${id}-seg button`).forEach(x => x.classList.toggle('sel', x === b));
+    const outro = b.dataset.v === 'outro';
+    document.getElementById(`${id}-box`).classList.toggle('oculto', !outro);
+    if (outro && !document.getElementById(id).value) document.getElementById(id).value = agoraLocal();
   });
 }
+function lerHorario(id) {
+  const outro = document.querySelector(`#${id}-seg .sel`).dataset.v === 'outro';
+  if (!outro) return '';
+  const v = document.getElementById(id).value;
+  if (!v) throw new Error('Informe o horário ou escolha "Agora".');
+  if (v > agoraLocal()) throw new Error('O horário não pode ser no futuro.');
+  return v;
+}
 
+// ---------- entrar ----------
+async function telaLogin() {
+  document.getElementById('btnSair').classList.add('oculto'); topo(); barra('');
+  $app.innerHTML = `<div class="login-marca"><img src="icon-192.png" alt=""><h1>Entrar no Kiton Campo</h1><p class="suave">Registro de saídas, ferramentas e retorno</p></div>
+    <div id="erro"></div>
+    <label class="rotulo" for="nome">Quem é você?</label>
+    <div id="nomes"><p class="suave">Carregando nomes…</p></div>
+    <label class="rotulo" for="pin">PIN</label>
+    <input class="campo-txt pin" id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••••">
+    <p class="suave" style="margin-top:8px">No primeiro acesso o PIN é 123456. Depois o app pede para você criar o seu.</p>`;
+  barra(`<div class="dentro"><button class="acao" id="entrar" type="button">Entrar</button></div>`);
+  let escolhido = lerLocal('kc_ultimo_nome') || '';
+  try {
+    const r = await api('nomes');
+    const desenha = () => {
+      document.getElementById('nomes').innerHTML = r.nomes.map(n => `<button type="button" class="linha ${n === escolhido ? 'sel' : ''}" data-n="${esc(n)}">${ic('pessoas')}${esc(n)}${n === escolhido ? `<span class="fim">${ic('ok')}</span>` : ''}</button>`).join('');
+      document.querySelectorAll('#nomes [data-n]').forEach(b => b.onclick = () => { escolhido = b.dataset.n; desenha(); document.getElementById('pin').focus(); });
+    };
+    desenha();
+  } catch (e) { erroTela(e.message); }
+  const entrar = () => executar(async () => {
+    const pin = document.getElementById('pin').value;
+    if (!escolhido) throw new Error('Toque no seu nome.');
+    if (pin.length !== 6) throw new Error('O PIN tem 6 números.');
+    const r = await api('login', { nome: escolhido, pin });
+    est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token); guardar('kc_ultimo_nome', escolhido);
+    r.usuario.trocaPendente ? telaTrocarPin() : carregarInicio();
+  });
+  document.getElementById('entrar').onclick = entrar;
+  document.getElementById('pin').onkeydown = e => { if (e.key === 'Enter') entrar(); };
+}
 function telaTrocarPin() {
-  $app.innerHTML = `<h2>Crie o seu PIN</h2><div id="erro"></div>
-    <div class="card">
-      <p class="muted">Escolha 6 números que só você saiba. Não vale 123456 nem sequências simples (111111, 123123).</p>
-      <label for="p1">Novo PIN</label><input id="p1" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
-      <label for="p2">Repita o PIN</label><input id="p2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
-      <button class="btn" id="ok" type="button">Salvar PIN</button>
-    </div>`;
+  topo(); barra('');
+  $app.innerHTML = `<h1>Crie o seu PIN</h1><div id="erro"></div>
+    <p class="suave">São 6 números que só você sabe. Não vale 123456 nem sequências como 111111 ou 123123.</p>
+    <label class="rotulo" for="p1">Novo PIN</label><input class="campo-txt pin" id="p1" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+    <label class="rotulo" for="p2">Repita o PIN</label><input class="campo-txt pin" id="p2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">`;
+  barra(`<div class="dentro"><button class="acao" id="ok" type="button">Salvar PIN</button></div>`);
   document.getElementById('ok').onclick = () => executar(async () => {
     const a = document.getElementById('p1').value, b = document.getElementById('p2').value;
-    if (a !== b) throw new Error('Os dois PINs não são iguais.');
+    if (a !== b) throw new Error('Os dois PINs estão diferentes.');
     const r = await api('trocarPin', { novo: a });
-    est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token);
-    carregarInicio();
+    est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token); carregarInicio();
   });
 }
 
 // ---------- início ----------
-async function carregarInicio(aviso) {
-  await executar(async () => {
-    const r = await api('inicio');
-    est.dados = r; est.usuario = r.usuario;
-    telaInicio(aviso);
-  });
+async function carregarInicio() {
+  await executar(async () => { const r = await api('inicio'); est.dados = r; est.usuario = r.usuario; telaInicio(); });
+}
+function telaInicio() {
+  document.getElementById('btnSair').classList.remove('oculto');
+  topo(est.usuario.nome); barra('');
+  const d = est.dados, admin = est.usuario.perfil === 'Administrador', ab = d.abertas;
+  let etiqueta;
+  if (ab.length) {
+    const s = ab[0];
+    const extra = ab.length > 1 ? `<p class="suave" style="margin-top:8px">E mais ${ab.length - 1} saída(s) em aberto.</p>` : '';
+    etiqueta = `<section class="etiqueta campo" aria-label="Você está em campo">
+      <span class="furo"></span><span class="estado">Em campo desde ${esc(hora(s.saida))}</span>
+      <div class="onde">${esc(s.destino)}</div>
+      <div class="det"><b>${esc(s.veiculo)}</b>${s.equipe ? ` com ${esc(s.equipe)}` : ''}<br>${s.itens.length ? `Levando ${s.itens.length} ${s.itens.length === 1 ? 'item' : 'itens'}` : 'Sem ferramentas registradas'}</div>${extra}
+      <button class="acao" id="bRetorno" type="button">${ic('retorno')} Registrar retorno</button>
+    </section>
+    <button class="acao leve" id="bSaida" type="button">${ic('saida')} Nova saída</button>`;
+  } else {
+    etiqueta = `<section class="etiqueta" aria-label="Você está na base">
+      <span class="furo"></span><span class="estado">Na base</span>
+      <div class="onde">Vai sair?</div>
+      <div class="det">Registre antes de sair: para onde vai, com qual veículo e o que está levando.</div>
+      <button class="acao" id="bSaida" type="button">${ic('saida')} Registrar saída</button>
+    </section>`;
+  }
+  $app.innerHTML = `<h1>Olá, ${esc(primeiroNome(est.usuario.nome))}</h1>${etiqueta}
+    ${admin ? `<div class="atalhos"><button class="atalho" id="bAdmin" type="button">${ic('admin')}<b>Conferir e fechar</b><span>Itens devolvidos, saídas em aberto e fechamento do mês</span></button>
+      <button class="atalho" id="bAcessos" type="button">${ic('pessoas')}<b>Acessos</b><span>Redefinir o PIN de alguém</span></button></div>` : ''}
+    <p class="regra">${ic('comb')}<span>Só são ressarcidas as saídas registradas aqui.</span></p>`;
+  document.getElementById('bSaida').onclick = () => fluxoSaida();
+  if (ab.length) document.getElementById('bRetorno').onclick = () => ab.length === 1 ? telaRetorno(ab[0]) : telaEscolherRetorno();
+  if (admin) { document.getElementById('bAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('bAcessos').onclick = () => telaAdmin('acessos'); }
 }
 
-function telaInicio(aviso) {
-  document.getElementById('btnSair').classList.remove('hidden');
-  const d = est.dados, admin = est.usuario.perfil === 'Administrador';
-  const ab = d.abertas.length;
-  $app.innerHTML = `<h2>Olá, ${esc(est.usuario.nome.split(' ').slice(-2).join(' '))}</h2>
-    ${aviso ? msg('ok', aviso) : ''}
-    <button class="big" id="bSaida" type="button">Registrar saída<small>Para onde vai, com qual veículo e o que está levando</small></button>
-    <button class="big" id="bRetorno" type="button">Registrar retorno<small>${ab ? ab + (ab === 1 ? ' saída em aberto' : ' saídas em aberto') : 'Nenhuma saída em aberto'}</small></button>
-    ${admin ? '<button class="big alt" id="bAdmin" type="button">Administração<small>Em aberto, conferência, fechamento do mês e acessos</small></button>' : ''}
-    <p class="muted">Somente serão ressarcidos os valores referentes às saídas registradas neste controle.</p>`;
-  document.getElementById('bSaida').onclick = telaSaida;
-  document.getElementById('bRetorno').onclick = telaRetornoLista;
-  if (admin) document.getElementById('bAdmin').onclick = () => telaAdmin('aberto');
-}
-
-// ---------- saída ----------
-function telaSaida() {
+// ---------- saída em passos ----------
+function fluxoSaida() {
   const d = est.dados;
-  const outros = d.colaboradores.filter(n => n !== est.usuario.nome);
-  const sel = new Set();
-  $app.innerHTML = `<h2>Registrar saída</h2><div id="erro"></div>
-    <div class="card">
-      <label>Motivo</label><div class="chips" id="motivo">${d.motivos.map(m => `<button type="button" class="chip" data-v="${esc(m)}">${esc(m)}</button>`).join('')}</div>
-      <label for="destino">Destino</label>
-      <select id="destino"><option value="">Selecione o cliente</option>${d.clientes.map(c => `<option>${esc(c)}</option>`).join('')}<option value="__outro">Outro (digitar)</option></select>
-      <input id="destinoOutro" class="hidden" placeholder="Ex.: loja de materiais, Copel Maringá" style="margin-top:8px">
-      <label>Veículo</label><div class="chips" id="veiculo">${d.veiculos.map(v => `<button type="button" class="chip" data-v="${esc(v)}">${esc(v)}</button>`).join('')}</div>
-      ${outros.length ? `<label>Quem vai junto (opcional)</label><div class="chips" id="equipe">${outros.map(n => `<button type="button" class="chip" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
-    </div>
-    <div class="card">
-      <label for="busca" style="margin-top:0">Ferramentas e EPC (opcional)</label>
-      <input id="busca" placeholder="Buscar por nome, número ou patrimônio">
-      <div id="lista"></div>
-    </div>
-    <div class="card"><label for="obs" style="margin-top:0">Observação (opcional)</label><textarea id="obs"></textarea></div>
-    <button class="btn" id="confirmar" type="button">Confirmar saída</button>
-    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
-  const unico = id => document.getElementById(id).querySelectorAll('.chip').forEach(b => b.onclick = () => {
-    document.getElementById(id).querySelectorAll('.chip').forEach(x => x.classList.remove('on')); b.classList.add('on');
-  });
-  unico('motivo'); unico('veiculo');
-  if (outros.length) document.getElementById('equipe').querySelectorAll('.chip').forEach(b => b.onclick = () => b.classList.toggle('on'));
-  const dest = document.getElementById('destino');
-  dest.onchange = () => document.getElementById('destinoOutro').classList.toggle('hidden', dest.value !== '__outro');
-
-  const itens = d.itens.filter(i => !i.kit); // componentes saem junto com o kit
-  const comp = pat => d.itens.filter(i => i.kit === pat).map(i => i.desc);
-  const desenhar = () => {
-    const q = document.getElementById('busca').value.trim().toLowerCase();
-    const vis = itens.filter(i => !q || [i.desc, i.grupo, i.ident, i.pat].join(' ').toLowerCase().includes(q));
-    document.getElementById('lista').innerHTML = vis.length ? vis.map(i => {
-      const livre = i.situacao === 'Disponível';
-      const info = livre ? '' : (i.comQuem ? `com ${i.comQuem} desde ${i.desde}` : i.situacao);
-      const nome = i.grupo && i.ident ? `${i.grupo} ${i.ident}` : i.desc;
-      const kit = i.tipo === 'Kit' ? `<div class="s">Contém: ${esc(comp(i.pat).join(', ') || '(sem componentes cadastrados)')}</div>` : '';
-      return `<label class="item ${livre ? '' : 'off'}" style="margin:0;font-weight:400"><input type="checkbox" data-p="${esc(i.pat)}" ${livre ? '' : 'disabled'} ${sel.has(i.pat) ? 'checked' : ''}>
-        <div class="d"><b>${esc(nome)}</b> <span class="tag">${esc(i.pat)}</span>${i.tipo === 'EPC' ? '<span class="tag warn">EPC</span>' : ''}${i.tipo === 'Kit' ? '<span class="tag">Kit</span>' : ''}
-        <div class="s">${esc(nome !== i.desc ? i.desc : '')}</div>${kit}${info ? `<div class="s"><span class="tag red">${esc(info)}</span></div>` : ''}</div></label>`;
-    }).join('') : '<p class="muted">Nenhum item encontrado.</p>';
-    document.getElementById('lista').querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => { c.checked ? sel.add(c.dataset.p) : sel.delete(c.dataset.p); });
+  const f = { motivo: '', destino: '', veiculo: '', equipe: new Set(), itens: new Set(), obs: '' };
+  const passos = ['Motivo', 'Destino', 'Veículo e equipe', 'Ferramentas e EPC', 'Conferir'];
+  let p = 0;
+  const cab = () => `<div class="passos">${passos.map((_, i) => `<i class="${i < p ? 'feito' : i === p ? 'atual' : ''}"></i>`).join('')}</div><div class="passo-nome">Passo ${p + 1} de ${passos.length}</div><div id="erro"></div>`;
+  const rodape = (txtAvancar, pode) => barra(`${p === 3 ? `<div class="contador">${f.itens.size ? f.itens.size + (f.itens.size === 1 ? ' item selecionado' : ' itens selecionados') : 'Nenhum item selecionado'}</div>` : ''}
+    <div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button>
+    <button class="acao" id="prox" type="button" ${pode ? '' : 'disabled'}>${txtAvancar}</button></div>`);
+  const ligar = () => {
+    document.getElementById('ant').onclick = () => { if (p === 0) telaInicio(); else { p--; desenhar(); } };
+    const pr = document.getElementById('prox'); if (pr) pr.onclick = () => { if (p < 4) { p++; desenhar(); } else confirmar(); };
   };
-  document.getElementById('busca').oninput = desenhar; desenhar();
-  document.getElementById('voltar').onclick = () => telaInicio();
-  document.getElementById('confirmar').onclick = () => executar(async () => {
-    const motivo = (document.querySelector('#motivo .on') || {}).dataset?.v;
-    const veiculo = (document.querySelector('#veiculo .on') || {}).dataset?.v;
-    const destino = dest.value === '__outro' ? document.getElementById('destinoOutro').value.trim() : dest.value;
-    if (!motivo) throw new Error('Escolha o motivo.');
-    if (!destino) throw new Error('Informe o destino.');
-    if (!veiculo) throw new Error('Escolha o veículo.');
-    const equipe = outros.length ? [...document.querySelectorAll('#equipe .on')].map(b => b.dataset.v) : [];
-    const geo = await localizacao();
-    const r = await api('registrarSaida', { motivo, destino, veiculo, equipe, itens: [...sel].map(pat => ({ pat, qtd: 1 })), obs: document.getElementById('obs').value, geo });
-    await carregarInicio(`Saída nº ${r.n} registrada às ${r.quando.slice(-5)}.${r.semLocalizacao ? ' Localização não disponível.' : ''}`);
-  });
+  const avancarSozinho = () => setTimeout(() => { p++; desenhar(); }, 150);
+  const itensBase = d.itens.filter(i => !i.kit);
+  const comp = pat => d.itens.filter(i => i.kit === pat).map(i => i.desc);
+  const nomeItem = i => i.grupo && i.ident ? `${i.grupo} ${i.ident}` : i.desc;
+
+  function desenhar() {
+    window.scrollTo(0, 0);
+    if (p === 0) {
+      $app.innerHTML = `${cab()}<h1>Por que você vai sair?</h1><div class="grade">
+        ${d.motivos.map(m => `<button type="button" class="opcao ${f.motivo === m ? 'sel' : ''}" data-v="${esc(m)}">${ic(icMotivo(m))}${esc(m)}</button>`).join('')}</div>`;
+      $app.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { f.motivo = b.dataset.v; if (/interno/i.test(f.motivo)) f.destino = f.destino || 'Kiton (uso interno)'; desenhar(); avancarSozinho(); });
+      rodape('Continuar', !!f.motivo);
+    } else if (p === 1) {
+      const lista = d.clientes;
+      $app.innerHTML = `${cab()}<h1>Para onde?</h1>
+        <input class="campo-txt" id="buscaDest" placeholder="Buscar cliente ou digitar outro destino" value="">
+        <div id="dests" style="margin-top:10px"></div>`;
+      const busca = document.getElementById('buscaDest');
+      const pintar = () => {
+        const q = busca.value.trim().toLowerCase();
+        const vis = lista.filter(c => !q || c.toLowerCase().includes(q));
+        const livre = busca.value.trim() && !lista.some(c => c.toLowerCase() === q);
+        document.getElementById('dests').innerHTML =
+          (livre ? `<button type="button" class="linha" data-v="${esc(busca.value.trim())}">${ic('outro')}<span>Usar “${esc(busca.value.trim())}”<small>Destino que não está na lista</small></span></button>` : '') +
+          vis.map(c => `<button type="button" class="linha ${f.destino === c ? 'sel' : ''}" data-v="${esc(c)}">${ic('cliente')}${esc(c)}${f.destino === c ? `<span class="fim">${ic('ok')}</span>` : ''}</button>`).join('');
+        document.querySelectorAll('#dests [data-v]').forEach(b => b.onclick = () => { f.destino = b.dataset.v; pintar(); rodape('Continuar', true); ligar(); avancarSozinho(); });
+      };
+      busca.oninput = pintar; pintar();
+      rodape('Continuar', !!f.destino);
+    } else if (p === 2) {
+      const outros = d.colaboradores.filter(n => n !== est.usuario.nome);
+      $app.innerHTML = `${cab()}<h1>Como você vai?</h1><div class="grade">
+        ${d.veiculos.map(v => `<button type="button" class="opcao ${/sem/i.test(v) ? 'larga' : ''} ${f.veiculo === v ? 'sel' : ''}" data-v="${esc(v)}">${ic(icVeiculo(v))}${esc(v)}</button>`).join('')}</div>
+        ${outros.length ? `<label class="rotulo">Quem vai junto?</label><div class="pessoas">${outros.map(n => `<button type="button" class="pessoa ${f.equipe.has(n) ? 'sel' : ''}" data-p="${esc(n)}">${esc(n)}</button>`).join('')}</div><p class="suave" style="margin-top:8px">Opcional. Quem for junto não precisa registrar de novo.</p>` : ''}`;
+      $app.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { f.veiculo = b.dataset.v; desenhar(); });
+      $app.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { f.equipe.has(b.dataset.p) ? f.equipe.delete(b.dataset.p) : f.equipe.add(b.dataset.p); b.classList.toggle('sel'); });
+      rodape('Continuar', !!f.veiculo);
+    } else if (p === 3) {
+      $app.innerHTML = `${cab()}<h1>O que você vai levar?</h1><p class="suave">Marque as ferramentas e EPC de uso coletivo. Se não levar nada, é só continuar.</p>
+        <div class="busca"><input class="campo-txt" id="buscaItem" placeholder="Buscar: escada, luva, K-0010…"></div><div id="itens"></div>`;
+      const pintar = () => {
+        const q = document.getElementById('buscaItem').value.trim().toLowerCase();
+        const vis = itensBase.filter(i => !q || [i.desc, i.grupo, i.ident, i.pat].join(' ').toLowerCase().includes(q));
+        const grupos = {};
+        vis.forEach(i => { const g = i.tipo === 'Kit' ? 'Kits' : i.tipo === 'EPC' ? 'EPC' : 'Ferramentas'; (grupos[g] = grupos[g] || []).push(i); });
+        document.getElementById('itens').innerHTML = Object.keys(grupos).length ? ['Ferramentas', 'EPC', 'Kits'].filter(g => grupos[g]).map(g => `<div class="grupo">${g}</div>` + grupos[g].map(i => {
+          const livre = i.situacao === 'Disponível', sel = f.itens.has(i.pat);
+          const motivo = livre ? '' : (i.comQuem ? `Com ${esc(primeiroNome(i.comQuem))} desde ${esc(i.desde)}` : esc(i.situacao));
+          return `<button type="button" class="item ${sel ? 'sel' : ''} ${livre ? '' : 'ocupado'}" data-p="${esc(i.pat)}" ${livre ? '' : 'aria-disabled="true"'}>
+            <span class="caixa">${sel ? ic('ok') : ''}</span>
+            <span><span class="nome">${esc(nomeItem(i))}</span><span class="pat">${esc(i.pat)}</span>
+            ${nomeItem(i) !== i.desc ? `<div class="sub">${esc(i.desc)}</div>` : ''}
+            ${i.tipo === 'Kit' ? `<div class="sub">Contém: ${esc(comp(i.pat).join(', ') || 'componentes não cadastrados')}</div>` : ''}
+            ${motivo ? `<span class="aviso-item">${motivo}</span>` : ''}</span></button>`;
+        }).join('')).join('') : '<p class="suave">Nenhum item com esse nome.</p>';
+        document.querySelectorAll('#itens [data-p]').forEach(b => b.onclick = () => {
+          if (b.getAttribute('aria-disabled')) return;
+          f.itens.has(b.dataset.p) ? f.itens.delete(b.dataset.p) : f.itens.add(b.dataset.p); pintar(); rodape('Continuar', true); ligar();
+        });
+      };
+      document.getElementById('buscaItem').oninput = pintar; pintar();
+      rodape('Continuar', true);
+    } else {
+      const sel = itensBase.filter(i => f.itens.has(i.pat));
+      $app.innerHTML = `${cab()}<h1>Confira a saída</h1>
+        <dl class="resumo">
+          <div><dt>Motivo</dt><dd>${esc(f.motivo)}</dd></div>
+          <div><dt>Destino</dt><dd>${esc(f.destino)}</dd></div>
+          <div><dt>Veículo</dt><dd>${esc(f.veiculo)}</dd></div>
+          <div><dt>Equipe</dt><dd>${f.equipe.size ? esc([...f.equipe].join(', ')) : 'Só você'}</dd></div>
+          <div><dt>Levando</dt><dd>${sel.length ? sel.map(i => esc(nomeItem(i))).join('<br>') : 'Nada'}</dd></div>
+        </dl>
+        ${blocoHorario('hSaida', 'Que horas você saiu?')}
+        <label class="rotulo" for="obs">Observação (opcional)</label><textarea class="campo-txt" id="obs">${esc(f.obs)}</textarea>
+        <p class="suave" style="margin-top:10px">A hora do lançamento e a sua localização são registradas automaticamente ao confirmar.</p>`;
+      document.getElementById('obs').oninput = e => f.obs = e.target.value;
+      ligarHorario('hSaida');
+      rodape(`${ic('saida')} Confirmar saída`, true);
+    }
+    ligar();
+  }
+  function confirmar() {
+    executar(async () => {
+      const horario = lerHorario('hSaida');
+      const geo = await localizacao();
+      const r = await api('registrarSaida', { horario, motivo: f.motivo, destino: f.destino, veiculo: f.veiculo, equipe: [...f.equipe], itens: [...f.itens].map(pat => ({ pat, qtd: 1 })), obs: f.obs, geo });
+      telaFeito(`Saída nº ${r.n} registrada`, `${f.destino} · saída às ${hora(r.quando)}`, r.semLocalizacao, r.tardio);
+    });
+  }
+  desenhar();
+}
+
+function telaFeito(titulo, sub, semLocal, tardio) {
+  barra(`<div class="dentro"><button class="acao preta" id="fim" type="button">Voltar ao início</button></div>`);
+  $app.innerHTML = `<div class="feito-tela"><div class="selo">${ic('ok')}</div><h1>${esc(titulo)}</h1><p class="suave">${esc(sub)}</p>
+    ${tardio ? msg('info', 'Lançamento feito depois do horário informado. Fica sinalizado para a administração.') : ''}
+    ${semLocal ? msg('info', 'A localização não estava disponível. O registro foi salvo mesmo assim.') : ''}</div>`;
+  document.getElementById('fim').onclick = () => carregarInicio();
 }
 
 // ---------- retorno ----------
-function telaRetornoLista() {
-  const ab = est.dados.abertas;
-  $app.innerHTML = `<h2>Registrar retorno</h2>
-    ${ab.length ? ab.map(s => `<button class="big" type="button" data-n="${esc(s.n)}">Saída nº ${esc(s.n)}: ${esc(s.destino)}<small>${esc(s.saida)} · ${esc(s.veiculo)}${s.itens.length ? ' · ' + s.itens.length + (s.itens.length === 1 ? ' item' : ' itens') : ''}</small></button>`).join('') : msg('info', 'Você não tem saídas em aberto.')}
-    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
-  $app.querySelectorAll('[data-n]').forEach(b => b.onclick = () => telaRetorno(ab.find(s => s.n === b.dataset.n)));
-  document.getElementById('voltar').onclick = () => telaInicio();
+function telaEscolherRetorno() {
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button></div>`);
+  $app.innerHTML = `<h1>Qual saída está encerrando?</h1>${est.dados.abertas.map(s => `<button type="button" class="linha" data-n="${esc(s.n)}">${ic(icVeiculo(s.veiculo))}<span>${esc(s.destino)}<small>Saiu ${esc(s.saida)} · nº ${esc(s.n)}</small></span><span class="fim">${ic('seta')}</span></button>`).join('')}`;
+  document.getElementById('ant').onclick = () => telaInicio();
+  $app.querySelectorAll('[data-n]').forEach(b => b.onclick = () => telaRetorno(est.dados.abertas.find(s => s.n === b.dataset.n)));
 }
-
 function telaRetorno(s) {
-  const d = est.dados;
-  const estado = {}; s.itens.forEach(i => estado[i.pat] = 'OK');
-  $app.innerHTML = `<h2>Retorno da saída nº ${esc(s.n)}</h2><div id="erro"></div>
-    <div class="card"><b>${esc(s.destino)}</b><div class="muted">${esc(s.motivo)} · saiu ${esc(s.saida)} · ${esc(s.veiculo)}</div></div>
-    <div class="card">
-      <label style="margin-top:0">Abastecimento</label>
-      <div class="chips" id="abast">${d.abastecimentos.map(a => `<button type="button" class="chip ${a === 'Não abasteceu' ? 'on' : ''}" data-v="${esc(a)}">${esc(a)}</button>`).join('')}</div>
-      <div id="boxValor" class="hidden"><label for="valor">Valor pago (R$)</label><input id="valor" inputmode="decimal" placeholder="0,00"></div>
-    </div>
-    ${s.itens.length ? `<div class="card"><label style="margin-top:0">Ferramentas e EPC</label><p class="muted">Marque o que voltou com problema. O resto fica aguardando conferência da administração.</p>
-      ${s.itens.map(i => `<div class="item" style="display:block"><b>${esc(i.desc)}</b> <span class="tag">${esc(i.pat)}</span>
-        <div class="row3" data-p="${esc(i.pat)}"><button type="button" class="on" data-v="OK">Voltou OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Extraviado</button></div>
-        <input class="hidden" data-obs="${esc(i.pat)}" placeholder="O que aconteceu?" style="margin-top:8px"></div>`).join('')}</div>` : ''}
-    <div class="card"><label for="obs" style="margin-top:0">Observação (opcional)</label><textarea id="obs"></textarea></div>
-    <button class="btn" id="confirmar" type="button">Confirmar retorno</button>
-    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
-  document.querySelectorAll('#abast .chip').forEach(b => b.onclick = () => {
-    document.querySelectorAll('#abast .chip').forEach(x => x.classList.remove('on')); b.classList.add('on');
-    document.getElementById('boxValor').classList.toggle('hidden', b.dataset.v.indexOf('colaborador') < 0);
+  const d = est.dados; const estado = {}; s.itens.forEach(i => estado[i.pat] = 'OK');
+  let abast = 'Não abasteceu';
+  $app.innerHTML = `<h1>Retorno de ${esc(s.destino)}</h1><p class="suave">Saiu ${esc(s.saida)} · ${esc(s.veiculo)} · nº ${esc(s.n)}</p><div id="erro"></div>
+    <h2>Abasteceu?</h2><div class="grade" id="abast">
+      ${d.abastecimentos.map(a => `<button type="button" class="opcao ${/não|nao/i.test(a) ? 'larga' : ''} ${a === abast ? 'sel' : ''}" data-v="${esc(a)}">${ic(icAbast(a))}${esc(a)}</button>`).join('')}</div>
+    <div id="boxValor" class="oculto"><label class="rotulo" for="valor">Quanto você pagou? (R$)</label><input class="campo-txt" id="valor" inputmode="decimal" placeholder="0,00"></div>
+    ${s.itens.length ? `<h2>Como voltaram as ferramentas?</h2>${s.itens.map(i => `<div class="cartao"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
+      <div class="segmento" data-p="${esc(i.pat)}"><button type="button" class="sel" data-v="OK">Voltou OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Sumiu</button></div>
+      <input class="campo-txt oculto" data-obs="${esc(i.pat)}" placeholder="O que aconteceu?" style="margin-top:10px"></div>`).join('')}` : ''}
+    ${blocoHorario('hRet', 'Que horas você voltou?')}
+    <label class="rotulo" for="obs">Observação (opcional)</label><textarea class="campo-txt" id="obs"></textarea>`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('retorno')} Confirmar retorno</button></div>`);
+  ligarHorario('hRet');
+  document.querySelectorAll('#abast [data-v]').forEach(b => b.onclick = () => {
+    abast = b.dataset.v; document.querySelectorAll('#abast .opcao').forEach(x => x.classList.toggle('sel', x === b));
+    document.getElementById('boxValor').classList.toggle('oculto', !/colaborador/i.test(abast));
   });
-  document.querySelectorAll('.row3').forEach(r => r.querySelectorAll('button').forEach(b => b.onclick = () => {
-    r.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on');
-    estado[r.dataset.p] = b.dataset.v;
-    document.querySelector(`[data-obs="${CSS.escape(r.dataset.p)}"]`).classList.toggle('hidden', b.dataset.v === 'OK');
+  document.querySelectorAll('.segmento').forEach(sg => sg.querySelectorAll('button').forEach(b => b.onclick = () => {
+    sg.querySelectorAll('button').forEach(x => x.className = x === b ? ('sel' + (b.dataset.v === 'OK' ? '' : ' ruim')) : '');
+    estado[sg.dataset.p] = b.dataset.v;
+    document.querySelector(`[data-obs="${CSS.escape(sg.dataset.p)}"]`).classList.toggle('oculto', b.dataset.v === 'OK');
   }));
-  document.getElementById('voltar').onclick = telaRetornoLista;
-  document.getElementById('confirmar').onclick = () => executar(async () => {
-    const abastecimento = document.querySelector('#abast .on').dataset.v;
-    const valorTxt = document.getElementById('valor').value.replace(/\./g, '').replace(',', '.');
-    const valor = abastecimento.indexOf('colaborador') >= 0 ? Number(valorTxt) || 0 : 0;
-    if (abastecimento.indexOf('colaborador') >= 0 && !valor) throw new Error('Informe o valor pago no abastecimento.');
+  document.getElementById('ant').onclick = () => telaInicio();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const valor = /colaborador/i.test(abast) ? Number(document.getElementById('valor').value.replace(/\./g, '').replace(',', '.')) || 0 : 0;
+    if (/colaborador/i.test(abast) && !valor) throw new Error('Informe quanto você pagou no abastecimento.');
+    const horario = lerHorario('hRet');
     const problemas = Object.keys(estado).filter(p => estado[p] !== 'OK').map(p => ({ pat: p, situacao: estado[p], obs: document.querySelector(`[data-obs="${CSS.escape(p)}"]`).value }));
     const geo = await localizacao();
-    const r = await api('registrarRetorno', { n: s.n, abastecimento, valor, problemas, obs: document.getElementById('obs').value, geo });
-    await carregarInicio(`Retorno da saída nº ${s.n} registrado às ${r.quando.slice(-5)}.`);
+    const r = await api('registrarRetorno', { horario, n: s.n, abastecimento: abast, valor, problemas, obs: document.getElementById('obs').value, geo });
+    telaFeito('Retorno registrado', `${s.destino} · retorno às ${hora(r.quando)}`, r.semLocalizacao, r.tardio);
   });
 }
 
 // ---------- administração ----------
 async function telaAdmin(aba) {
-  const tabs = [['aberto', 'Em aberto'], ['fech', 'Fechamento'], ['acessos', 'Acessos']];
-  $app.innerHTML = `<h2>Administração</h2>
-    <div class="tabs">${tabs.map(([k, t]) => `<button type="button" data-t="${k}" class="${k === aba ? 'on' : ''}">${t}</button>`).join('')}</div>
-    <div id="erro"></div><div id="conteudo"></div>
-    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
+  topo('Administração');
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
+  $app.innerHTML = `<div class="abas">${[['aberto', 'Conferir'], ['fech', 'Mês'], ['acessos', 'Acessos']].map(([k, t]) => `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}</button>`).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
   $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
-  document.getElementById('voltar').onclick = () => carregarInicio();
+  document.getElementById('ant').onclick = () => carregarInicio();
   const box = document.getElementById('conteudo');
   if (aba === 'aberto') {
     await executar(async () => {
       const r = await api('emAberto');
-      box.innerHTML = `<h3>Saídas sem retorno (${r.semRetorno.length})</h3>
-        ${r.semRetorno.length ? r.semRetorno.map(s => `<div class="card">${s.atrasada ? '<span class="tag red">desde outro dia</span>' : ''}<b>Nº ${esc(s.n)} · ${esc(s.colaborador)}</b>
-          <div class="muted">${esc(s.destino)} · ${esc(s.saida)} · ${esc(s.veiculo)}</div>
-          ${s.itens.length ? `<div class="muted">Levou: ${esc(s.itens.map(i => i.pat + ' ' + i.desc).join('; '))}</div>` : ''}</div>`).join('') : msg('info', 'Nenhuma.')}
-        <h3>Itens para conferir (${r.pendentes.length})</h3>
-        ${r.pendentes.length ? r.pendentes.map(p => `<div class="card"><b>${esc(p.desc)}</b> <span class="tag">${esc(p.pat)}</span>
-          <span class="tag ${p.situacao === 'Aguardando conferência' ? 'warn' : 'red'}">${esc(p.situacao)}</span>
-          <div class="muted">Saída nº ${esc(p.n)} · ${esc(p.quem)} · ${esc(p.destino)}</div>${p.obs ? `<div class="muted">Obs.: ${esc(p.obs)}</div>` : ''}
-          <div class="row3" data-l="${p.linha}"><button type="button" data-v="Conferido OK">Conferido OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Extraviado</button></div></div>`).join('') : msg('info', 'Nada para conferir.')}
-        ${r.semLocal ? msg('info', r.semLocal + ' registro(s) sem localização na planilha.') : ''}`;
-      box.querySelectorAll('.row3').forEach(rw => rw.querySelectorAll('button').forEach(b => b.onclick = () => executar(async () => {
-        if (b.dataset.v !== 'Conferido OK' && !confirm(`Marcar como ${b.dataset.v}? Isso gera pendência de reposição.`)) return;
-        await api('conferir', { linha: rw.dataset.l, resultado: b.dataset.v });
-        telaAdmin('aberto');
+      box.innerHTML = `<h1>Itens para conferir</h1>
+        ${r.pendentes.length ? r.pendentes.map(p => `<div class="cartao"><div class="t">${esc(p.desc)}<span class="pat">${esc(p.pat)}</span></div>
+          <p class="suave" style="margin:4px 0 0">${esc(p.quem)} · ${esc(p.destino)} · saída nº ${esc(p.n)}</p>
+          <span class="selo-txt ${p.situacao === 'Aguardando conferência' ? 'amarelo' : 'vermelho'}">${esc(p.situacao === 'Aguardando conferência' ? 'Devolvido, falta conferir' : p.situacao)}</span>${p.obs ? `<p class="suave" style="margin:6px 0 0">“${esc(p.obs)}”</p>` : ''}
+          <div class="segmento" data-l="${p.linha}"><button type="button" data-v="Conferido OK">Está OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Sumiu</button></div></div>`).join('') : msg('info', 'Nada para conferir agora.')}
+        <h2>Fora da base</h2>
+        ${r.semRetorno.length ? r.semRetorno.map(s => `<div class="cartao"><div class="t">${esc(s.colaborador)} em ${esc(s.destino)}</div>
+          <p class="suave" style="margin:4px 0 0">Saiu ${esc(s.saida)} · ${esc(s.veiculo)}${s.itens.length ? ' · ' + s.itens.length + (s.itens.length === 1 ? ' item' : ' itens') : ''}</p>
+          ${s.atrasada ? '<span class="selo-txt vermelho">Sem retorno desde outro dia</span>' : ''}${s.tardio ? `<span class="selo-txt laranja">Saída lançada depois (às ${esc(hora(s.lancadoEm))})</span>` : ''}</div>`).join('') : msg('info', 'Ninguém fora agora.')}
+        <h2>Lançados depois (últimos 30 dias)</h2>
+        ${r.tardios && r.tardios.length ? r.tardios.map(t => `<div class="cartao tardio"><div class="t">${esc(t.colaborador)} em ${esc(t.destino)}</div>
+          ${/Saída/.test(t.qual) ? `<p class="suave" style="margin:4px 0 0">Saída informada ${esc(t.saida)}, lançada ${esc(t.saidaLancada)}</p>` : ''}
+          ${/etorno/.test(t.qual) ? `<p class="suave" style="margin:4px 0 0">Retorno informado ${esc(t.retorno)}, lançado ${esc(t.retornoLancado)}</p>` : ''}
+          <span class="selo-txt laranja">${esc(t.qual)} lançado depois</span></div>`).join('') : msg('info', 'Nenhum lançamento fora de hora.')}
+        ${r.semLocal ? `<p class="suave">${r.semLocal} registro(s) sem localização na planilha.</p>` : ''}`;
+      box.querySelectorAll('.segmento').forEach(sg => sg.querySelectorAll('button').forEach(b => b.onclick = () => executar(async () => {
+        if (b.dataset.v !== 'Conferido OK' && !confirm(`Marcar como ${b.dataset.v === 'Extraviado' ? 'extraviado' : 'avariado'}? Isso gera pendência de reposição.`)) return;
+        await api('conferir', { linha: sg.dataset.l, resultado: b.dataset.v }); telaAdmin('aberto');
       })));
     });
   } else if (aba === 'fech') {
-    const hoje = new Date(); const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
-    box.innerHTML = `<div class="card"><label for="mes" style="margin-top:0">Mês</label><input id="mes" type="month" value="${mesAtual}"><div id="tab"></div></div>`;
+    const h = new Date(), mes = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
+    box.innerHTML = `<h1>Fechamento do mês</h1><input class="campo-txt" id="mes" type="month" value="${mes}"><div id="tab" style="margin-top:12px"></div>`;
     const carregar = () => executar(async () => {
       const r = await api('fechamento', { mes: document.getElementById('mes').value });
-      document.getElementById('tab').innerHTML = r.pessoas.length ? `<table><thead><tr><th>Colaborador</th><th>Saídas</th><th>Carro partic.</th><th>Abast. pago por ele</th><th>Abast. Kiton</th></tr></thead><tbody>
-        ${r.pessoas.map(p => `<tr><td>${esc(p.nome)}${p.semRetorno ? ` <span class="tag red">${p.semRetorno} sem retorno</span>` : ''}</td><td>${p.saidas}</td><td>${p.particular}</td><td>${p.abastColab} · R$ ${p.valorColab.toFixed(2).replace('.', ',')}</td><td>${p.abastKiton}</td></tr>`).join('')}
-        </tbody></table>` : msg('info', 'Nenhuma saída neste mês.');
+      document.getElementById('tab').innerHTML = r.pessoas.length ? r.pessoas.map(p => `<div class="cartao"><div class="t">${esc(p.nome)}</div>
+        <table><tbody>
+          <tr><td>Saídas</td><td class="n">${p.saidas}</td></tr>
+          <tr><td>Com carro particular</td><td class="n"><b>${p.particular}</b></td></tr>
+          <tr><td>Abastecimentos pagos por ele</td><td class="n">${p.abastColab} · R$ ${p.valorColab.toFixed(2).replace('.', ',')}</td></tr>
+          <tr><td>Abastecimentos pagos pela Kiton</td><td class="n">${p.abastKiton}</td></tr>
+          <tr><td>Lançados depois</td><td class="n">${p.tardios ? `<span class="selo-txt laranja">${p.tardios}</span>` : '0'}</td></tr>
+        </tbody></table>${p.semRetorno ? `<span class="selo-txt vermelho">${p.semRetorno} sem retorno registrado</span>` : ''}</div>`).join('') : msg('info', 'Nenhuma saída neste mês.');
     });
     document.getElementById('mes').onchange = carregar; carregar();
   } else {
-    box.innerHTML = `<div class="card"><label for="quem" style="margin-top:0">Redefinir PIN de</label>
-      <select id="quem">${est.dados.colaboradores.map(n => `<option>${esc(n)}</option>`).join('')}</select>
-      <p class="muted">O PIN volta para 123456 e a pessoa precisa criar um novo no próximo acesso. Os celulares conectados dela saem da conta.</p>
-      <button class="btn" id="reset" type="button">Redefinir PIN</button></div>`;
-    document.getElementById('reset').onclick = () => executar(async () => {
-      const nome = document.getElementById('quem').value;
-      if (!confirm(`Redefinir o PIN de ${nome}?`)) return;
-      await api('resetarPin', { nome });
-      box.insertAdjacentHTML('afterbegin', msg('ok', `PIN de ${nome} redefinido para 123456.`));
-    });
+    let quem = '';
+    const pintar = () => {
+      box.innerHTML = `<h1>Redefinir PIN</h1><p class="suave">O PIN volta para 123456 e a pessoa cria um novo no próximo acesso. Os celulares dela saem da conta.</p>
+        ${est.dados.colaboradores.map(n => `<button type="button" class="linha ${n === quem ? 'sel' : ''}" data-n="${esc(n)}">${ic('pessoas')}${esc(n)}${n === quem ? `<span class="fim">${ic('ok')}</span>` : ''}</button>`).join('')}
+        <button class="acao" id="reset" type="button" ${quem ? '' : 'disabled'}>Redefinir PIN${quem ? ' de ' + esc(primeiroNome(quem)) : ''}</button>`;
+      box.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { quem = b.dataset.n; pintar(); });
+      document.getElementById('reset').onclick = () => executar(async () => {
+        if (!confirm(`Redefinir o PIN de ${quem}?`)) return;
+        await api('resetarPin', { nome: quem }); document.getElementById('erro').innerHTML = msg('ok', `PIN de ${quem} redefinido para 123456.`);
+      });
+    };
+    pintar();
   }
 }
 
 // ---------- partida ----------
 est.token = lerLocal('kc_token');
 est.token ? carregarInicio() : telaLogin();
-if ('serviceWorker' in navigator) { /* sem cache offline na fase 1: o app precisa da internet para registrar */ }
 </script>
 </body>
 </html>
