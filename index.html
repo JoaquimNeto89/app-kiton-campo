@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>App Kiton Campo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--red:#CD0000;--yellow:#FFAF1F;--ink:#111;--muted:#5A6472;--line:#D9DDE3;--bg:#F4F5F7;--card:#fff;--ok:#1B7F3B;--warn:#B26A00}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+header{position:sticky;top:0;z-index:5;background:#000;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:4px solid var(--red)}
+header img{height:28px;background:#fff;border-radius:6px;padding:2px}
+header .t{font-weight:700;flex:1}
+header button{background:none;border:1px solid #555;color:#fff;border-radius:8px;padding:6px 10px;font-size:14px}
+main{max-width:560px;margin:0 auto;padding:16px 16px 96px}
+h2{font-size:20px;margin:8px 0 12px}
+h3{font-size:16px;margin:20px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.big{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--red);border-radius:12px;padding:18px 16px;margin-bottom:12px;font-size:18px;font-weight:700;color:var(--ink)}
+.big small{display:block;font-weight:400;font-size:14px;color:var(--muted);margin-top:2px}
+.big.alt{border-left-color:#000}
+label{display:block;font-weight:600;margin:14px 0 6px}
+input,select,textarea{width:100%;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+textarea{min-height:70px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 14px;font-size:15px}
+.chip.on{background:#000;color:#fff;border-color:#000}
+.btn{display:block;width:100%;padding:16px;border:0;border-radius:12px;font-size:17px;font-weight:700;background:var(--red);color:#fff;margin-top:18px}
+.btn.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.5}
+.item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item input[type=checkbox]{width:22px;height:22px;margin-top:2px;flex:none}
+.item .d{flex:1}
+.item .s{font-size:13px;color:var(--muted)}
+.item.off{opacity:.55}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:#eee;margin-right:4px}
+.tag.red{background:#FDE7E7;color:var(--red)}
+.tag.ok{background:#E3F4E8;color:var(--ok)}
+.tag.warn{background:#FFF1D6;color:var(--warn)}
+.row3{display:flex;gap:6px;margin-top:8px}
+.row3 button{flex:1;padding:10px 4px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px}
+.row3 button.on{background:#000;color:#fff}
+.msg{padding:12px 14px;border-radius:10px;margin:10px 0;font-size:15px}
+.msg.err{background:#FDE7E7;color:#8A0000}
+.msg.ok{background:#E3F4E8;color:#0F5A27}
+.msg.info{background:#EEF0F3;color:var(--muted)}
+.tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
+.tabs button{flex:none;padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:15px}
+.tabs button.on{background:#000;color:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{font-size:12px;color:var(--muted);text-transform:uppercase}
+.muted{color:var(--muted);font-size:14px}
+.spin{position:fixed;inset:0;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;z-index:20;font-weight:700}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <img src="icon-192.png" alt="">
+  <div class="t">App Kiton Campo</div>
+  <button id="btnSair" class="hidden" type="button">Sair</button>
+</header>
+<main id="app"></main>
+<div id="spin" class="spin hidden">Aguarde…</div>
+<script src="config.js"></script>
+<script>
+'use strict';
+const $app = document.getElementById('app');
+const est = { token: null, usuario: null, dados: null };
+
+// ---------- armazenamento local (só o token) ----------
+const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+const lerLocal = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+
+// ---------- utilidades ----------
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const spin = on => document.getElementById('spin').classList.toggle('hidden', !on);
+const msg = (tipo, texto) => `<div class="msg ${tipo}">${esc(texto)}</div>`;
+
+async function api(acao, dados = {}) {
+  if (!window.API_URL || API_URL.indexOf('http') !== 0) throw new Error('O endereço do Apps Script ainda não foi configurado (config.js).');
+  const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: est.token, ...dados }) });
+  const j = await r.json();
+  if (!j.ok) {
+    if (j.erro === 'SESSAO_INVALIDA') { sair(); throw new Error('Sua sessão expirou. Entre de novo.'); }
+    if (j.erro === 'TROCAR_PIN') { telaTrocarPin(); throw new Error('Crie o seu PIN para continuar.'); }
+    throw new Error(j.erro || 'Erro desconhecido.');
+  }
+  return j;
+}
+
+function localizacao() {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: p.coords.accuracy }),
+      () => res(null),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
+}
+
+async function executar(fn) {
+  spin(true);
+  try { return await fn(); }
+  catch (e) { erroTela(e.message); }
+  finally { spin(false); }
+}
+function erroTela(t) {
+  const box = document.getElementById('erro');
+  if (box) { box.innerHTML = msg('err', t); box.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  else alert(t);
+}
+
+function sair() {
+  est.token = null; est.usuario = null; est.dados = null;
+  guardar('kc_token', null);
+  telaLogin();
+}
+document.getElementById('btnSair').onclick = () => { if (confirm('Sair do app neste celular?')) sair(); };
+
+// ---------- login ----------
+async function telaLogin() {
+  document.getElementById('btnSair').classList.add('hidden');
+  $app.innerHTML = `<h2>Entrar</h2><div id="erro"></div>
+    <div class="card">
+      <label for="nome">Seu nome</label><select id="nome"><option value="">Carregando…</option></select>
+      <label for="pin">PIN (6 números)</label><input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
+      <button class="btn" id="entrar" type="button">Entrar</button>
+      <p class="muted">No primeiro acesso o PIN é 123456 e o app pede para trocar.</p>
+    </div>`;
+  try {
+    const r = await api('nomes');
+    document.getElementById('nome').innerHTML = '<option value="">Selecione</option>' + r.nomes.map(n => `<option>${esc(n)}</option>`).join('');
+    const ult = lerLocal('kc_ultimo_nome'); if (ult) document.getElementById('nome').value = ult;
+  } catch (e) { erroTela(e.message); }
+  document.getElementById('entrar').onclick = () => executar(async () => {
+    const nome = document.getElementById('nome').value, pin = document.getElementById('pin').value;
+    if (!nome || !pin) throw new Error('Escolha o nome e digite o PIN.');
+    const r = await api('login', { nome, pin });
+    est.token = r.token; est.usuario = r.usuario;
+    guardar('kc_token', r.token); guardar('kc_ultimo_nome', nome);
+    r.usuario.trocaPendente ? telaTrocarPin() : carregarInicio();
+  });
+}
+
+function telaTrocarPin() {
+  $app.innerHTML = `<h2>Crie o seu PIN</h2><div id="erro"></div>
+    <div class="card">
+      <p class="muted">Escolha 6 números que só você saiba. Não vale 123456 nem sequências simples (111111, 123123).</p>
+      <label for="p1">Novo PIN</label><input id="p1" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+      <label for="p2">Repita o PIN</label><input id="p2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+      <button class="btn" id="ok" type="button">Salvar PIN</button>
+    </div>`;
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const a = document.getElementById('p1').value, b = document.getElementById('p2').value;
+    if (a !== b) throw new Error('Os dois PINs não são iguais.');
+    const r = await api('trocarPin', { novo: a });
+    est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token);
+    carregarInicio();
+  });
+}
+
+// ---------- início ----------
+async function carregarInicio(aviso) {
+  await executar(async () => {
+    const r = await api('inicio');
+    est.dados = r; est.usuario = r.usuario;
+    telaInicio(aviso);
+  });
+}
+
+function telaInicio(aviso) {
+  document.getElementById('btnSair').classList.remove('hidden');
+  const d = est.dados, admin = est.usuario.perfil === 'Administrador';
+  const ab = d.abertas.length;
+  $app.innerHTML = `<h2>Olá, ${esc(est.usuario.nome.split(' ').slice(-2).join(' '))}</h2>
+    ${aviso ? msg('ok', aviso) : ''}
+    <button class="big" id="bSaida" type="button">Registrar saída<small>Para onde vai, com qual veículo e o que está levando</small></button>
+    <button class="big" id="bRetorno" type="button">Registrar retorno<small>${ab ? ab + (ab === 1 ? ' saída em aberto' : ' saídas em aberto') : 'Nenhuma saída em aberto'}</small></button>
+    ${admin ? '<button class="big alt" id="bAdmin" type="button">Administração<small>Em aberto, conferência, fechamento do mês e acessos</small></button>' : ''}
+    <p class="muted">Somente serão ressarcidos os valores referentes às saídas registradas neste controle.</p>`;
+  document.getElementById('bSaida').onclick = telaSaida;
+  document.getElementById('bRetorno').onclick = telaRetornoLista;
+  if (admin) document.getElementById('bAdmin').onclick = () => telaAdmin('aberto');
+}
+
+// ---------- saída ----------
+function telaSaida() {
+  const d = est.dados;
+  const outros = d.colaboradores.filter(n => n !== est.usuario.nome);
+  const sel = new Set();
+  $app.innerHTML = `<h2>Registrar saída</h2><div id="erro"></div>
+    <div class="card">
+      <label>Motivo</label><div class="chips" id="motivo">${d.motivos.map(m => `<button type="button" class="chip" data-v="${esc(m)}">${esc(m)}</button>`).join('')}</div>
+      <label for="destino">Destino</label>
+      <select id="destino"><option value="">Selecione o cliente</option>${d.clientes.map(c => `<option>${esc(c)}</option>`).join('')}<option value="__outro">Outro (digitar)</option></select>
+      <input id="destinoOutro" class="hidden" placeholder="Ex.: loja de materiais, Copel Maringá" style="margin-top:8px">
+      <label>Veículo</label><div class="chips" id="veiculo">${d.veiculos.map(v => `<button type="button" class="chip" data-v="${esc(v)}">${esc(v)}</button>`).join('')}</div>
+      ${outros.length ? `<label>Quem vai junto (opcional)</label><div class="chips" id="equipe">${outros.map(n => `<button type="button" class="chip" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
+    </div>
+    <div class="card">
+      <label for="busca" style="margin-top:0">Ferramentas e EPC (opcional)</label>
+      <input id="busca" placeholder="Buscar por nome, número ou patrimônio">
+      <div id="lista"></div>
+    </div>
+    <div class="card"><label for="obs" style="margin-top:0">Observação (opcional)</label><textarea id="obs"></textarea></div>
+    <button class="btn" id="confirmar" type="button">Confirmar saída</button>
+    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
+  const unico = id => document.getElementById(id).querySelectorAll('.chip').forEach(b => b.onclick = () => {
+    document.getElementById(id).querySelectorAll('.chip').forEach(x => x.classList.remove('on')); b.classList.add('on');
+  });
+  unico('motivo'); unico('veiculo');
+  if (outros.length) document.getElementById('equipe').querySelectorAll('.chip').forEach(b => b.onclick = () => b.classList.toggle('on'));
+  const dest = document.getElementById('destino');
+  dest.onchange = () => document.getElementById('destinoOutro').classList.toggle('hidden', dest.value !== '__outro');
+
+  const itens = d.itens.filter(i => !i.kit); // componentes saem junto com o kit
+  const comp = pat => d.itens.filter(i => i.kit === pat).map(i => i.desc);
+  const desenhar = () => {
+    const q = document.getElementById('busca').value.trim().toLowerCase();
+    const vis = itens.filter(i => !q || [i.desc, i.grupo, i.ident, i.pat].join(' ').toLowerCase().includes(q));
+    document.getElementById('lista').innerHTML = vis.length ? vis.map(i => {
+      const livre = i.situacao === 'Disponível';
+      const info = livre ? '' : (i.comQuem ? `com ${i.comQuem} desde ${i.desde}` : i.situacao);
+      const nome = i.grupo && i.ident ? `${i.grupo} ${i.ident}` : i.desc;
+      const kit = i.tipo === 'Kit' ? `<div class="s">Contém: ${esc(comp(i.pat).join(', ') || '(sem componentes cadastrados)')}</div>` : '';
+      return `<label class="item ${livre ? '' : 'off'}" style="margin:0;font-weight:400"><input type="checkbox" data-p="${esc(i.pat)}" ${livre ? '' : 'disabled'} ${sel.has(i.pat) ? 'checked' : ''}>
+        <div class="d"><b>${esc(nome)}</b> <span class="tag">${esc(i.pat)}</span>${i.tipo === 'EPC' ? '<span class="tag warn">EPC</span>' : ''}${i.tipo === 'Kit' ? '<span class="tag">Kit</span>' : ''}
+        <div class="s">${esc(nome !== i.desc ? i.desc : '')}</div>${kit}${info ? `<div class="s"><span class="tag red">${esc(info)}</span></div>` : ''}</div></label>`;
+    }).join('') : '<p class="muted">Nenhum item encontrado.</p>';
+    document.getElementById('lista').querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => { c.checked ? sel.add(c.dataset.p) : sel.delete(c.dataset.p); });
+  };
+  document.getElementById('busca').oninput = desenhar; desenhar();
+  document.getElementById('voltar').onclick = () => telaInicio();
+  document.getElementById('confirmar').onclick = () => executar(async () => {
+    const motivo = (document.querySelector('#motivo .on') || {}).dataset?.v;
+    const veiculo = (document.querySelector('#veiculo .on') || {}).dataset?.v;
+    const destino = dest.value === '__outro' ? document.getElementById('destinoOutro').value.trim() : dest.value;
+    if (!motivo) throw new Error('Escolha o motivo.');
+    if (!destino) throw new Error('Informe o destino.');
+    if (!veiculo) throw new Error('Escolha o veículo.');
+    const equipe = outros.length ? [...document.querySelectorAll('#equipe .on')].map(b => b.dataset.v) : [];
+    const geo = await localizacao();
+    const r = await api('registrarSaida', { motivo, destino, veiculo, equipe, itens: [...sel].map(pat => ({ pat, qtd: 1 })), obs: document.getElementById('obs').value, geo });
+    await carregarInicio(`Saída nº ${r.n} registrada às ${r.quando.slice(-5)}.${r.semLocalizacao ? ' Localização não disponível.' : ''}`);
+  });
+}
+
+// ---------- retorno ----------
+function telaRetornoLista() {
+  const ab = est.dados.abertas;
+  $app.innerHTML = `<h2>Registrar retorno</h2>
+    ${ab.length ? ab.map(s => `<button class="big" type="button" data-n="${esc(s.n)}">Saída nº ${esc(s.n)}: ${esc(s.destino)}<small>${esc(s.saida)} · ${esc(s.veiculo)}${s.itens.length ? ' · ' + s.itens.length + (s.itens.length === 1 ? ' item' : ' itens') : ''}</small></button>`).join('') : msg('info', 'Você não tem saídas em aberto.')}
+    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
+  $app.querySelectorAll('[data-n]').forEach(b => b.onclick = () => telaRetorno(ab.find(s => s.n === b.dataset.n)));
+  document.getElementById('voltar').onclick = () => telaInicio();
+}
+
+function telaRetorno(s) {
+  const d = est.dados;
+  const estado = {}; s.itens.forEach(i => estado[i.pat] = 'OK');
+  $app.innerHTML = `<h2>Retorno da saída nº ${esc(s.n)}</h2><div id="erro"></div>
+    <div class="card"><b>${esc(s.destino)}</b><div class="muted">${esc(s.motivo)} · saiu ${esc(s.saida)} · ${esc(s.veiculo)}</div></div>
+    <div class="card">
+      <label style="margin-top:0">Abastecimento</label>
+      <div class="chips" id="abast">${d.abastecimentos.map(a => `<button type="button" class="chip ${a === 'Não abasteceu' ? 'on' : ''}" data-v="${esc(a)}">${esc(a)}</button>`).join('')}</div>
+      <div id="boxValor" class="hidden"><label for="valor">Valor pago (R$)</label><input id="valor" inputmode="decimal" placeholder="0,00"></div>
+    </div>
+    ${s.itens.length ? `<div class="card"><label style="margin-top:0">Ferramentas e EPC</label><p class="muted">Marque o que voltou com problema. O resto fica aguardando conferência da administração.</p>
+      ${s.itens.map(i => `<div class="item" style="display:block"><b>${esc(i.desc)}</b> <span class="tag">${esc(i.pat)}</span>
+        <div class="row3" data-p="${esc(i.pat)}"><button type="button" class="on" data-v="OK">Voltou OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Extraviado</button></div>
+        <input class="hidden" data-obs="${esc(i.pat)}" placeholder="O que aconteceu?" style="margin-top:8px"></div>`).join('')}</div>` : ''}
+    <div class="card"><label for="obs" style="margin-top:0">Observação (opcional)</label><textarea id="obs"></textarea></div>
+    <button class="btn" id="confirmar" type="button">Confirmar retorno</button>
+    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
+  document.querySelectorAll('#abast .chip').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#abast .chip').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    document.getElementById('boxValor').classList.toggle('hidden', b.dataset.v.indexOf('colaborador') < 0);
+  });
+  document.querySelectorAll('.row3').forEach(r => r.querySelectorAll('button').forEach(b => b.onclick = () => {
+    r.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    estado[r.dataset.p] = b.dataset.v;
+    document.querySelector(`[data-obs="${CSS.escape(r.dataset.p)}"]`).classList.toggle('hidden', b.dataset.v === 'OK');
+  }));
+  document.getElementById('voltar').onclick = telaRetornoLista;
+  document.getElementById('confirmar').onclick = () => executar(async () => {
+    const abastecimento = document.querySelector('#abast .on').dataset.v;
+    const valorTxt = document.getElementById('valor').value.replace(/\./g, '').replace(',', '.');
+    const valor = abastecimento.indexOf('colaborador') >= 0 ? Number(valorTxt) || 0 : 0;
+    if (abastecimento.indexOf('colaborador') >= 0 && !valor) throw new Error('Informe o valor pago no abastecimento.');
+    const problemas = Object.keys(estado).filter(p => estado[p] !== 'OK').map(p => ({ pat: p, situacao: estado[p], obs: document.querySelector(`[data-obs="${CSS.escape(p)}"]`).value }));
+    const geo = await localizacao();
+    const r = await api('registrarRetorno', { n: s.n, abastecimento, valor, problemas, obs: document.getElementById('obs').value, geo });
+    await carregarInicio(`Retorno da saída nº ${s.n} registrado às ${r.quando.slice(-5)}.`);
+  });
+}
+
+// ---------- administração ----------
+async function telaAdmin(aba) {
+  const tabs = [['aberto', 'Em aberto'], ['fech', 'Fechamento'], ['acessos', 'Acessos']];
+  $app.innerHTML = `<h2>Administração</h2>
+    <div class="tabs">${tabs.map(([k, t]) => `<button type="button" data-t="${k}" class="${k === aba ? 'on' : ''}">${t}</button>`).join('')}</div>
+    <div id="erro"></div><div id="conteudo"></div>
+    <button class="btn sec" id="voltar" type="button">Voltar</button>`;
+  $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
+  document.getElementById('voltar').onclick = () => carregarInicio();
+  const box = document.getElementById('conteudo');
+  if (aba === 'aberto') {
+    await executar(async () => {
+      const r = await api('emAberto');
+      box.innerHTML = `<h3>Saídas sem retorno (${r.semRetorno.length})</h3>
+        ${r.semRetorno.length ? r.semRetorno.map(s => `<div class="card">${s.atrasada ? '<span class="tag red">desde outro dia</span>' : ''}<b>Nº ${esc(s.n)} · ${esc(s.colaborador)}</b>
+          <div class="muted">${esc(s.destino)} · ${esc(s.saida)} · ${esc(s.veiculo)}</div>
+          ${s.itens.length ? `<div class="muted">Levou: ${esc(s.itens.map(i => i.pat + ' ' + i.desc).join('; '))}</div>` : ''}</div>`).join('') : msg('info', 'Nenhuma.')}
+        <h3>Itens para conferir (${r.pendentes.length})</h3>
+        ${r.pendentes.length ? r.pendentes.map(p => `<div class="card"><b>${esc(p.desc)}</b> <span class="tag">${esc(p.pat)}</span>
+          <span class="tag ${p.situacao === 'Aguardando conferência' ? 'warn' : 'red'}">${esc(p.situacao)}</span>
+          <div class="muted">Saída nº ${esc(p.n)} · ${esc(p.quem)} · ${esc(p.destino)}</div>${p.obs ? `<div class="muted">Obs.: ${esc(p.obs)}</div>` : ''}
+          <div class="row3" data-l="${p.linha}"><button type="button" data-v="Conferido OK">Conferido OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Extraviado</button></div></div>`).join('') : msg('info', 'Nada para conferir.')}
+        ${r.semLocal ? msg('info', r.semLocal + ' registro(s) sem localização na planilha.') : ''}`;
+      box.querySelectorAll('.row3').forEach(rw => rw.querySelectorAll('button').forEach(b => b.onclick = () => executar(async () => {
+        if (b.dataset.v !== 'Conferido OK' && !confirm(`Marcar como ${b.dataset.v}? Isso gera pendência de reposição.`)) return;
+        await api('conferir', { linha: rw.dataset.l, resultado: b.dataset.v });
+        telaAdmin('aberto');
+      })));
+    });
+  } else if (aba === 'fech') {
+    const hoje = new Date(); const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    box.innerHTML = `<div class="card"><label for="mes" style="margin-top:0">Mês</label><input id="mes" type="month" value="${mesAtual}"><div id="tab"></div></div>`;
+    const carregar = () => executar(async () => {
+      const r = await api('fechamento', { mes: document.getElementById('mes').value });
+      document.getElementById('tab').innerHTML = r.pessoas.length ? `<table><thead><tr><th>Colaborador</th><th>Saídas</th><th>Carro partic.</th><th>Abast. pago por ele</th><th>Abast. Kiton</th></tr></thead><tbody>
+        ${r.pessoas.map(p => `<tr><td>${esc(p.nome)}${p.semRetorno ? ` <span class="tag red">${p.semRetorno} sem retorno</span>` : ''}</td><td>${p.saidas}</td><td>${p.particular}</td><td>${p.abastColab} · R$ ${p.valorColab.toFixed(2).replace('.', ',')}</td><td>${p.abastKiton}</td></tr>`).join('')}
+        </tbody></table>` : msg('info', 'Nenhuma saída neste mês.');
+    });
+    document.getElementById('mes').onchange = carregar; carregar();
+  } else {
+    box.innerHTML = `<div class="card"><label for="quem" style="margin-top:0">Redefinir PIN de</label>
+      <select id="quem">${est.dados.colaboradores.map(n => `<option>${esc(n)}</option>`).join('')}</select>
+      <p class="muted">O PIN volta para 123456 e a pessoa precisa criar um novo no próximo acesso. Os celulares conectados dela saem da conta.</p>
+      <button class="btn" id="reset" type="button">Redefinir PIN</button></div>`;
+    document.getElementById('reset').onclick = () => executar(async () => {
+      const nome = document.getElementById('quem').value;
+      if (!confirm(`Redefinir o PIN de ${nome}?`)) return;
+      await api('resetarPin', { nome });
+      box.insertAdjacentHTML('afterbegin', msg('ok', `PIN de ${nome} redefinido para 123456.`));
+    });
+  }
+}
+
+// ---------- partida ----------
+est.token = lerLocal('kc_token');
+est.token ? carregarInicio() : telaLogin();
+if ('serviceWorker' in navigator) { /* sem cache offline na fase 1: o app precisa da internet para registrar */ }
+</script>
+</body>
+</html>
