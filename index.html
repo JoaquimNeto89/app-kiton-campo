@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>App Kiton Campo</title>
+<title>Kiton Hub</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -154,7 +154,7 @@ td.n{text-align:right}
 <body>
 <header class="topo">
   <img src="icon-192.png" alt="">
-  <div class="marca" id="marca">Kiton Campo</div>
+  <div class="marca" id="marca">Kiton Hub</div>
   <button class="icone-btn oculto" id="btnSair" type="button" aria-label="Sair do app"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg></button>
 </header>
 <div class="faixa"></div>
@@ -203,7 +203,7 @@ const msg = (tipo, t) => `<div class="msg ${tipo}" role="status">${esc(t)}</div>
 const hora = s => String(s || '').slice(-5);
 const primeiroNome = n => String(n || '').replace(/^Eng\.\s*/, '').split(' ')[0];
 const barra = html => { $barra.innerHTML = html ? `<div class="barra">${html}</div>` : ''; };
-const topo = (sub) => { document.getElementById('marca').innerHTML = `Kiton Campo${sub ? `<span>${esc(sub)}</span>` : ''}`; };
+const topo = (sub) => { document.getElementById('marca').innerHTML = `Kiton Hub${sub ? `<span>${esc(sub)}</span>` : ''}`; };
 
 async function api(acao, dados = {}) {
   if (!window.API_URL || API_URL.indexOf('http') !== 0) throw new Error('O endereço do Apps Script ainda não foi configurado (config.js).');
@@ -269,7 +269,7 @@ function lerHorario(id) {
 // ---------- entrar ----------
 async function telaLogin() {
   document.getElementById('btnSair').classList.add('oculto'); topo(); barra('');
-  $app.innerHTML = `<div class="login-marca"><img src="icon-192.png" alt=""><h1>Entrar no Kiton Campo</h1><p class="suave">Registro de saídas, ferramentas e retorno</p></div>
+  $app.innerHTML = `<div class="login-marca"><img src="icon-192.png" alt=""><h1>Entrar no Kiton Hub</h1><p class="suave">Registro de saídas, ferramentas e retorno</p></div>
     <div id="erro"></div>
     <label class="rotulo" for="nome">Quem é você?</label>
     <div id="nomes"><p class="suave">Carregando nomes…</p></div>

@@ -1,6 +1,6 @@
 {
-  "name": "App Kiton Campo",
-  "short_name": "Kiton Campo",
+  "name": "Kiton Hub",
+  "short_name": "Kiton Hub",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
