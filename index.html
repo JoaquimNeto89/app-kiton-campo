@@ -387,7 +387,7 @@ function telaInicio() {
   const mod = (id, icone, titulo, desc, extra = '', breve = false, principal = false) =>
     `<button type="button" class="modulo ${breve ? 'breve' : ''} ${principal ? 'principal' : ''}" ${breve ? 'aria-disabled="true"' : `id="${id}"`}>
       ${extra}<span class="ic-caixa">${ic(icone)}</span><b>${titulo}</b><span class="d">${desc}</span></button>`;
-  $app.innerHTML = `<h1>Olá, ${esc(primeiroNome(est.usuario.nome))}</h1>
+  $app.innerHTML = `<h1>Olá, ${esc(est.usuario.nome)}</h1>
     <div class="modulos">
       ${mod('mSaidas', 'saida', 'Saídas e retornos', 'Veículo, destino, ferramentas e EPC', status, false, true)}
       ${mod('', 'pino', 'Check-in em obra', 'Em breve', '', true)}
