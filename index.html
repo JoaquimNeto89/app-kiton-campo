@@ -193,6 +193,17 @@ td.n{text-align:right}
 .carregando{position:fixed;inset:0;z-index:30;background:rgba(230,233,237,.75);display:grid;place-items:center}
 .carregando div{background:#000;color:#fff;font-weight:600;padding:14px 20px;border-radius:12px}
 .oculto{display:none!important}
+.fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.foto{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#fff}
+.foto img{width:100%;height:100%;object-fit:cover;display:block}
+.foto button{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:18px;line-height:1}
+.assin{position:relative;background:#fff;border:2px dashed var(--aco-esc);border-radius:12px}
+.assin canvas{display:block;width:100%;height:210px;touch-action:none;border-radius:10px}
+.assin .link{position:absolute;right:12px;top:8px}
+.linha-meus{display:flex;align-items:center;gap:12px;width:100%;background:var(--branco);border:0;border-radius:14px;padding:14px 16px;margin-top:12px;text-align:left}
+.linha-meus b{font:700 18px/1.1 var(--tit)}
+.linha-meus .q{min-width:34px;height:34px;border-radius:9px;background:var(--preto);color:#fff;display:grid;place-items:center;font:700 16px/1 var(--tit)}
+select.campo-txt{appearance:auto}
 .login-marca{text-align:center;margin:26px 0 22px}
 .login-marca img{width:84px;height:84px;border-radius:20px;background:#fff}
 .login-marca h1{margin:12px 0 4px}
@@ -384,16 +395,19 @@ function telaInicio() {
   topo(est.usuario.nome); barra('');
   const d = est.dados, admin = est.usuario.perfil === 'Administrador', ab = d.abertas;
   const status = ab.length ? `<span class="status campo">Em campo desde ${esc(hora(ab[0].saida))}</span>` : '<span class="status">Na base</span>';
+  const stCk = d.checkin ? `<span class="status campo">No cliente</span>` : '';
+  const nMeus = (d.meus || []).length;
   const mod = (id, icone, titulo, desc, extra = '', breve = false, principal = false) =>
     `<button type="button" class="modulo ${breve ? 'breve' : ''} ${principal ? 'principal' : ''}" ${breve ? 'aria-disabled="true"' : `id="${id}"`}>
       ${extra}<span class="ic-caixa">${ic(icone)}</span><b>${titulo}</b><span class="d">${desc}</span></button>`;
   $app.innerHTML = `<h1>Olá, ${esc(est.usuario.nome)}</h1>
     <div class="modulos">
       ${mod('mSaidas', 'saida', 'Saídas e retornos', 'Veículo, destino, ferramentas e EPC', status, false, true)}
-      ${mod('', 'pino', 'Check-in em obra', 'Em breve', '', true)}
-      ${mod('', 'os', 'Ordem de serviço', 'Em breve', '', true)}
-      ${mod('', 'recibo', 'Despesas', 'Em breve', '', true)}
+      ${mod('mCheckin', 'pino', 'Check-in em obra', d.checkin ? 'Em ' + esc(d.checkin.cliente) + ' desde ' + esc(hora(d.checkin.chegada)) : 'Chegada e saída no cliente', stCk)}
+      ${mod('mOS', 'os', 'Ordem de serviço', 'Serviço executado e assinatura do cliente')}
+      ${mod('mDesp', 'recibo', 'Despesas', 'Comprovantes e reembolso')}
     </div>
+    <button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens</b><span class="suave" style="display:block">${nMeus ? 'Ferramentas e equipamentos no seu nome' : 'Nenhum item no seu nome'}</span></span>${ic('seta')}</button>
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
       ${mod('mAdmin', 'admin', 'Conferir e fechar', 'Itens devolvidos, saídas em aberto e fechamento do mês')}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
@@ -401,6 +415,10 @@ function telaInicio() {
       ${mod('mCad', 'tabela', 'Cadastros', 'Itens, pessoas e clientes na planilha')}
     </div>` : ''}`;
   document.getElementById('mSaidas').onclick = telaSaidas;
+  document.getElementById('mCheckin').onclick = telaCheckin;
+  document.getElementById('mOS').onclick = telaOS;
+  document.getElementById('mDesp').onclick = telaDespesas;
+  document.getElementById('mMeus').onclick = telaMeusItens;
   if (admin) { document.getElementById('mAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
@@ -417,10 +435,12 @@ function telaCadastros() {
   topo('Cadastros');
   barra(`<div class="dentro"><button class="acao leve" id="ini" type="button">${ic('voltar')} Início</button></div>`);
   $app.innerHTML = `<h1>Cadastros</h1>
-    <p class="suave">Abre a planilha base com a conta da Kiton. O que você mudar lá aparece no app na próxima vez que ele carregar.</p>
+    <button class="acao" id="novoItem" type="button">${ic('ferr')} Cadastrar item pelo app</button>
+    <p class="suave" style="margin-top:16px">Ou abra a planilha base com a conta da Kiton. O que você mudar lá aparece no app na próxima vez que ele carregar.</p>
     ${ABAS_CAD.map(a => `<a class="linha" href="${PLANILHA}#gid=${a.gid}" target="_blank" rel="noopener"><span style="flex:1">${esc(a.nome)}<small>${esc(a.desc)}</small></span><span class="fim">${ic('seta')}</span></a>`).join('')}
     ${msg('info', 'Não renomeie abas nem títulos de coluna: o app encontra os dados por eles. Pode incluir colunas novas no fim; elas ficam guardadas na planilha, mas só aparecem no app depois que eu ajustar a tela.')}`;
   document.getElementById('ini').onclick = () => carregarInicio();
+  document.getElementById('novoItem').onclick = telaNovoItem;
 }
 
 // ---------- calibração (administração) ----------
@@ -692,9 +712,10 @@ function fluxoSaida() {
   desenhar();
 }
 
-function telaFeito(titulo, sub, semLocal, tardio) {
+function telaFeito(titulo, sub, semLocal, tardio, aviso) {
   barra(`<div class="dentro"><button class="acao preta" id="fim" type="button">Voltar ao início</button></div>`);
   $app.innerHTML = `<div class="feito-tela"><div class="selo">${ic('ok')}</div><h1>${esc(titulo)}</h1><p class="suave">${esc(sub)}</p>
+    ${aviso ? msg('info', aviso) : ''}
     ${tardio ? msg('info', 'Lançamento feito depois do horário informado. Fica sinalizado para a administração.') : ''}
     ${semLocal ? msg('info', 'A localização não estava disponível. O registro foi salvo mesmo assim.') : ''}</div>`;
   document.getElementById('fim').onclick = () => carregarInicio();
@@ -713,7 +734,9 @@ function telaRetorno(s) {
   $app.innerHTML = `<h1>Retorno de ${esc(s.destino)}</h1><p class="suave">Saiu ${esc(s.saida)} · ${esc(s.veiculo)} · nº ${esc(s.n)}</p><div id="erro"></div>
     <h2>Abasteceu?</h2><div class="grade" id="abast">
       ${d.abastecimentos.map(a => `<button type="button" class="opcao ${/não|nao/i.test(a) ? 'larga' : ''} ${a === abast ? 'sel' : ''}" data-v="${esc(a)}">${ic(icAbast(a))}${esc(a)}</button>`).join('')}</div>
-    <div id="boxValor" class="oculto"><label class="rotulo" for="valor">Quanto você pagou? (R$)</label><input class="campo-txt" id="valor" inputmode="decimal" placeholder="0,00"></div>
+    <div id="boxValor" class="oculto"><label class="rotulo" for="valor">Quanto você pagou? (R$)</label><input class="campo-txt" id="valor" inputmode="decimal" placeholder="0,00">
+      <div id="rPrev"></div><label class="acao leve" for="rFoto" style="cursor:pointer">${ic('recibo')} Fotografar o cupom</label><input id="rFoto" type="file" accept="image/*" capture="environment" class="oculto">
+      <p class="suave" style="margin-top:6px">Vai direto para Despesas como pedido de reembolso.</p></div>
     ${s.itens.length ? `<h2>Como voltaram as ferramentas?</h2>${s.itens.map(i => `<div class="cartao"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
       <div class="segmento" data-p="${esc(i.pat)}"><button type="button" class="sel" data-v="OK">Voltou OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Sumiu</button></div>
       <input class="campo-txt oculto" data-obs="${esc(i.pat)}" placeholder="O que aconteceu?" style="margin-top:10px"></div>`).join('')}` : ''}
@@ -721,6 +744,12 @@ function telaRetorno(s) {
     <label class="rotulo" for="obs">Observação (opcional)</label><textarea class="campo-txt" id="obs"></textarea>`;
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('retorno')} Confirmar retorno</button></div>`);
   ligarHorario('hRet');
+  let fotoCupom = null;
+  document.getElementById('rFoto').onchange = e => executar(async () => {
+    const a = e.target.files[0]; if (!a) return;
+    fotoCupom = await comprimir(a, 1600, 0.75);
+    document.getElementById('rPrev').innerHTML = `<div class="fotos"><div class="foto"><img src="${fotoCupom}" alt="Cupom"></div></div>`;
+  });
   document.querySelectorAll('#abast [data-v]').forEach(b => b.onclick = () => {
     abast = b.dataset.v; document.querySelectorAll('#abast .opcao').forEach(x => x.classList.toggle('sel', x === b));
     document.getElementById('boxValor').classList.toggle('oculto', !/colaborador/i.test(abast));
@@ -737,7 +766,7 @@ function telaRetorno(s) {
     const horario = lerHorario('hRet');
     const problemas = Object.keys(estado).filter(p => estado[p] !== 'OK').map(p => ({ pat: p, situacao: estado[p], obs: document.querySelector(`[data-obs="${CSS.escape(p)}"]`).value }));
     const geo = await localizacao();
-    const r = await api('registrarRetorno', { horario, n: s.n, abastecimento: abast, valor, problemas, obs: document.getElementById('obs').value, geo });
+    const r = await api('registrarRetorno', { horario, n: s.n, abastecimento: abast, valor, foto: fotoCupom, problemas, obs: document.getElementById('obs').value, geo });
     telaFeito('Retorno registrado', `${s.destino} · retorno às ${hora(r.quando)}`, r.semLocalizacao, r.tardio);
   });
 }
@@ -746,14 +775,14 @@ function telaRetorno(s) {
 async function telaAdmin(aba) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
-  $app.innerHTML = `<div class="abas">${[['aberto', 'Conferir'], ['fech', 'Mês'], ['acessos', 'Acessos']].map(([k, t]) => `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}</button>`).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
+  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens'], ['desp', 'Despesas'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t]) => `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}</button>`).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
   $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
   document.getElementById('ant').onclick = () => carregarInicio();
   const box = document.getElementById('conteudo');
   if (aba === 'aberto') {
     await executar(async () => {
       const r = await api('emAberto');
-      box.innerHTML = `<h1>Itens para conferir</h1>
+      box.innerHTML = `<h1>Itens devolvidos para conferir</h1>
         ${r.pendentes.length ? r.pendentes.map(p => `<div class="cartao"><div class="t">${esc(p.desc)}<span class="pat">${esc(p.pat)}</span></div>
           <p class="suave" style="margin:4px 0 0">${esc(p.quem)} · ${esc(p.destino)} · saída nº ${esc(p.n)}</p>
           <span class="selo-txt ${p.situacao === 'Aguardando conferência' ? 'amarelo' : 'vermelho'}">${esc(p.situacao === 'Aguardando conferência' ? 'Devolvido, falta conferir' : p.situacao)}</span>${p.obs ? `<p class="suave" style="margin:6px 0 0">“${esc(p.obs)}”</p>` : ''}
@@ -773,6 +802,10 @@ async function telaAdmin(aba) {
         await api('conferir', { linha: sg.dataset.l, resultado: b.dataset.v }); telaAdmin('aberto');
       })));
     });
+  } else if (aba === 'desp') {
+    await adminDespesas(box);
+  } else if (aba === 'pres') {
+    await adminPresenca(box);
   } else if (aba === 'fech') {
     const h = new Date(), mes = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
     box.innerHTML = `<h1>Fechamento do mês</h1><input class="campo-txt" id="mes" type="month" value="${mes}"><div id="tab" style="margin-top:12px"></div>`;
@@ -785,7 +818,19 @@ async function telaAdmin(aba) {
           <tr><td>Abastecimentos pagos por ele</td><td class="n">${p.abastColab} · R$ ${p.valorColab.toFixed(2).replace('.', ',')}</td></tr>
           <tr><td>Abastecimentos pagos pela Kiton</td><td class="n">${p.abastKiton}</td></tr>
           <tr><td>Lançados depois</td><td class="n">${p.tardios ? `<span class="selo-txt laranja">${p.tardios}</span>` : '0'}</td></tr>
-        </tbody></table>${p.semRetorno ? `<span class="selo-txt vermelho">${p.semRetorno} sem retorno registrado</span>` : ''}</div>`).join('') : msg('info', 'Nenhuma saída neste mês.');
+          <tr><td>Dias em obra (check-in)</td><td class="n">${p.diasObra}</td></tr>
+          <tr><td>Horas em obra</td><td class="n">${String(p.horasObra).replace('.', ',')}</td></tr>
+          <tr><td>Check-ins fora do raio</td><td class="n">${p.foraRaio ? `<span class="selo-txt laranja">${p.foraRaio}</span>` : '0'}</td></tr>
+          <tr><td>Despesas aguardando conferência</td><td class="n">${reais(p.despPendente)}</td></tr>
+          <tr><td><b>Reembolso aprovado a pagar</b></td><td class="n"><b>${reais(p.reembolsar)}</b></td></tr>
+          <tr><td>Já reembolsado</td><td class="n">${reais(p.reembolsado)}</td></tr>
+        </tbody></table>${p.semRetorno ? `<span class="selo-txt vermelho">${p.semRetorno} sem retorno registrado</span>` : ''}${p.semSaidaCliente ? `<span class="selo-txt vermelho">${p.semSaidaCliente} check-in sem saída</span>` : ''}
+        ${p.reembolsar ? `<button type="button" class="acao leve" data-reemb="${esc(p.nome)}">Marcar ${reais(p.reembolsar)} como pago</button>` : ''}</div>`).join('') : msg('info', 'Nenhum registro neste mês.');
+      document.querySelectorAll('[data-reemb]').forEach(b => b.onclick = () => executar(async () => {
+        if (!confirm(`Confirmar que o reembolso de ${b.dataset.reemb} foi pago?`)) return;
+        const x = await api('marcarReembolso', { mes: document.getElementById('mes').value, nome: b.dataset.reemb });
+        document.getElementById('erro').innerHTML = msg('ok', `${x.qtd} despesa(s) marcada(s) como reembolsada(s): ${reais(x.total)}.`); carregar();
+      }));
     });
     document.getElementById('mes').onchange = carregar; carregar();
   } else {
@@ -802,6 +847,477 @@ async function telaAdmin(aba) {
     };
     pintar();
   }
+}
+
+// ---------- utilidades novas ----------
+const reais = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const numBR = v => Number(String(v || '').replace(/\./g, '').replace(',', '.')) || 0;
+const hojeISO = () => agoraLocal().slice(0, 10);
+const distTxt = m => m == null || m === '' ? '' : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`;
+function distanciaM(a, b) {
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+/** Foto do celular reduzida para no máximo `max` px (JPEG), em dataURL. */
+function comprimir(arquivo, max = 1280, q = 0.72) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(arquivo);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Não foi possível ler a foto.')); };
+    img.src = url;
+  });
+}
+const chips = (id, lista, sel) => `<div class="pessoas" id="${id}">${lista.map(x => `<button type="button" class="pessoa ${x === sel ? 'sel' : ''}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
+function ligarChips(id, aoEscolher, multi) {
+  document.querySelectorAll(`#${id} [data-v]`).forEach(b => b.onclick = () => {
+    if (multi) b.classList.toggle('sel');
+    else document.querySelectorAll(`#${id} .pessoa`).forEach(x => x.classList.toggle('sel', x === b));
+    aoEscolher(b.dataset.v, b.classList.contains('sel'));
+  });
+}
+const voltarInicio = () => barra(`<div class="dentro"><button class="acao leve" id="ini" type="button">${ic('voltar')} Início</button></div>`);
+
+// ---------- meus itens ----------
+function telaMeusItens() {
+  topo('Meus itens'); voltarInicio();
+  const m = est.dados.meus || [];
+  const total = m.reduce((s, i) => s + (i.valor || 0), 0);
+  $app.innerHTML = `<h1>Meus itens</h1>
+    <p class="suave">Ferramentas e equipamentos de uso individual que estão sob a sua responsabilidade. Eles não aparecem na retirada porque já ficam com você.</p>
+    ${m.length ? m.map(i => `<div class="cartao"><div class="t">${esc(i.grupo && i.ident ? i.grupo + ' ' + i.ident : i.desc)}<span class="pat">${esc(i.pat)}</span></div>
+      <p class="suave" style="margin:2px 0 0">${esc([i.desc !== i.grupo ? i.desc : '', i.marca, i.serie ? 'série ' + i.serie : ''].filter(Boolean).join(' · '))}</p>
+      ${linhaCal(i)}</div>`).join('') + `<p class="suave">${m.length} ${m.length === 1 ? 'item' : 'itens'} · valor de reposição ${reais(total)}</p>`
+      : msg('info', 'Nenhum item de uso individual está no seu nome.')}
+    <p class="regra">${ic('ferr')}<span>Perda ou quebra por mau uso pode ser descontada pelo valor de reposição. Algo errado nesta lista? Fale com a administração.</span></p>`;
+  document.getElementById('ini').onclick = () => telaInicio();
+}
+
+// ---------- check-in em obra ----------
+function telaCheckin() {
+  topo('Check-in em obra'); voltarInicio();
+  const d = est.dados, ck = d.checkin;
+  const selo = s => s === 'No local' ? '<span class="selo-txt verde">No local</span>' : s === 'Fora do raio' ? '<span class="selo-txt laranja">Fora do raio do cliente</span>' :
+    s === 'Sem GPS' ? '<span class="selo-txt amarelo">Sem localização</span>' : s ? `<span class="selo-txt amarelo">${esc(s)}</span>` : '';
+  const historico = (d.ultimosCheckins || []).length ? `<h2>Últimos atendimentos</h2>${d.ultimosCheckins.map(c => `<div class="cartao"><div class="t">${esc(c.cliente)}</div>
+    <p class="suave" style="margin:2px 0 0">${esc(c.chegada)} às ${esc(hora(c.saida))} · ${String(c.horas).replace('.', ',')} h</p>${selo(c.situacao)}</div>`).join('')}` : '';
+  if (ck) {
+    $app.innerHTML = `<h1>Check-in em obra</h1>
+      <section class="etiqueta campo"><span class="furo"></span><span class="estado">No cliente desde ${esc(hora(ck.chegada))}</span>
+        <div class="onde">${esc(ck.cliente)}</div><div class="det">${selo(ck.situacao)}${ck.dist !== '' && ck.dist != null ? ` a ${distTxt(ck.dist)} do endereço` : ''}</div>
+        <button class="acao" id="bSai" type="button">${ic('saida')} Registrar saída do cliente</button></section>
+      <button class="acao leve" id="bOS" type="button">${ic('os')} Fazer a OS deste atendimento</button>${historico}`;
+    document.getElementById('bSai').onclick = () => telaCheckout(ck);
+    document.getElementById('bOS').onclick = () => fluxoOS({ cliente: ck.cliente, checkin: ck.n, inicio: hora(ck.chegada), data: ck.chegada });
+  } else {
+    $app.innerHTML = `<h1>Check-in em obra</h1><div id="erro"></div>
+      <p class="suave" id="gpsInfo">Buscando a sua localização…</p>
+      <input class="campo-txt" id="buscaCli" placeholder="Buscar cliente">
+      <div id="clis" style="margin-top:10px"></div>${historico}`;
+    let geo = null;
+    const pintar = () => {
+      const q = document.getElementById('buscaCli').value.trim().toLowerCase();
+      const lista = d.clientesInfo.filter(c => !q || c.nome.toLowerCase().includes(q)).map(c => ({ ...c, dist: geo && c.lat != null ? distanciaM(geo, c) : null }));
+      lista.sort((a, b) => (a.dist ?? 1e12) - (b.dist ?? 1e12) || a.nome.localeCompare(b.nome, 'pt-BR'));
+      document.getElementById('clis').innerHTML = lista.map(c => {
+        const perto = c.dist != null && c.dist <= c.raio + 100;
+        return `<button type="button" class="linha" data-c="${esc(c.nome)}">${ic('cliente')}<span>${esc(c.nome)}<small>${c.dist != null ? (perto ? 'Você está aqui · ' : '') + distTxt(c.dist) : c.lat == null ? 'Sem localização cadastrada' : esc(c.cidade)}</small></span>
+          ${perto ? `<span class="fim">${ic('pino')}</span>` : `<span class="fim">${ic('seta')}</span>`}</button>`;
+      }).join('') || '<p class="suave">Nenhum cliente com esse nome. Peça para a administração cadastrar.</p>';
+      document.querySelectorAll('#clis [data-c]').forEach(b => b.onclick = () => telaConfirmarCheckin(d.clientesInfo.find(c => c.nome === b.dataset.c), geo));
+    };
+    document.getElementById('buscaCli').oninput = pintar; pintar();
+    localizacao().then(g => {
+      geo = g;
+      const info = document.getElementById('gpsInfo');
+      if (!info) return;
+      info.textContent = g ? 'Clientes mais próximos primeiro.' : 'Sem localização: ative o GPS e permita o acesso. Dá para fazer o check-in mesmo assim.';
+      pintar();
+    });
+  }
+  document.getElementById('ini').onclick = () => telaInicio();
+}
+
+function telaConfirmarCheckin(c, geo) {
+  const dist = geo && c.lat != null ? distanciaM(geo, c) : null;
+  $app.innerHTML = `<h1>Chegada em ${esc(c.nome)}</h1><div id="erro"></div>
+    ${dist == null ? msg('info', c.lat == null ? 'Este cliente ainda não tem localização cadastrada. O check-in fica registrado e a administração define o local.' : 'Sem localização no momento. O check-in fica registrado como "sem localização".')
+      : dist <= c.raio + 100 ? msg('ok', `Você está no cliente (${distTxt(dist)} do endereço).`) : msg('info', `Você está a ${distTxt(dist)} do endereço cadastrado. Pode registrar; a administração verá a distância.`)}
+    ${blocoHorario('hCk', 'Que horas você chegou?')}
+    <label class="rotulo" for="obs">O que vai fazer? (opcional)</label><textarea class="campo-txt" id="obs" placeholder="Ex.: manutenção no quadro da prensa 2"></textarea>`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('pino')} Fazer check-in</button></div>`);
+  ligarHorario('hCk');
+  document.getElementById('ant').onclick = () => telaCheckin();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const horario = lerHorario('hCk');
+    const g = await localizacao() || geo;
+    const r = await api('checkin', { cliente: c.nome, horario, geo: g, obs: document.getElementById('obs').value });
+    const avisos = r.situacao === 'Fora do raio' ? `Registrado a ${distTxt(r.dist)} do endereço do cliente.` : '';
+    telaFeito(`Check-in em ${c.nome}`, `Chegada às ${hora(r.quando)}`, r.semLocalizacao, r.tardio, avisos);
+  });
+}
+
+function telaCheckout(ck) {
+  $app.innerHTML = `<h1>Saída de ${esc(ck.cliente)}</h1><p class="suave">Chegou ${esc(ck.chegada)}</p><div id="erro"></div>
+    ${blocoHorario('hCo', 'Que horas você saiu do cliente?')}
+    <label class="rotulo" for="obs">Observação (opcional)</label><textarea class="campo-txt" id="obs"></textarea>`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('saida')} Registrar saída</button></div>`);
+  ligarHorario('hCo');
+  document.getElementById('ant').onclick = () => telaCheckin();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const horario = lerHorario('hCo');
+    const geo = await localizacao();
+    const r = await api('checkout', { n: ck.n, horario, geo, obs: document.getElementById('obs').value });
+    telaFeito(`Saída de ${ck.cliente} registrada`, `Saída às ${hora(r.quando)} · ${String(r.horas).replace('.', ',')} h no cliente`, r.semLocalizacao, r.tardio);
+  });
+}
+
+// ---------- ordem de serviço ----------
+async function telaOS() {
+  topo('Ordem de serviço'); voltarInicio();
+  $app.innerHTML = `<h1>Ordem de serviço</h1><div id="erro"></div>
+    <button class="acao" id="nova" type="button">${ic('os')} Nova OS</button>
+    ${lerLocal('kc_os_rascunho') ? `<button class="acao leve" id="rasc" type="button">Continuar OS não finalizada</button>` : ''}
+    <h2>Últimas OS</h2><div id="lista"><p class="suave">Carregando…</p></div>`;
+  document.getElementById('ini').onclick = () => telaInicio();
+  document.getElementById('nova').onclick = () => { guardar('kc_os_rascunho', null); fluxoOS(est.dados.checkin ? { cliente: est.dados.checkin.cliente, checkin: est.dados.checkin.n, inicio: hora(est.dados.checkin.chegada) } : {}); };
+  const rasc = document.getElementById('rasc');
+  if (rasc) rasc.onclick = () => { try { fluxoOS(JSON.parse(lerLocal('kc_os_rascunho'))); } catch (e) { fluxoOS({}); } };
+  await executar(async () => {
+    const r = await api('listarOS');
+    document.getElementById('lista').innerHTML = r.lista.length ? r.lista.map(o => `<div class="cartao"><div class="t">OS ${esc(o.numero)} · ${esc(o.cliente)}</div>
+      <p class="suave" style="margin:2px 0 6px">${esc(o.data)}${o.tipo ? ' · ' + esc(o.tipo) : ''} · assinada por ${esc(o.assinante)}</p>
+      <span class="selo-txt ${/^Enviada|^Reenviada/.test(o.envio) ? 'verde' : 'vermelho'}">${esc(/^Enviada|^Reenviada/.test(o.envio) ? 'Enviada' : 'Não enviada')}</span>
+      ${o.pdf ? `<a class="link" href="${esc(o.pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
+      ${/^Erro/.test(o.envio) ? ` · <button type="button" class="link" data-r="${esc(o.numero)}">Tentar enviar de novo</button>` : ''}</div>`).join('') : msg('info', 'Nenhuma OS ainda.');
+    document.querySelectorAll('[data-r]').forEach(b => b.onclick = () => executar(async () => { await api('reenviarOS', { numero: b.dataset.r }); telaOS(); }));
+  });
+}
+
+function fluxoOS(pre) {
+  topo('Ordem de serviço');
+  const d = est.dados;
+  const f = Object.assign({ cliente: '', local: '', solicitante: '', tipo: '', data: hojeISO(), inicio: '', fim: '', tecnicos: [est.usuario.nome],
+    solicitacao: '', executado: '', materiais: [], pendencias: '', emails: null, extra: '', assinante: '', cargo: '' }, pre || {});
+  if (f.data && /\//.test(f.data)) { const m = f.data.match(/(\d{2})\/(\d{2})\/(\d{4})/); f.data = m ? `${m[3]}-${m[2]}-${m[1]}` : hojeISO(); }
+  const fotos = []; let assinatura = null, tracos = 0;
+  const passos = ['Atendimento', 'Serviço', 'Fotos', 'Assinatura'];
+  let p = 0;
+  const salvarRascunho = () => { const { ...x } = f; guardar('kc_os_rascunho', JSON.stringify(x)); };
+  const cab = () => `<div class="passos">${passos.map((_, i) => `<i class="${i < p ? 'feito' : i === p ? 'atual' : ''}"></i>`).join('')}</div><div class="passo-nome">Passo ${p + 1} de ${passos.length} · ${passos[p]}</div><div id="erro"></div>`;
+  const rodape = txt => {
+    barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="prox" type="button">${txt}</button></div>`);
+    document.getElementById('ant').onclick = () => { ler(); if (p === 0) telaOS(); else { p--; desenhar(); } };
+    document.getElementById('prox').onclick = () => { ler(); try { validar(); } catch (e) { return erroTela(e.message); } if (p < 3) { p++; desenhar(); } else finalizar(); };
+  };
+  const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  function ler() {
+    if (p === 0) { f.local = val('oLocal'); f.solicitante = val('oSol'); f.data = val('oData'); f.inicio = val('oIni'); f.fim = val('oFim'); }
+    if (p === 1) {
+      f.solicitacao = val('oSolic'); f.executado = val('oExec'); f.pendencias = val('oPend');
+      f.materiais = [...document.querySelectorAll('.mat')].map(r => ({ qtd: r.querySelector('[data-q]').value.trim(), desc: r.querySelector('[data-d]').value.trim() })).filter(m => m.desc);
+    }
+    if (p === 3) { f.assinante = val('oAss'); f.cargo = val('oCargo'); f.extra = val('oExtra'); f.emails = [...document.querySelectorAll('#oMails input:checked')].map(x => x.value); }
+    salvarRascunho();
+  }
+  function validar() {
+    if (p === 0 && !f.cliente) throw new Error('Escolha o cliente.');
+    if (p === 0 && !f.tipo) throw new Error('Escolha o tipo de serviço.');
+    if (p === 0 && f.inicio && f.fim && f.fim < f.inicio) throw new Error('O término está antes do início. Confira os horários.');
+    if (p === 1 && !f.executado) throw new Error('Descreva o serviço executado.');
+  }
+  function desenhar() {
+    window.scrollTo(0, 0);
+    if (p === 0) {
+      $app.innerHTML = `${cab()}<h1>Atendimento</h1>
+        <label class="rotulo">Cliente</label><select class="campo-txt" id="oCli"><option value="">Escolha…</option>${d.clientesInfo.map(c => `<option ${c.nome === f.cliente ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select>
+        <label class="rotulo" for="oLocal">Local / setor / equipamento</label><input class="campo-txt" id="oLocal" value="${esc(f.local)}" placeholder="Ex.: Prensa 2, quadro geral">
+        <label class="rotulo" for="oSol">Quem solicitou</label><input class="campo-txt" id="oSol" value="${esc(f.solicitante)}">
+        <label class="rotulo">Tipo de serviço</label>${chips('oTipo', d.tiposOS, f.tipo)}
+        <label class="rotulo" for="oData">Data</label><input class="campo-txt" id="oData" type="date" max="${hojeISO()}" value="${esc(f.data)}">
+        <div class="grade" style="margin-top:0"><div><label class="rotulo" for="oIni">Início</label><input class="campo-txt" id="oIni" type="time" value="${esc(f.inicio)}"></div>
+        <div><label class="rotulo" for="oFim">Término</label><input class="campo-txt" id="oFim" type="time" value="${esc(f.fim)}"></div></div>
+        <label class="rotulo">Técnicos da Kiton</label>${chips('oTec', d.colaboradores, '')}`;
+      document.getElementById('oCli').onchange = e => { f.cliente = e.target.value; f.emails = null; };
+      ligarChips('oTipo', v => f.tipo = v);
+      document.querySelectorAll('#oTec .pessoa').forEach(b => b.classList.toggle('sel', f.tecnicos.includes(b.dataset.v)));
+      ligarChips('oTec', (v, on) => { f.tecnicos = on ? [...new Set([...f.tecnicos, v])] : f.tecnicos.filter(x => x !== v); }, true);
+      rodape('Continuar');
+    } else if (p === 1) {
+      const linhaMat = (m = {}) => `<div class="mat grade" style="grid-template-columns:76px 1fr 44px;margin-bottom:8px"><input class="campo-txt" data-q placeholder="Qtd." value="${esc(m.qtd || '')}"><input class="campo-txt" data-d placeholder="Material" value="${esc(m.desc || '')}"><button type="button" class="acao leve" data-x style="margin:0;min-height:0;padding:0" aria-label="Remover">×</button></div>`;
+      $app.innerHTML = `${cab()}<h1>Serviço</h1>
+        <label class="rotulo" for="oSolic">Solicitação / problema relatado</label><textarea class="campo-txt" id="oSolic">${esc(f.solicitacao)}</textarea>
+        <label class="rotulo" for="oExec">Serviço executado</label><textarea class="campo-txt" id="oExec" style="min-height:130px">${esc(f.executado)}</textarea>
+        <label class="rotulo">Materiais utilizados</label><div id="mats">${(f.materiais.length ? f.materiais : [{}]).map(linhaMat).join('')}</div>
+        <button type="button" class="link" id="addMat">+ Adicionar material</button>
+        <label class="rotulo" for="oPend">Pendências e recomendações</label><textarea class="campo-txt" id="oPend">${esc(f.pendencias)}</textarea>`;
+      const ligarX = () => document.querySelectorAll('[data-x]').forEach(b => b.onclick = () => b.closest('.mat').remove());
+      document.getElementById('addMat').onclick = () => { document.getElementById('mats').insertAdjacentHTML('beforeend', linhaMat()); ligarX(); };
+      ligarX();
+      rodape('Continuar');
+    } else if (p === 2) {
+      $app.innerHTML = `${cab()}<h1>Fotos (opcional)</h1><p class="suave">Até 6 fotos do serviço. Elas entram no PDF da OS.</p>
+        <div class="fotos" id="fotos"></div>
+        <label class="acao leve" for="oFoto" style="cursor:pointer">${ic('ok')} Tirar ou escolher foto</label>
+        <input id="oFoto" type="file" accept="image/*" capture="environment" multiple class="oculto">`;
+      const pintarFotos = () => {
+        document.getElementById('fotos').innerHTML = fotos.map((x, i) => `<div class="foto"><img src="${x}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Remover foto">×</button></div>`).join('');
+        document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { fotos.splice(+b.dataset.rm, 1); pintarFotos(); });
+      };
+      document.getElementById('oFoto').onchange = e => executar(async () => {
+        for (const a of [...e.target.files]) { if (fotos.length >= 6) break; fotos.push(await comprimir(a, 1100, 0.7)); }
+        e.target.value = ''; pintarFotos();
+      });
+      pintarFotos();
+      rodape('Continuar');
+    } else {
+      const cli = d.clientesInfo.find(c => c.nome === f.cliente) || { emails: [] };
+      if (!f.emails) f.emails = cli.emails.slice();
+      $app.innerHTML = `${cab()}<h1>Assinatura do cliente</h1>
+        <dl class="resumo">
+          <div><dt>Cliente</dt><dd>${esc(f.cliente)}${f.local ? '<br>' + esc(f.local) : ''}</dd></div>
+          <div><dt>Serviço</dt><dd>${esc(f.tipo)} · ${esc(f.data.split('-').reverse().join('/'))}${f.inicio ? ' · ' + esc(f.inicio) + (f.fim ? ' às ' + esc(f.fim) : '') : ''}</dd></div>
+          <div><dt>Executado</dt><dd style="font-weight:400;text-align:left">${esc(f.executado).replace(/\n/g, '<br>')}</dd></div>
+          ${f.materiais.length ? `<div><dt>Materiais</dt><dd>${f.materiais.map(m => esc((m.qtd ? m.qtd + ' x ' : '') + m.desc)).join('<br>')}</dd></div>` : ''}
+          ${fotos.length ? `<div><dt>Fotos</dt><dd>${fotos.length}</dd></div>` : ''}
+        </dl>
+        <label class="rotulo">Assine no quadro abaixo</label>
+        <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>
+        <label class="rotulo" for="oAss">Nome de quem assinou</label><input class="campo-txt" id="oAss" value="${esc(f.assinante)}" autocomplete="off">
+        <label class="rotulo" for="oCargo">Cargo / setor (opcional)</label><input class="campo-txt" id="oCargo" value="${esc(f.cargo)}">
+        <label class="rotulo">Enviar a OS para</label>
+        <div id="oMails">${cli.emails.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${f.emails.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Este cliente não tem e-mail cadastrado.</p>'}</div>
+        <input class="campo-txt" id="oExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)" value="${esc(f.extra)}">
+        <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>`;
+      montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+      document.getElementById('limpar').onclick = () => { montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; }); assinatura = null; tracos = 0; };
+      rodape(`${ic('ok')} Finalizar e enviar`);
+    }
+  }
+  function finalizar() {
+    executar(async () => {
+      if (!assinatura || tracos < 1) throw new Error('Peça para o cliente assinar no quadro.');
+      if (!f.assinante) throw new Error('Informe o nome de quem assinou.');
+      const emails = [...f.emails, f.extra].filter(Boolean);
+      if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
+      const geo = await localizacao();
+      const r = await api('salvarOS', { ...f, emails, fotos, assinatura, geo });
+      guardar('kc_os_rascunho', null);
+      barra(`<div class="dentro"><button class="acao preta" id="fim" type="button">Voltar ao início</button></div>`);
+      $app.innerHTML = `<div class="feito-tela"><div class="selo">${ic('ok')}</div><h1>OS ${esc(r.numero)} registrada</h1>
+        <p class="suave">${esc(f.cliente)} · assinada por ${esc(f.assinante)}</p>
+        ${r.enviada ? msg('ok', `Enviada para ${r.emails.length ? r.emails.join(', ') + ' e ' : ''}contato@kitonengenharia.com.br.`) : msg('erro', 'A OS foi salva, mas o e-mail não saiu. Em "Ordem de serviço" dá para tentar enviar de novo.')}
+        <a class="acao leve" href="${esc(r.link)}" target="_blank" rel="noopener" style="text-decoration:none">${ic('os')} Abrir o PDF</a></div>`;
+      document.getElementById('fim').onclick = () => carregarInicio();
+    });
+  }
+  desenhar();
+}
+
+/** Quadro de assinatura com dedo ou caneta. Devolve PNG com fundo branco. */
+function montarAssinatura(cv, aoMudar) {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  const g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  g.lineWidth = 2.4 * dpr; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#0B2A6F';
+  let desenhando = false, n = 0, ult = null;
+  const pos = e => { const b = cv.getBoundingClientRect(); return { x: (e.clientX - b.left) * dpr, y: (e.clientY - b.top) * dpr }; };
+  cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); desenhando = true; ult = pos(e); g.beginPath(); g.moveTo(ult.x, ult.y); };
+  cv.onpointermove = e => { if (!desenhando) return; const q = pos(e); g.lineTo(q.x, q.y); g.stroke(); ult = q; };
+  const fim = () => { if (!desenhando) return; desenhando = false; n++; aoMudar(cv.toDataURL('image/png'), n); };
+  cv.onpointerup = fim; cv.onpointercancel = fim; cv.onpointerleave = fim;
+}
+
+// ---------- despesas ----------
+async function telaDespesas() {
+  topo('Despesas'); voltarInicio();
+  $app.innerHTML = `<h1>Despesas</h1><div id="erro"></div>
+    <button class="acao" id="nova" type="button">${ic('recibo')} Lançar despesa</button>
+    <div id="lista" style="margin-top:6px"><p class="suave">Carregando…</p></div>`;
+  document.getElementById('ini').onclick = () => telaInicio();
+  document.getElementById('nova').onclick = () => telaNovaDespesa();
+  await executar(async () => {
+    const r = await api('minhasDespesas');
+    const soma = st => r.lista.filter(x => x.situacao === st && /reembolso/i.test(x.pagamento)).reduce((s, x) => s + x.valor, 0);
+    const cor = s => s === 'Aprovada' ? 'verde' : s === 'Recusada' ? 'vermelho' : s === 'Reembolsada' ? 'verde' : 'amarelo';
+    document.getElementById('lista').innerHTML = `<div class="cal-resumo" style="grid-template-columns:1fr 1fr 1fr;margin-top:10px">
+        <div class="cal-qd amarelo"><b style="font-size:18px">${reais(soma('Aguardando conferência'))}</b><span>Aguardando conferência</span></div>
+        <div class="cal-qd verde"><b style="font-size:18px">${reais(soma('Aprovada'))}</b><span>Aprovado, a receber</span></div>
+        <div class="cal-qd"><b style="font-size:18px">${reais(soma('Reembolsada'))}</b><span>Já reembolsado</span></div></div>
+      <h2>Lançamentos</h2>` + (r.lista.length ? r.lista.map(x => `<div class="cartao"><div class="t">${esc(x.categoria)} · ${reais(x.valor)}</div>
+        <p class="suave" style="margin:2px 0 6px">${esc(x.data)}${x.cliente ? ' · ' + esc(x.cliente) : ''} · ${esc(/reembolso/i.test(x.pagamento) ? 'reembolso' : 'pago pela Kiton')}${x.descricao ? '<br>' + esc(x.descricao) : ''}</p>
+        <span class="selo-txt ${cor(x.situacao)}">${esc(x.situacao === 'Aguardando conferência' ? 'Aguardando conferência' : x.situacao)}</span>${x.motivo ? `<p class="suave" style="margin:6px 0 0">Motivo: ${esc(x.motivo)}</p>` : ''}</div>`).join('') : msg('info', 'Nenhuma despesa lançada.'));
+  });
+}
+
+function telaNovaDespesa() {
+  const d = est.dados;
+  const f = { categoria: '', pagamento: d.pagamentosDespesa[0] || '', foto: null };
+  $app.innerHTML = `<h1>Lançar despesa</h1><div id="erro"></div>
+    <label class="rotulo">Categoria</label>${chips('dCat', d.categoriasDespesa, '')}
+    <label class="rotulo" for="dValor">Valor (R$)</label><input class="campo-txt" id="dValor" inputmode="decimal" placeholder="0,00">
+    <label class="rotulo" for="dData">Data</label><input class="campo-txt" id="dData" type="date" max="${hojeISO()}" value="${hojeISO()}">
+    <label class="rotulo">Quem pagou?</label>${chips('dPag', d.pagamentosDespesa, f.pagamento)}
+    <label class="rotulo" for="dCli">Cliente / obra (se for de um atendimento)</label><select class="campo-txt" id="dCli"><option value="">Nenhum</option>${d.clientesInfo.map(c => `<option ${d.checkin && d.checkin.cliente === c.nome ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select>
+    <label class="rotulo" for="dDesc">Descrição</label><input class="campo-txt" id="dDesc" placeholder="Ex.: almoço da equipe, pedágio de Medianeira">
+    <label class="rotulo">Comprovante</label>
+    <div id="dPrev"></div>
+    <label class="acao leve" for="dFoto" style="cursor:pointer;margin-top:0">${ic('recibo')} Fotografar comprovante</label>
+    <input id="dFoto" type="file" accept="image/*" capture="environment" class="oculto">
+    <button type="button" class="link" id="semFoto" style="margin-top:10px">Não tenho comprovante</button>
+    <div id="boxSem" class="oculto"><input class="campo-txt" id="dSem" placeholder="Por que não tem comprovante?" style="margin-top:8px"></div>
+    <p class="regra">${ic('recibo')}<span>Só são reembolsadas despesas lançadas aqui e aprovadas pela administração.</span></p>`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">Salvar despesa</button></div>`);
+  ligarChips('dCat', v => f.categoria = v);
+  ligarChips('dPag', v => f.pagamento = v);
+  document.getElementById('dFoto').onchange = e => executar(async () => {
+    const a = e.target.files[0]; if (!a) return;
+    f.foto = await comprimir(a, 1600, 0.75);
+    document.getElementById('dPrev').innerHTML = `<div class="fotos"><div class="foto"><img src="${f.foto}" alt="Comprovante"></div></div>`;
+  });
+  document.getElementById('semFoto').onclick = () => document.getElementById('boxSem').classList.toggle('oculto');
+  document.getElementById('ant').onclick = () => telaDespesas();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    if (!f.categoria) throw new Error('Escolha a categoria.');
+    const valor = numBR(document.getElementById('dValor').value);
+    if (!valor) throw new Error('Informe o valor.');
+    const semFotoMotivo = document.getElementById('dSem').value.trim();
+    if (!f.foto && !semFotoMotivo) throw new Error('Fotografe o comprovante ou diga por que não tem.');
+    const r = await api('salvarDespesa', { categoria: f.categoria, valor, data: document.getElementById('dData').value, pagamento: f.pagamento,
+      cliente: document.getElementById('dCli').value, descricao: document.getElementById('dDesc').value, foto: f.foto, semFotoMotivo });
+    telaFeito(`Despesa nº ${r.n} lançada`, `${f.categoria} · ${reais(valor)} · aguardando conferência`, false, false);
+  });
+}
+
+// ---------- cadastro de item pelo app ----------
+async function telaNovoItem() {
+  topo('Cadastrar item');
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">Cadastrar</button></div>`);
+  $app.innerHTML = `<h1>Cadastrar item</h1><div id="erro"></div><p class="suave">Carregando…</p>`;
+  document.getElementById('ant').onclick = () => telaCadastros();
+  let info;
+  await executar(async () => { info = await api('cadastroInfo'); });
+  if (!info) return;
+  const f = { grupo: '', tipo: '', uso: 'Coletivo', estado: 'N', periodicidade: '' };
+  $app.innerHTML = `<h1>Cadastrar item</h1><div id="erro"></div>
+    <label class="rotulo" for="nGrupo">Grupo</label>
+    <select class="campo-txt" id="nGrupo"><option value="">Escolha um grupo existente…</option>${info.grupos.map(g => `<option value="${esc(g.grupo)}">${esc(g.grupo)} (${esc(g.prefixos.join(', '))}) · ${g.qtd}</option>`).join('')}<option value="__novo">+ Grupo novo</option></select>
+    <input class="campo-txt oculto" id="nGrupoNovo" placeholder="Nome do grupo novo (ex.: Escada)" style="margin-top:8px">
+    <label class="rotulo">Início do código</label>
+    <div class="grade" style="grid-template-columns:1fr 1fr"><input class="campo-txt" id="nFam" maxlength="3" placeholder="FAM" style="text-transform:uppercase;text-align:center;letter-spacing:3px">
+      <input class="campo-txt" id="nTip" maxlength="3" placeholder="TIP" style="text-transform:uppercase;text-align:center;letter-spacing:3px"></div>
+    <p class="suave" id="nProx" style="margin-top:6px">Ex.: ESC-FIB para escada de fibra.</p>
+    <label class="rotulo" for="nDesc">Descrição</label><input class="campo-txt" id="nDesc">
+    <label class="rotulo">Tipo</label>${chips('nTipo', info.tipos, '')}
+    <div class="grade" style="margin-top:0"><div><label class="rotulo" for="nQtd">Quantidade</label><input class="campo-txt" id="nQtd" type="number" min="1" max="20" value="1"></div>
+      <div><label class="rotulo" for="nIdent">Nº pintado</label><input class="campo-txt" id="nIdent" inputmode="numeric"></div></div>
+    <p class="suave" style="margin-top:6px">Com quantidade maior que 1, cada peça ganha um código e o nº pintado segue a sequência a partir do informado.</p>
+    <label class="rotulo">Uso</label>${chips('nUso', info.usos, 'Coletivo')}
+    <div id="boxResp" class="oculto"><label class="rotulo" for="nResp">Responsável</label><select class="campo-txt" id="nResp"><option value="">Escolha…</option>${info.colaboradores.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
+    <label class="rotulo" for="nMarca">Marca / modelo</label><input class="campo-txt" id="nMarca">
+    <label class="rotulo" for="nSerie">Nº de série</label><input class="campo-txt" id="nSerie">
+    <label class="rotulo">Estado</label>${chips('nEst', info.estados, 'N')}<p class="suave" style="margin-top:6px">${esc(info.legendaEstado.join(' · '))}</p>
+    <label class="rotulo" for="nValor">Valor de reposição (R$)</label><input class="campo-txt" id="nValor" inputmode="decimal" placeholder="0,00">
+    <label class="rotulo" for="nLocal">Local de guarda</label><input class="campo-txt" id="nLocal" list="locais"><datalist id="locais">${info.locais.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+    ${info.kits.length ? `<label class="rotulo" for="nKit">Faz parte de um kit?</label><select class="campo-txt" id="nKit"><option value="">Não</option>${info.kits.map(k => `<option value="${esc(k.pat)}">${esc(k.pat)} · ${esc(k.desc)}</option>`).join('')}</select>` : ''}
+    <div id="boxPer" class="oculto"><label class="rotulo">Periodicidade da calibração</label>${chips('nPer', info.periodicidades, '')}</div>
+    <label class="rotulo" for="nObs">Observação (opcional)</label><textarea class="campo-txt" id="nObs"></textarea>`;
+  const prox = () => {
+    const pf = (document.getElementById('nFam').value + '-' + document.getElementById('nTip').value).toUpperCase();
+    const el = document.getElementById('nProx');
+    if (/^[A-Z]{3}-[A-Z]{3}$/.test(pf)) {
+      const n = (info.ultimos[pf] || 0) + 1, q = Math.max(1, Number(document.getElementById('nQtd').value) || 1);
+      el.innerHTML = `Próximo código: <b>${pf}-${String(n).padStart(3, '0')}</b>${q > 1 ? ` até <b>${pf}-${String(n + q - 1).padStart(3, '0')}</b>` : ''}${info.ultimos[pf] ? '' : ' (código novo)'}`;
+    } else el.textContent = 'Use 3 letras para a família e 3 para o tipo. Ex.: ESC-FIB.';
+  };
+  const marcarTipo = t => { f.tipo = t; document.querySelectorAll('#nTipo .pessoa').forEach(b => b.classList.toggle('sel', b.dataset.v === t)); document.getElementById('boxPer').classList.toggle('oculto', t !== 'Instrumento'); };
+  document.getElementById('nGrupo').onchange = e => {
+    const v = e.target.value;
+    document.getElementById('nGrupoNovo').classList.toggle('oculto', v !== '__novo');
+    const g = info.grupos.find(x => x.grupo === v);
+    if (g) {
+      f.grupo = g.grupo; const [a, b] = (g.prefixos[0] || '-').split('-');
+      document.getElementById('nFam').value = a || ''; document.getElementById('nTip').value = b || '';
+      if (!document.getElementById('nDesc').value) document.getElementById('nDesc').value = g.desc;
+      if (g.tipo) marcarTipo(g.tipo);
+    } else f.grupo = '';
+    prox();
+  };
+  ['nFam', 'nTip', 'nQtd'].forEach(id => document.getElementById(id).oninput = prox);
+  ligarChips('nTipo', marcarTipo);
+  ligarChips('nUso', v => { f.uso = v; document.getElementById('boxResp').classList.toggle('oculto', v !== 'Individual'); });
+  ligarChips('nEst', v => f.estado = v);
+  ligarChips('nPer', v => f.periodicidade = v);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const grupo = document.getElementById('nGrupo').value === '__novo' ? document.getElementById('nGrupoNovo').value.trim() : f.grupo;
+    if (!grupo) throw new Error('Escolha o grupo ou crie um novo.');
+    if (!f.tipo) throw new Error('Escolha o tipo.');
+    const kit = document.getElementById('nKit');
+    const r = await api('novoItem', {
+      grupo, tipo: f.tipo, prefixo: (document.getElementById('nFam').value + '-' + document.getElementById('nTip').value).toUpperCase(),
+      descricao: document.getElementById('nDesc').value, quantidade: document.getElementById('nQtd').value, ident: document.getElementById('nIdent').value,
+      uso: f.uso, responsavel: document.getElementById('nResp').value, marca: document.getElementById('nMarca').value, serie: document.getElementById('nSerie').value,
+      estado: f.estado, valor: numBR(document.getElementById('nValor').value), local: document.getElementById('nLocal').value,
+      kit: kit ? kit.value : '', periodicidade: f.tipo === 'Instrumento' ? f.periodicidade : '', obs: document.getElementById('nObs').value
+    });
+    barra(`<div class="dentro"><button class="acao leve" id="fim" type="button">Cadastros</button><button class="acao" id="outro" type="button">Cadastrar outro</button></div>`);
+    $app.innerHTML = `<div class="feito-tela"><div class="selo">${ic('ok')}</div><h1>${r.criados.length === 1 ? 'Item cadastrado' : r.criados.length + ' itens cadastrados'}</h1>
+      <p class="suave">${r.criados.map(esc).join(', ')}</p>${msg('info', 'Escreva o código na etiqueta e cole na peça.')}</div>`;
+    document.getElementById('fim').onclick = telaCadastros;
+    document.getElementById('outro').onclick = telaNovoItem;
+  });
+}
+
+// ---------- administração: despesas e presença ----------
+async function adminDespesas(box) {
+  await executar(async () => {
+    const r = await api('despesasPendentes');
+    box.innerHTML = `<h1>Despesas para conferir</h1>` + (r.lista.length ? r.lista.map(x => `<div class="cartao" data-n="${esc(x.n)}">
+      <div class="t">${esc(x.colaborador)} · ${reais(x.valor)}</div>
+      <p class="suave" style="margin:2px 0 6px">${esc(x.data)} · ${esc(x.categoria)}${x.cliente ? ' · ' + esc(x.cliente) : ''}<br>${esc(/reembolso/i.test(x.pagamento) ? 'Reembolso ao colaborador' : 'Pago pela Kiton')}${x.saida ? ' · saída nº ' + esc(x.saida) : ''}${x.descricao ? '<br>' + esc(x.descricao) : ''}</p>
+      ${/^http/.test(x.comprovante) ? `<a class="link" href="${esc(x.comprovante)}" target="_blank" rel="noopener">Ver comprovante</a>` : '<span class="selo-txt amarelo">Sem comprovante</span>'}
+      <div class="segmento" style="margin-top:10px"><button type="button" data-v="Aprovada">Aprovar</button><button type="button" data-v="Recusada">Recusar</button></div></div>`).join('') : msg('info', 'Nenhuma despesa aguardando conferência.'));
+    box.querySelectorAll('[data-n]').forEach(c => c.querySelectorAll('[data-v]').forEach(b => b.onclick = () => executar(async () => {
+      let motivo = '';
+      if (b.dataset.v === 'Recusada') { motivo = prompt('Motivo da recusa (o colaborador vai ver):') || ''; if (!motivo.trim()) return; }
+      await api('conferirDespesa', { n: c.dataset.n, resultado: b.dataset.v, motivo }); adminDespesas(box);
+    })));
+  });
+}
+
+async function adminPresenca(box) {
+  const h = new Date(), mes = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
+  box.innerHTML = `<h1>Presença em obra</h1><input class="campo-txt" id="mesP" type="month" value="${mes}"><div id="pres" style="margin-top:12px"></div>`;
+  const carregar = () => executar(async () => {
+    const r = await api('presenca', { mes: document.getElementById('mesP').value });
+    const pessoas = {};
+    r.visitas.forEach(v => {
+      const p = pessoas[v.colaborador] || (pessoas[v.colaborador] = { dias: new Set(), horas: 0, fora: 0, n: 0, aberto: 0 });
+      p.n++; p.dias.add(v.chegada.slice(0, 10)); p.horas += Number(v.horas) || 0; if (v.situacao === 'Fora do raio') p.fora++; if (!v.saida) p.aberto++;
+    });
+    const selo = s => s === 'No local' ? 'verde' : s === 'Fora do raio' ? 'laranja' : 'amarelo';
+    document.getElementById('pres').innerHTML = (Object.keys(pessoas).length ? `<div class="cartao"><table><thead><tr><th>Colaborador</th><th class="n">Dias</th><th class="n">Horas</th><th class="n">Fora</th></tr></thead><tbody>
+        ${Object.keys(pessoas).sort().map(k => `<tr><td>${esc(k)}</td><td class="n">${pessoas[k].dias.size}</td><td class="n">${pessoas[k].horas.toFixed(1).replace('.', ',')}</td><td class="n">${pessoas[k].fora ? `<span class="selo-txt laranja">${pessoas[k].fora}</span>` : '0'}</td></tr>`).join('')}
+      </tbody></table></div>` : msg('info', 'Nenhum check-in neste mês.')) +
+      (r.semLocal.length ? `<p class="suave">Clientes sem localização: ${esc(r.semLocal.join(', '))}. Use o botão “Usar como local do cliente” num check-in feito lá.</p>` : '') +
+      (r.visitas.length ? `<h2>Check-ins</h2>` + r.visitas.map(v => `<div class="cartao ${v.tardio ? 'tardio' : ''}"><div class="t">${esc(v.colaborador)} · ${esc(v.cliente)}</div>
+        <p class="suave" style="margin:2px 0 6px">${esc(v.chegada)}${v.saida ? ' às ' + esc(hora(v.saida)) + ' · ' + String(v.horas).replace('.', ',') + ' h' : ' · <b>sem saída registrada</b>'}${v.obs ? '<br>' + esc(v.obs) : ''}</p>
+        <span class="selo-txt ${selo(v.situacao)}">${esc(v.situacao)}${v.dist !== '' && v.dist != null && v.situacao !== 'No local' ? ' · ' + distTxt(v.dist) : ''}</span>${v.tardio ? `<span class="selo-txt laranja">${esc(v.tardio)} lançada depois</span>` : ''}
+        ${/^http/.test(v.mapa) ? `<a class="link" href="${esc(v.mapa)}" target="_blank" rel="noopener">Mapa</a>` : ''}
+        ${v.situacao === 'Cliente sem localização' && v.lat !== '' ? ` · <button type="button" class="link" data-loc="${esc(v.n)}">Usar como local do cliente</button>` : ''}</div>`).join('') : '');
+    document.querySelectorAll('[data-loc]').forEach(b => b.onclick = () => executar(async () => {
+      if (!confirm('Usar a posição deste check-in como endereço do cliente? Os próximos check-ins serão comparados com ela.')) return;
+      const x = await api('definirLocalCliente', { n: b.dataset.loc }); erroTela(''); document.getElementById('erro').innerHTML = msg('ok', `Localização de ${x.cliente} definida.`); carregar();
+    }));
+  });
+  document.getElementById('mesP').onchange = carregar; carregar();
 }
 
 // ---------- partida ----------
