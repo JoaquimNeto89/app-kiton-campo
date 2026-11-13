@@ -456,7 +456,7 @@ function desenharCal() {
     const aberto = calAbertos.has(g) || !!calFiltro;
     return `<div class="subgrupo${aberto ? ' aberto' : ''}" data-g="${esc(g)}">
       <button type="button" class="sg-cab" aria-expanded="${aberto}"><span class="sg-qtd cal-${corQtd}">${l.length}</span>
-        <span class="sg-txt"><span class="nome">${esc(g)}</span><span class="cal-minis">${resumoG}</span></span>
+        <span class="sg-txt"><span class="nome">${esc(g)}${(() => { const pf = [...new Set(l.map(i => i.pat.split('-').slice(0, 2).join('-')))]; return pf[0] ? ` <span style="white-space:nowrap">(${esc(pf.join(', '))})</span>` : ''; })()}</span><span class="cal-minis">${resumoG}</span></span>
         <span class="seta-sg">${ic('seta')}</span></button>
       <div class="sg-itens"${aberto ? '' : ' hidden'}>${l.map(linha).join('')}</div></div>`;
   }).join('');
