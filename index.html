@@ -178,8 +178,9 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .selo-txt.laranja{background:#FFE2C2;color:#8A3B00}
 .cartao.tardio{box-shadow:inset 4px 0 0 #E8730C}
 .selo-txt.verde{background:var(--verde-claro);color:var(--verde)}
-.abas{display:flex;gap:8px;margin-bottom:14px}
-.abas button{flex:1;border:0;border-radius:12px;padding:12px 6px;background:#fff;font-weight:600}
+.abas{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.abas button{flex:1 1 auto;border:0;border-radius:12px;padding:12px 12px;background:#fff;font-weight:600;font-size:15px;white-space:nowrap}
+.bolinha{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;margin-left:6px;border-radius:10px;background:var(--vermelho);color:#fff;font-size:12px;line-height:1}
 .abas button.sel{background:var(--preto);color:#fff}
 table{width:100%;border-collapse:collapse;font-size:15px}
 th,td{text-align:left;padding:10px 6px;border-bottom:1px solid var(--aco)}
@@ -409,7 +410,9 @@ function telaInicio() {
     </div>
     <button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens</b><span class="suave" style="display:block">${nMeus ? 'Ferramentas e equipamentos no seu nome' : 'Nenhum item no seu nome'}</span></span>${ic('seta')}</button>
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${mod('mAdmin', 'admin', 'Conferir e fechar', 'Itens devolvidos, saídas em aberto e fechamento do mês')}
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0);
+        const det = [pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : ''].filter(Boolean).join(', ');
+        return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
       ${mod('mCad', 'tabela', 'Cadastros', 'Itens, pessoas e clientes na planilha')}
@@ -419,7 +422,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = telaMeusItens;
-  if (admin) { document.getElementById('mAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -775,7 +778,9 @@ function telaRetorno(s) {
 async function telaAdmin(aba) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
-  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens'], ['desp', 'Despesas'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t]) => `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}</button>`).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
+  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
+    const n = pk && est.dados.pendencias ? est.dados.pendencias[pk] : 0;
+    return `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}${n ? `<span class="bolinha">${n}</span>` : ''}</button>`; }).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
   $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
   document.getElementById('ant').onclick = () => carregarInicio();
   const box = document.getElementById('conteudo');
@@ -804,6 +809,8 @@ async function telaAdmin(aba) {
     });
   } else if (aba === 'desp') {
     await adminDespesas(box);
+  } else if (aba === 'cli') {
+    await adminClientes(box);
   } else if (aba === 'pres') {
     await adminPresenca(box);
   } else if (aba === 'fech') {
@@ -911,7 +918,7 @@ function parecidos(digitado, lista) {
   return lista.filter(c => {
     const kc = chaveCliente(c.nome);
     return kc === k || kc.includes(k) || k.includes(kc) || distEdicao(k, kc) <= Math.max(1, Math.floor(k.length / 6)) ||
-      kc.split(' ')[0] === k.split(' ')[0] && k.split(' ')[0].length >= 4;
+      (() => { const a = k.split(' ')[0], b = kc.split(' ')[0]; return a.length >= 4 && b.length >= 4 && (a === b || (Math.min(a.length, b.length) >= 5 && distEdicao(a, b) <= 1)); })();
   });
 }
 
@@ -1358,6 +1365,58 @@ async function adminDespesas(box) {
       if (b.dataset.v === 'Recusada') { motivo = prompt('Motivo da recusa (o colaborador vai ver):') || ''; if (!motivo.trim()) return; }
       await api('conferirDespesa', { n: c.dataset.n, resultado: b.dataset.v, motivo }); adminDespesas(box);
     })));
+  });
+}
+
+async function adminClientes(box) {
+  await executar(async () => {
+    const r = await api('clientesNovos');
+    if (est.dados.pendencias) est.dados.pendencias.clientes = r.novos.length;
+    const usoTxt = u => [u['Check-ins'] ? u['Check-ins'] + ' check-in(s)' : '', u['Ordens de serviço'] ? u['Ordens de serviço'] + ' OS' : '', u['Despesas'] ? u['Despesas'] + ' despesa(s)' : '', u['Saídas'] ? u['Saídas'] + ' saída(s)' : ''].filter(Boolean).join(', ') || 'nenhum lançamento';
+    box.innerHTML = `<h1>Novos clientes cadastrados</h1><p class="suave">Cadastrados pelos colaboradores em campo. Aceite (corrigindo o que precisar) ou junte com um cliente que já existe.</p>` +
+      (r.novos.length ? r.novos.map((c, i) => {
+        const par = parecidos(c.nome, r.outros);
+        return `<div class="cartao" data-i="${i}"><div class="t">${esc(c.nome)}</div>
+        <p class="suave" style="margin:2px 0 6px">${esc(c.cidade)} · ${esc(c.por)}<br>Usado em: ${esc(usoTxt(c.usos))}</p>
+        ${c.lat ? `<a class="link" href="https://maps.google.com/?q=${esc(c.lat)},${esc(c.lng)}" target="_blank" rel="noopener">Ver no mapa</a>` : '<span class="selo-txt amarelo">Sem localização</span>'}
+        ${par.length ? `<p style="margin:8px 0 0"><span class="selo-txt laranja">Parecido com: ${esc(par.map(x => x.nome).join(', '))}</span></p>` : ''}
+        <div class="segmento" style="margin-top:10px"><button type="button" data-a="aceitar">Aceitar / corrigir</button><button type="button" data-a="juntar">É o mesmo que…</button></div>
+        <div class="oculto" data-f="aceitar">
+          <label class="rotulo">Nome</label><input class="campo-txt" data-k="novoNome" value="${esc(c.nome)}">
+          <label class="rotulo">Cidade</label><input class="campo-txt" data-k="cidade" value="${esc(c.cidade)}">
+          <label class="rotulo">Endereço</label><input class="campo-txt" data-k="endereco" value="${esc(c.endereco)}">
+          <label class="rotulo">E-mails para a OS (até 3)</label>
+          ${[0, 1, 2].map(j => `<input class="campo-txt" data-e="${j}" type="email" value="${esc(c.emails[j] || '')}" style="margin-bottom:6px">`).join('')}
+          <label class="rotulo">Raio do check-in (m)</label><input class="campo-txt" data-k="raio" inputmode="numeric" value="${esc(c.raio)}">
+          <button type="button" class="acao" data-ok="aceitar">Salvar e aceitar</button></div>
+        <div class="oculto" data-f="juntar">
+          <label class="rotulo">Cliente certo</label><select class="campo-txt" data-k="destino"><option value="">Escolha…</option>
+            ${par.map(x => `<option value="${esc(x.nome)}">${esc(x.nome)} (parecido)</option>`).join('')}${r.outros.filter(x => !par.includes(x)).map(x => `<option value="${esc(x.nome)}">${esc(x.nome)}</option>`).join('')}</select>
+          <p class="suave" style="margin-top:6px">Os lançamentos passam para o cliente escolhido e este cadastro é apagado.</p>
+          <button type="button" class="acao" data-ok="juntar">Juntar</button></div></div>`;
+      }).join('') : msg('info', 'Nenhum cliente novo aguardando aceite.'));
+    box.querySelectorAll('[data-i]').forEach(card => {
+      const c = r.novos[+card.dataset.i];
+      card.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+        card.querySelectorAll('[data-a]').forEach(x => x.className = x === b ? 'sel' : '');
+        card.querySelectorAll('[data-f]').forEach(f => f.classList.toggle('oculto', f.dataset.f !== b.dataset.a));
+      });
+      const v = k => card.querySelector(`[data-k="${k}"]`).value.trim();
+      card.querySelector('[data-ok="aceitar"]').onclick = () => executar(async () => {
+        const x = await api('aceitarCliente', { nome: c.nome, novoNome: v('novoNome'), cidade: v('cidade'), endereco: v('endereco'), raio: v('raio'),
+          emails: [...card.querySelectorAll('[data-e]')].map(e => e.value.trim()) });
+        await adminClientes(box);
+        document.getElementById('erro').innerHTML = msg('ok', `${x.nome} aceito.${x.alterados ? ` ${x.alterados} lançamento(s) passaram a usar o nome novo.` : ''}`);
+      });
+      card.querySelector('[data-ok="juntar"]').onclick = () => executar(async () => {
+        const destino = v('destino');
+        if (!destino) throw new Error('Escolha o cliente certo.');
+        if (!confirm(`Juntar "${c.nome}" com "${destino}"? Os lançamentos passam para ${destino} e o cadastro "${c.nome}" é apagado.`)) return;
+        const x = await api('juntarCliente', { nome: c.nome, destino });
+        await adminClientes(box);
+        document.getElementById('erro').innerHTML = msg('ok', `Juntado com ${x.destino}: ${x.alterados} lançamento(s) atualizados.`);
+      });
+    });
   });
 }
 

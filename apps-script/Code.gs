@@ -87,6 +87,9 @@ function rotear_(req) {
     case 'checkout': return comTrava_(() => checkout_(u, req));
     case 'presenca': exigirAdmin_(u); return presenca_(req);
     case 'definirLocalCliente': exigirAdmin_(u); return comTrava_(() => definirLocalCliente_(req));
+    case 'clientesNovos': exigirAdmin_(u); return clientesNovos_();
+    case 'aceitarCliente': exigirAdmin_(u); return comTrava_(() => aceitarCliente_(u, req));
+    case 'juntarCliente': exigirAdmin_(u); return comTrava_(() => juntarCliente_(u, req));
     // ordem de serviço
     case 'salvarOS': return comTrava_(() => salvarOS_(u, req));
     case 'listarOS': return listarOS_(u);
@@ -374,9 +377,18 @@ function inicio_(u) {
     clientesInfo,
     checkin: checkinAberto_(u),
     ultimosCheckins: ultimosCheckins_(u, 5),
+    pendencias: u.perfil === 'Administrador' ? pendenciasAdmin_() : null,
     tiposOS: lista_('Tipo de OS'),
     categoriasDespesa: lista_('Categoria de despesa'),
     pagamentosDespesa: lista_('Pagamento de despesa')
+  };
+}
+
+function pendenciasAdmin_() {
+  return {
+    itens: ler_(ABA.itensSaida).linhas.filter(l => ['Aguardando conferência', 'Avariado', 'Extraviado'].indexOf(txt_(l.get('Situação'))) >= 0 && !txt_(l.get('Conferido por'))).length,
+    despesas: ler_(ABA.despesas).linhas.filter(l => txt_(l.get('Situação')) === 'Aguardando conferência').length,
+    clientes: pendentesCliente_().length
   };
 }
 
@@ -790,6 +802,92 @@ function cadastrarClienteCampo_(u, nome, cidade, g) {
     'Cadastrado por': 'App: ' + u.nome + ' em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' (conferir)'
   });
   return { nome: padrao, cidade: cidade, lat: g ? g.lat : null, lng: g ? g.lng : null, raio: RAIO_PADRAO_M, emails: [] };
+}
+
+// ---------- conferência de clientes cadastrados em campo ----------
+
+const REF_CLIENTE = [['Check-ins', 'Cliente'], ['Ordens de serviço', 'Cliente'], ['Despesas', 'Cliente / obra'], ['Saídas', 'Destino']];
+
+function usosCliente_(nome) {
+  const r = {};
+  REF_CLIENTE.forEach(([aba, col]) => { r[aba] = ler_(aba).linhas.filter(l => txt_(l.get(col)) === nome).length; });
+  return r;
+}
+
+function renomearReferencias_(de, para) {
+  let n = 0;
+  REF_CLIENTE.forEach(([aba, col]) => {
+    const t = ler_(aba);
+    t.linhas.filter(l => txt_(l.get(col)) === de).forEach(l => { set_(t, l._linha, col, para); n++; });
+  });
+  return n;
+}
+
+/** Recalcula a situação dos check-ins de um cliente com a localização atual dele. */
+function recalcularCheckins_(nome) {
+  const cli = clientes_().find(c => c.nome === nome);
+  if (!cli || cli.lat === null) return;
+  const t = ler_(ABA.checkins);
+  t.linhas.filter(x => txt_(x.get('Cliente')) === nome && txt_(x.get('Lat. chegada')) !== '').forEach(x => {
+    const loc = situacaoLocal_(cli, { lat: Number(x.get('Lat. chegada')), lng: Number(x.get('Long. chegada')), acc: Number(x.get('Precisão chegada (m)')) });
+    set_(t, x._linha, 'Distância chegada (m)', loc.dist);
+    set_(t, x._linha, 'Situação chegada', loc.situacao);
+  });
+}
+
+function pendentesCliente_() {
+  return ler_(ABA.clientes).linhas.filter(l => /\(conferir\)/.test(txt_(l.get('Cadastrado por'))));
+}
+
+function clientesNovos_() {
+  const novos = pendentesCliente_().map(l => ({
+    nome: txt_(l.get('Cliente')), cidade: txt_(l.get('Cidade')), endereco: txt_(l.get('Endereço')),
+    lat: txt_(l.get('Latitude')), lng: txt_(l.get('Longitude')), raio: Number(l.get('Raio do check-in (m)')) || RAIO_PADRAO_M,
+    emails: ['E-mail OS 1', 'E-mail OS 2', 'E-mail OS 3'].map(k => txt_(l.get(k))), por: txt_(l.get('Cadastrado por')).replace(' (conferir)', ''),
+    usos: usosCliente_(txt_(l.get('Cliente')))
+  }));
+  const nomes = novos.map(n => n.nome);
+  const outros = clientes_().filter(c => nomes.indexOf(c.nome) < 0).map(c => ({ nome: c.nome, cidade: c.cidade }));
+  return { ok: true, novos, outros };
+}
+
+function aceitarCliente_(u, req) {
+  const t = ler_(ABA.clientes);
+  const l = t.linhas.find(x => txt_(x.get('Cliente')) === txt_(req.nome));
+  if (!l) throw new Error('Cliente não encontrado.');
+  const novoNome = txt_(req.novoNome).replace(/\s+/g, ' ');
+  if (novoNome.length < 2) throw new Error('Informe o nome do cliente.');
+  const outro = t.linhas.find(x => x._linha !== l._linha && chaveCliente_(x.get('Cliente')) === chaveCliente_(novoNome));
+  if (outro) throw new Error('Já existe "' + txt_(outro.get('Cliente')) + '". Use "É o mesmo que" para juntar.');
+  const emails = (req.emails || []).map(txt_);
+  const inv = emails.find(e => e && !emailValido_(e));
+  if (inv) throw new Error('E-mail inválido: ' + inv);
+  set_(t, l._linha, 'Cliente', novoNome);
+  set_(t, l._linha, 'Cidade', txt_(req.cidade));
+  set_(t, l._linha, 'Endereço', txt_(req.endereco));
+  ['E-mail OS 1', 'E-mail OS 2', 'E-mail OS 3'].forEach((k, i) => set_(t, l._linha, k, emails[i] || ''));
+  set_(t, l._linha, 'Raio do check-in (m)', Number(req.raio) || RAIO_PADRAO_M);
+  set_(t, l._linha, 'Cadastrado por', txt_(l.get('Cadastrado por')).replace('(conferir)', '(aceito por ' + u.nome + ' em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy') + ')'));
+  const alterados = novoNome !== txt_(req.nome) ? renomearReferencias_(txt_(req.nome), novoNome) : 0;
+  recalcularCheckins_(novoNome);
+  return { ok: true, nome: novoNome, alterados };
+}
+
+function juntarCliente_(u, req) {
+  const t = ler_(ABA.clientes);
+  const l = t.linhas.find(x => txt_(x.get('Cliente')) === txt_(req.nome));
+  const d = t.linhas.find(x => txt_(x.get('Cliente')) === txt_(req.destino));
+  if (!l || !d) throw new Error('Cliente não encontrado.');
+  if (l._linha === d._linha) throw new Error('Escolha outro cliente.');
+  // o cliente certo herda a localização se ainda não tiver
+  if (txt_(d.get('Latitude')) === '' && txt_(l.get('Latitude')) !== '') {
+    set_(t, d._linha, 'Latitude', Number(l.get('Latitude')));
+    set_(t, d._linha, 'Longitude', Number(l.get('Longitude')));
+  }
+  const alterados = renomearReferencias_(txt_(req.nome), txt_(req.destino));
+  t.sh.deleteRow(l._linha);
+  recalcularCheckins_(txt_(req.destino));
+  return { ok: true, destino: txt_(req.destino), alterados };
 }
 
 function checkin_(u, req) {
