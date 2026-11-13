@@ -756,15 +756,57 @@ function resumoCheckin_(l) {
   };
 }
 
+/** Chave para comparar nomes de cliente: sem acento, maiúscula, pontuação nem sufixo societário. */
+function chaveCliente_(n) {
+  return txt_(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\b(ltda|me|epp|eireli|s ?a|cia|industria e comercio|ind e com)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/** Nome no padrão do cadastro: espaços simples, iniciais maiúsculas, conectivos minúsculos, sem sufixo societário. */
+function padronizarCliente_(n) {
+  const minus = ['de', 'da', 'do', 'das', 'dos', 'e'];
+  let s = txt_(n).replace(/\s+/g, ' ').replace(/[\s,.-]+(ltda|me|epp|eireli|s\.?\/?a)\.?$/i, '').trim();
+  return s.split(' ').map((w, i) => {
+    if (/^[A-Z0-9]{2,4}$/.test(w)) return w;            // sigla já em maiúscula: EP, CBA
+    const l = w.toLowerCase();
+    if (i > 0 && minus.indexOf(l) >= 0) return l;
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  }).join(' ');
+}
+
+/** Cadastra um cliente digitado em campo, se não existir nada parecido. */
+function cadastrarClienteCampo_(u, nome, cidade, g) {
+  const padrao = padronizarCliente_(nome);
+  if (padrao.length < 3) throw new Error('Nome do cliente muito curto.');
+  if (!txt_(cidade)) throw new Error('Informe a cidade do cliente novo.');
+  if (padrao !== txt_(nome)) throw new Error('PADRAO:' + padrao);
+  const k = chaveCliente_(padrao);
+  const igual = clientes_().find(c => chaveCliente_(c.nome) === k);
+  if (igual) throw new Error('Esse cliente já existe como "' + igual.nome + '". Escolha ele na lista.');
+  const t = ler_(ABA.clientes);
+  anexar_(t, {
+    'Cliente': padrao, 'Cidade': padronizarCliente_(cidade).replace(/[\s\/-]+([a-z]{2})$/i, (_, uf) => '-' + uf.toUpperCase()), 'Latitude': g ? g.lat : '', 'Longitude': g ? g.lng : '', 'Ativo': 'Sim',
+    'Cadastrado por': 'App: ' + u.nome + ' em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' (conferir)'
+  });
+  return { nome: padrao, cidade: cidade, lat: g ? g.lat : null, lng: g ? g.lng : null, raio: RAIO_PADRAO_M, emails: [] };
+}
+
 function checkin_(u, req) {
-  const nome = txt_(req.cliente);
+  let nome = txt_(req.cliente);
   if (!nome) throw new Error('Escolha o cliente.');
   if (checkinAberto_(u)) throw new Error('Você já está com um check-in aberto. Registre a saída do cliente antes.');
-  const cliente = clientes_().find(c => c.nome === nome) || null;
+  let cliente = clientes_().find(c => c.nome === nome) || null;
   const agora = new Date();
   const quando = horarioInformado_(req.horario, agora);
   const g = req.geo || null;
-  const loc = situacaoLocal_(cliente, g);
+  let novo = false;
+  if (!cliente) {
+    if (!req.novo) throw new Error('Cliente não encontrado. Escolha na lista ou cadastre como cliente novo.');
+    cliente = cadastrarClienteCampo_(u, nome, req.cidade, g);
+    nome = cliente.nome; novo = true;
+  }
+  const loc = novo ? { situacao: g ? 'Cliente novo' : 'Cliente sem localização', dist: '' } : situacaoLocal_(cliente, g);
   const t = ler_(ABA.checkins);
   const n = proximoNumero_(t, 'Nº');
   anexar_(t, {
@@ -773,7 +815,7 @@ function checkin_(u, req) {
     'Distância chegada (m)': loc.dist, 'Situação chegada': loc.situacao, 'Mapa chegada': mapa_(g),
     'Lançamento tardio': tardio_(quando, agora) ? 'Chegada' : '', 'Observações': txt_(req.obs)
   });
-  return { ok: true, n, quando: fmt_(quando), situacao: loc.situacao, dist: loc.dist, tardio: tardio_(quando, agora), semLocalizacao: !g };
+  return { ok: true, n, cliente: nome, novo, quando: fmt_(quando), situacao: loc.situacao, dist: loc.dist, tardio: tardio_(quando, agora), semLocalizacao: !g };
 }
 
 function checkout_(u, req) {
