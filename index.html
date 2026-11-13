@@ -107,6 +107,9 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .item .sub{font-size:14px;color:var(--cinza)}
 .item.ocupado{opacity:.6}
 .item.ocupado .caixa{border-style:dashed}
+.cal{font-size:12.5px;color:var(--cinza);margin-top:2px}
+.cal.ruim{color:var(--vermelho-esc);font-weight:600}
+.cal.atencao{color:#8A3B00;font-weight:600}
 .subgrupo{background:var(--branco);border-radius:12px;margin-bottom:8px;overflow:hidden}
 .sg-cab{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;padding:12px 14px;text-align:left}
 .sg-qtd{min-width:32px;height:32px;border-radius:8px;background:var(--aco);display:grid;place-items:center;font:700 15px/1 var(--tit)}
@@ -212,6 +215,7 @@ const IC = {
   admin:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2zM9 13l2 2 4-4"/>',
   pino:'<path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
   os:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17c1.5-1.5 2.5 1.5 4 0s2.5 1 4 0"/>',
+  calib:'<path d="M4 15a8 8 0 1 1 16 0M12 15l4-5M8 19h8"/>',
   recibo:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/>',
   pessoas:'<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6"/>'
 };
@@ -265,6 +269,16 @@ function sair() {
   est.token = null; est.usuario = null; est.dados = null; guardar('kc_token', null); telaLogin();
 }
 document.getElementById('btnSair').onclick = () => { if (confirm('Sair do app neste celular?')) sair(); };
+
+// ---------- calibração na lista de itens ----------
+function linhaCal(i) {
+  if (i.tipo !== 'Instrumento' && !i.calData) return '';
+  if (!i.calData) return '<div class="cal">Sem calibração registrada</div>';
+  const d = i.calDias;
+  if (d == null) return `<div class="cal">Calibrado em ${esc(i.calData)}</div>`;
+  if (d < 0) return `<div class="cal ruim">Calibrado em ${esc(i.calData)} · vencida há ${-d} dias</div>`;
+  return `<div class="cal ${d <= 60 ? 'atencao' : ''}">Calibrado em ${esc(i.calData)} · vence em ${d} dias</div>`;
+}
 
 // ---------- horário: agora ou informado ----------
 const doisDig = n => String(n).padStart(2, '0');
@@ -359,10 +373,68 @@ function telaInicio() {
     </div>
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
       ${mod('mAdmin', 'admin', 'Conferir e fechar', 'Itens devolvidos, saídas em aberto e fechamento do mês')}
+      ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
     </div>` : ''}`;
   document.getElementById('mSaidas').onclick = telaSaidas;
-  if (admin) { document.getElementById('mAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); }
+  if (admin) { document.getElementById('mAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); }
+}
+
+// ---------- calibração (administração) ----------
+async function telaCalibracao() {
+  topo('Calibração');
+  barra(`<div class="dentro"><button class="acao leve" id="ini" type="button">${ic('voltar')} Início</button></div>`);
+  $app.innerHTML = `<h1>Calibração</h1><div id="erro"></div><div id="lista"><p class="suave">Carregando…</p></div>`;
+  document.getElementById('ini').onclick = () => carregarInicio();
+  await executar(async () => {
+    const r = await api('calibraveis');
+    const cor = st => st === 'Vencido' ? 'vermelho' : st === 'Vencendo' ? 'laranja' : st === 'Válido' ? 'verde' : 'amarelo';
+    const cont = st => r.itens.filter(i => i.status === st).length;
+    document.getElementById('lista').innerHTML = `<p class="suave">${cont('Vencido')} vencidos · ${cont('Vencendo')} vencendo em 60 dias · ${cont('Sem calibração')} sem calibração · ${cont('Válido')} válidos</p>` +
+      r.itens.map(i => `<button type="button" class="linha" data-p="${esc(i.pat)}" style="align-items:flex-start">
+        <span style="flex:1"><span class="pat" style="margin:0 6px 0 0">${esc(i.pat)}</span>${esc(i.desc)}
+        <small>${esc(i.marca)}${i.validade ? ` · válida até ${esc(i.validade)}` : ''}${i.dias != null ? ` (${i.dias < 0 ? 'há ' + (-i.dias) + ' dias' : i.dias + ' dias'})` : ''}</small>
+        <span class="selo-txt ${cor(i.status)}" style="margin-top:6px">${esc(i.status)}</span></span><span class="fim">${ic('seta')}</span></button>`).join('');
+    document.querySelectorAll('#lista [data-p]').forEach(b => b.onclick = () => telaCalItem(r.itens.find(x => x.pat === b.dataset.p), r.periodicidades));
+  });
+}
+
+function telaCalItem(i, pers) {
+  topo('Calibração');
+  const hoje = agoraLocal().slice(0, 10);
+  const real = v => v === '' || v == null ? '' : Number(v).toFixed(2).replace('.', ',');
+  $app.innerHTML = `<h1>${esc(i.desc)}</h1><p class="suave"><span class="pat" style="margin:0 6px 0 0">${esc(i.pat)}</span>${esc(i.marca)}${i.serie ? ' · série ' + esc(i.serie) : ''}</p><div id="erro"></div>
+    <dl class="resumo">
+      <div><dt>Situação</dt><dd>${esc(i.status)}</dd></div>
+      <div><dt>Última calibração</dt><dd>${esc(i.data || 'Não registrada')}</dd></div>
+      <div><dt>Válida até</dt><dd>${esc(i.validade || '-')}</dd></div>
+      <div><dt>Certificado</dt><dd>${esc(i.cert || '-')}</dd></div>
+      <div><dt>Periodicidade</dt><dd>${esc(i.per || '-')}</dd></div>
+      <div><dt>Fornecedor</dt><dd>${esc(i.fornecedor || '-')}</dd></div>
+      <div><dt>Custo da última</dt><dd>${i.custo !== '' && i.custo != null ? 'R$ ' + real(i.custo) : '-'}</dd></div>
+      <div><dt>Local / responsável</dt><dd>${esc(i.local || i.responsavel || '-')}</dd></div>
+    </dl>
+    <h2>Registrar nova calibração</h2>
+    <label class="rotulo" for="cData">Data da calibração</label><input class="campo-txt" id="cData" type="date" max="${hoje}" value="${hoje}">
+    <label class="rotulo" for="cCert">Nº do certificado</label><input class="campo-txt" id="cCert">
+    <label class="rotulo">Periodicidade</label><div class="pessoas" id="cPer">${pers.map(x => `<button type="button" class="pessoa ${x === i.per ? 'sel' : ''}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+    <label class="rotulo" for="cForn">Fornecedor / laboratório</label><input class="campo-txt" id="cForn" value="${esc(i.fornecedor)}">
+    <label class="rotulo" for="cCusto">Custo (R$)</label><input class="campo-txt" id="cCusto" inputmode="decimal" placeholder="0,00">
+    <label class="rotulo" for="cObs">Observação (opcional)</label><textarea class="campo-txt" id="cObs"></textarea>
+    <p class="suave" style="margin-top:10px">A calibração anterior fica guardada no histórico.</p>`;
+  let per = i.per;
+  document.querySelectorAll('#cPer [data-v]').forEach(b => b.onclick = () => { per = b.dataset.v; document.querySelectorAll('#cPer .pessoa').forEach(x => x.classList.toggle('sel', x === b)); });
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">Salvar calibração</button></div>`);
+  document.getElementById('ant').onclick = () => telaCalibracao();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const data = document.getElementById('cData').value;
+    if (!data) throw new Error('Informe a data da calibração.');
+    if (!per) throw new Error('Escolha a periodicidade.');
+    const custo = Number(document.getElementById('cCusto').value.replace(/\./g, '').replace(',', '.')) || '';
+    await api('registrarCalibracao', { pat: i.pat, data, cert: document.getElementById('cCert').value, periodicidade: per, fornecedor: document.getElementById('cForn').value, custo, obs: document.getElementById('cObs').value });
+    await telaCalibracao();
+    document.getElementById('erro').innerHTML = msg('ok', `Calibração de ${i.pat} registrada.`);
+  });
 }
 
 function telaSaidas() {
@@ -459,6 +531,7 @@ function fluxoSaida() {
           <span><span class="nome">${esc(nome)}</span><span class="pat">${esc(i.pat)}</span>
           ${!dentro && nome !== i.desc ? `<div class="sub">${esc(i.desc)}</div>` : ''}
           ${i.tipo === 'Kit' ? `<div class="sub">Contém: ${esc(comp(i.pat).join(', ') || 'componentes não cadastrados')}</div>` : ''}
+          ${linhaCal(i)}
           ${motivo ? `<span class="aviso-item">${motivo}</span>` : ''}</span></button>`;
       };
       const pintar = () => {
@@ -466,11 +539,11 @@ function fluxoSaida() {
         const vis = itensBase.filter(i => !q || [i.desc, i.grupo, i.ident, i.pat].join(' ').toLowerCase().includes(q));
         const cats = {};
         vis.forEach(i => {
-          const c = i.tipo === 'Kit' ? 'Kits' : i.tipo === 'EPC' ? 'EPC' : 'Ferramentas';
+          const c = i.tipo === 'Kit' ? 'Kits' : i.tipo === 'EPC' ? 'EPC' : i.tipo === 'Instrumento' ? 'Instrumentos' : i.tipo === 'Equipamento' ? 'Equipamentos' : 'Ferramentas';
           const g = i.grupo || i.desc;
           ((cats[c] = cats[c] || {})[g] = cats[c][g] || []).push(i);
         });
-        const html = ['Ferramentas', 'EPC', 'Kits'].filter(c => cats[c]).map(c => `<div class="grupo">${c}</div>` +
+        const html = ['Ferramentas', 'Instrumentos', 'EPC', 'Kits', 'Equipamentos'].filter(c => cats[c]).map(c => `<div class="grupo">${c}</div>` +
           Object.keys(cats[c]).sort((x, y) => x.localeCompare(y, 'pt-BR')).map(g => {
             const lista = cats[c][g].sort((x, y) => (Number(x.ident) || 0) - (Number(y.ident) || 0) || x.pat.localeCompare(y.pat));
             if (lista.length === 1) return linhaItem(lista[0], false);

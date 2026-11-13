@@ -15,7 +15,8 @@ const ABA = {
   clientes: 'Clientes',
   saidas: 'Saídas',
   itensSaida: 'Itens por saída',
-  listas: 'Listas'
+  listas: 'Listas',
+  histCal: 'Histórico de calibração'
 };
 
 // ---------- entrada HTTP ----------
@@ -53,6 +54,8 @@ function rotear_(req) {
     case 'conferir': exigirAdmin_(u); return comTrava_(() => conferir_(u, req));
     case 'fechamento': exigirAdmin_(u); return fechamento_(req);
     case 'resetarPin': exigirAdmin_(u); return comTrava_(() => resetarPin_(req));
+    case 'calibraveis': exigirAdmin_(u); return calibraveis_();
+    case 'registrarCalibracao': exigirAdmin_(u); return comTrava_(() => registrarCalibracao_(u, req));
   }
   throw new Error('Ação desconhecida: ' + a);
 }
@@ -136,6 +139,11 @@ function horarioInformado_(valor, agora) {
 
 function tardio_(informado, lancado) {
   return lancado.getTime() - informado.getTime() > TOLERANCIA_MIN * 60000;
+}
+
+function dia_(v) {
+  const d = data_(v);
+  return d ? Utilities.formatDate(d, TZ, 'dd/MM/yyyy') : '';
 }
 
 function mapa_(g) {
@@ -262,7 +270,7 @@ function inicio_(u) {
   saidas.linhas.forEach(l => { infoSaida[txt_(l.get('Nº'))] = { quem: txt_(l.get('Colaborador')), quando: fmt_(l.get('Data e hora de saída')) }; });
 
   const itens = ler_(ABA.itens).linhas
-    .filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' && txt_(l.get('Uso')) !== 'Individual')
+    .filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' && (txt_(l.get('Uso')) || 'Coletivo') === 'Coletivo')
     .map(l => {
       const pat = txt_(l.get('Patrimônio'));
       const ns = ultimaSaidaDoItem[pat];
@@ -270,12 +278,15 @@ function inicio_(u) {
         pat,
         desc: txt_(l.get('Descrição')),
         grupo: txt_(l.get('Grupo')),
-        ident: txt_(l.get('Nº identificação')),
+        ident: txt_(l.get('Nº pintado / gravado')) || txt_(l.get('Nº identificação')),
         tipo: txt_(l.get('Tipo')),
         kit: txt_(l.get('Kit (patrimônio do kit)')),
         situacao: txt_(l.get('Situação')) || 'Disponível',
         comQuem: ns && infoSaida[ns] ? infoSaida[ns].quem : '',
-        desde: ns && infoSaida[ns] ? infoSaida[ns].quando : ''
+        desde: ns && infoSaida[ns] ? infoSaida[ns].quando : '',
+        calData: dia_(l.get('Data da calibração')),
+        calStatus: txt_(l.get('Status da calibração')),
+        calDias: l.get('Dias para vencer') === '' ? null : Number(l.get('Dias para vencer'))
       };
     });
 
@@ -497,6 +508,58 @@ function fechamento_(req) {
     if (txt_(l.get('Lançamento tardio'))) p.tardios++;
   });
   return { ok: true, mes, pessoas: Object.keys(porPessoa).sort().map(k => porPessoa[k]) };
+}
+
+// ---------- calibração ----------
+
+function calibraveis_() {
+  const t = ler_(ABA.itens);
+  const lista = t.linhas
+    .filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' && (txt_(l.get('Tipo')) === 'Instrumento' || txt_(l.get('Periodicidade'))))
+    .map(l => ({
+      pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
+      data: dia_(l.get('Data da calibração')), cert: txt_(l.get('Nº certificado')), per: txt_(l.get('Periodicidade')),
+      validade: dia_(l.get('Validade da calibração')), status: txt_(l.get('Status da calibração')) || 'Sem calibração',
+      dias: l.get('Dias para vencer') === '' ? null : Number(l.get('Dias para vencer')),
+      fornecedor: txt_(l.get('Fornecedor da calibração')), custo: l.get('Custo última calibração (R$)'),
+      responsavel: txt_(l.get('Responsável (uso individual)')), local: txt_(l.get('Local de guarda'))
+    }));
+  const ordem = { 'Vencido': 0, 'Vencendo': 1, 'Sem calibração': 2, 'Válido': 3 };
+  lista.sort((a, b) => (ordem[a.status] ?? 4) - (ordem[b.status] ?? 4) || (a.dias ?? 1e9) - (b.dias ?? 1e9) || a.pat.localeCompare(b.pat));
+  return { ok: true, itens: lista, periodicidades: lista_('Periodicidade') };
+}
+
+function abaHistorico_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(ABA.histCal);
+  if (!sh) {
+    sh = ss.insertSheet(ABA.histCal);
+    sh.appendRow(['Data do registro', 'Patrimônio', 'Descrição', 'Data da calibração', 'Nº certificado', 'Periodicidade', 'Fornecedor', 'Custo (R$)', 'Calibração anterior', 'Registrado por', 'Observações']);
+    sh.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#000000').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function registrarCalibracao_(u, req) {
+  const t = ler_(ABA.itens);
+  const l = t.linhas.find(x => txt_(x.get('Patrimônio')) === txt_(req.pat));
+  if (!l) throw new Error('Item não encontrado.');
+  const d = Utilities.parseDate(txt_(req.data), TZ, 'yyyy-MM-dd');
+  if (isNaN(d)) throw new Error('Data da calibração inválida.');
+  if (d.getTime() > Date.now() + 864e5) throw new Error('A data da calibração não pode ser no futuro.');
+  const per = txt_(req.periodicidade);
+  if (lista_('Periodicidade').indexOf(per) < 0) throw new Error('Escolha a periodicidade.');
+  const anterior = dia_(l.get('Data da calibração'));
+  abaHistorico_().appendRow([new Date(), txt_(req.pat), txt_(l.get('Descrição')), d, txt_(req.cert), per, txt_(req.fornecedor),
+    req.custo ? Number(req.custo) : '', anterior, u.nome, txt_(req.obs)]);
+  set_(t, l._linha, 'Data da calibração', d);
+  set_(t, l._linha, 'Nº certificado', txt_(req.cert));
+  set_(t, l._linha, 'Periodicidade', per);
+  set_(t, l._linha, 'Fornecedor da calibração', txt_(req.fornecedor));
+  if (req.custo) set_(t, l._linha, 'Custo última calibração (R$)', Number(req.custo));
+  SpreadsheetApp.flush();
+  return { ok: true };
 }
 
 /** Rode uma vez pelo editor para autorizar o script e conferir a leitura da planilha. */
