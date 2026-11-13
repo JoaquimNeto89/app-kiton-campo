@@ -107,6 +107,17 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .item .sub{font-size:14px;color:var(--cinza)}
 .item.ocupado{opacity:.6}
 .item.ocupado .caixa{border-style:dashed}
+.subgrupo{background:var(--branco);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.sg-cab{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;padding:12px 14px;text-align:left}
+.sg-qtd{min-width:32px;height:32px;border-radius:8px;background:var(--aco);display:grid;place-items:center;font:700 15px/1 var(--tit)}
+.sg-qtd.tem{background:var(--preto);color:#fff}
+.sg-txt{flex:1}.sg-txt .nome{display:block;font-weight:600}.sg-txt .sub{font-size:14px;color:var(--cinza)}
+.seta-sg{transition:transform .15s;color:var(--cinza)}
+.subgrupo.aberto .seta-sg{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.seta-sg{transition:none}}
+.sg-itens{padding:0 10px 6px;border-top:1px solid var(--aco)}
+.item.dentro{margin:6px 0;background:var(--aco);}
+.item.dentro.sel{background:#fff}
 .pat{display:inline-block;font-size:13px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--aco);margin-left:6px;vertical-align:1px}
 .aviso-item{display:inline-block;margin-top:4px;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--amarelo-claro);color:#7A4A00}
 
@@ -438,21 +449,44 @@ function fluxoSaida() {
     } else if (p === 3) {
       $app.innerHTML = `${cab()}<h1>O que você vai levar?</h1><p class="suave">Marque as ferramentas e EPC de uso coletivo. Se não levar nada, é só continuar.</p>
         <div class="busca"><input class="campo-txt" id="buscaItem" placeholder="Buscar: escada, luva, K-0010…"></div><div id="itens"></div>`;
+      const abertos = new Set();
+      const linhaItem = (i, dentro) => {
+        const livre = i.situacao === 'Disponível', sel = f.itens.has(i.pat);
+        const motivo = livre ? '' : (i.comQuem ? `Com ${esc(primeiroNome(i.comQuem))} desde ${esc(i.desde)}` : esc(i.situacao));
+        const nome = dentro && i.ident ? `${i.grupo} ${i.ident}` : nomeItem(i);
+        return `<button type="button" class="item ${dentro ? 'dentro' : ''} ${sel ? 'sel' : ''} ${livre ? '' : 'ocupado'}" data-p="${esc(i.pat)}" ${livre ? '' : 'aria-disabled="true"'}>
+          <span class="caixa">${sel ? ic('ok') : ''}</span>
+          <span><span class="nome">${esc(nome)}</span><span class="pat">${esc(i.pat)}</span>
+          ${!dentro && nome !== i.desc ? `<div class="sub">${esc(i.desc)}</div>` : ''}
+          ${i.tipo === 'Kit' ? `<div class="sub">Contém: ${esc(comp(i.pat).join(', ') || 'componentes não cadastrados')}</div>` : ''}
+          ${motivo ? `<span class="aviso-item">${motivo}</span>` : ''}</span></button>`;
+      };
       const pintar = () => {
         const q = document.getElementById('buscaItem').value.trim().toLowerCase();
         const vis = itensBase.filter(i => !q || [i.desc, i.grupo, i.ident, i.pat].join(' ').toLowerCase().includes(q));
-        const grupos = {};
-        vis.forEach(i => { const g = i.tipo === 'Kit' ? 'Kits' : i.tipo === 'EPC' ? 'EPC' : 'Ferramentas'; (grupos[g] = grupos[g] || []).push(i); });
-        document.getElementById('itens').innerHTML = Object.keys(grupos).length ? ['Ferramentas', 'EPC', 'Kits'].filter(g => grupos[g]).map(g => `<div class="grupo">${g}</div>` + grupos[g].map(i => {
-          const livre = i.situacao === 'Disponível', sel = f.itens.has(i.pat);
-          const motivo = livre ? '' : (i.comQuem ? `Com ${esc(primeiroNome(i.comQuem))} desde ${esc(i.desde)}` : esc(i.situacao));
-          return `<button type="button" class="item ${sel ? 'sel' : ''} ${livre ? '' : 'ocupado'}" data-p="${esc(i.pat)}" ${livre ? '' : 'aria-disabled="true"'}>
-            <span class="caixa">${sel ? ic('ok') : ''}</span>
-            <span><span class="nome">${esc(nomeItem(i))}</span><span class="pat">${esc(i.pat)}</span>
-            ${nomeItem(i) !== i.desc ? `<div class="sub">${esc(i.desc)}</div>` : ''}
-            ${i.tipo === 'Kit' ? `<div class="sub">Contém: ${esc(comp(i.pat).join(', ') || 'componentes não cadastrados')}</div>` : ''}
-            ${motivo ? `<span class="aviso-item">${motivo}</span>` : ''}</span></button>`;
-        }).join('')).join('') : '<p class="suave">Nenhum item com esse nome.</p>';
+        const cats = {};
+        vis.forEach(i => {
+          const c = i.tipo === 'Kit' ? 'Kits' : i.tipo === 'EPC' ? 'EPC' : 'Ferramentas';
+          const g = i.grupo || i.desc;
+          ((cats[c] = cats[c] || {})[g] = cats[c][g] || []).push(i);
+        });
+        const html = ['Ferramentas', 'EPC', 'Kits'].filter(c => cats[c]).map(c => `<div class="grupo">${c}</div>` +
+          Object.keys(cats[c]).sort((x, y) => x.localeCompare(y, 'pt-BR')).map(g => {
+            const lista = cats[c][g].sort((x, y) => (Number(x.ident) || 0) - (Number(y.ident) || 0) || x.pat.localeCompare(y.pat));
+            if (lista.length === 1) return linhaItem(lista[0], false);
+            const livres = lista.filter(i => i.situacao === 'Disponível').length;
+            const marcados = lista.filter(i => f.itens.has(i.pat)).length;
+            const aberto = q ? true : abertos.has(g);
+            return `<div class="subgrupo ${aberto ? 'aberto' : ''}">
+              <button type="button" class="sg-cab" data-g="${esc(g)}" aria-expanded="${aberto}">
+                <span class="sg-qtd ${marcados ? 'tem' : ''}">${marcados || lista.length}</span>
+                <span class="sg-txt"><span class="nome">${esc(g)}</span><span class="sub">${marcados ? `${marcados} selecionado${marcados > 1 ? 's' : ''} · ` : ''}${livres} de ${lista.length} disponíveis</span></span>
+                <svg class="i seta-sg" viewBox="0 0 24 24" aria-hidden="true">${IC.seta}</svg>
+              </button>
+              ${aberto ? `<div class="sg-itens">${lista.map(i => linhaItem(i, true)).join('')}</div>` : ''}</div>`;
+          }).join('')).join('');
+        document.getElementById('itens').innerHTML = html || '<p class="suave">Nenhum item com esse nome.</p>';
+        document.querySelectorAll('#itens [data-g]').forEach(b => b.onclick = () => { abertos.has(b.dataset.g) ? abertos.delete(b.dataset.g) : abertos.add(b.dataset.g); pintar(); });
         document.querySelectorAll('#itens [data-p]').forEach(b => b.onclick = () => {
           if (b.getAttribute('aria-disabled')) return;
           f.itens.has(b.dataset.p) ? f.itens.delete(b.dataset.p) : f.itens.add(b.dataset.p); pintar(); rodape('Continuar', true); ligar();
