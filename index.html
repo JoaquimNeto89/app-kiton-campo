@@ -54,6 +54,18 @@ svg.i{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.9;stro
 .acao:disabled{opacity:.45}
 .acao svg.i{width:24px;height:24px}
 
+.modulos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modulo{position:relative;background:var(--branco);border:0;border-radius:16px;padding:18px 16px 16px;text-align:left;display:flex;flex-direction:column;gap:12px;min-height:138px}
+.modulo .ic-caixa{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;background:var(--preto);color:#fff}
+.modulo .ic-caixa svg.i{width:26px;height:26px}
+.modulo b{font:700 19px/1.1 var(--tit)}
+.modulo span.d{font-size:14px;color:var(--cinza);line-height:1.3}
+.modulo .status{position:absolute;top:14px;right:14px;font:700 13px/1 var(--tit);padding:6px 9px;border-radius:8px;background:var(--aco)}
+.modulo .status.campo{background:var(--amarelo);color:#000}
+.modulo.principal .ic-caixa{background:var(--vermelho)}
+.modulo.breve{opacity:.55}
+.modulo.breve .ic-caixa{background:var(--aco-esc);color:var(--texto)}
+.secao-titulo{font:700 16px/1.2 var(--tit);color:var(--cinza);margin:22px 0 10px}
 .atalhos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 .atalho{background:var(--branco);border:0;border-radius:14px;padding:16px;text-align:left;display:flex;flex-direction:column;gap:10px;min-height:104px}
 .atalho b{font:700 18px/1.1 var(--tit)}
@@ -187,6 +199,9 @@ const IC = {
   saida:'<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M9 8l4 4-4 4M13 12H3"/>',
   retorno:'<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l-4 4 4 4M11 12h10"/>',
   admin:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2zM9 13l2 2 4-4"/>',
+  pino:'<path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  os:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17c1.5-1.5 2.5 1.5 4 0s2.5 1 4 0"/>',
+  recibo:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3"/>',
   pessoas:'<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6"/>'
 };
 const ic = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[n] || IC.outro}</svg>`;
@@ -320,6 +335,29 @@ function telaInicio() {
   document.getElementById('btnSair').classList.remove('oculto');
   topo(est.usuario.nome); barra('');
   const d = est.dados, admin = est.usuario.perfil === 'Administrador', ab = d.abertas;
+  const status = ab.length ? `<span class="status campo">Em campo desde ${esc(hora(ab[0].saida))}</span>` : '<span class="status">Na base</span>';
+  const mod = (id, icone, titulo, desc, extra = '', breve = false, principal = false) =>
+    `<button type="button" class="modulo ${breve ? 'breve' : ''} ${principal ? 'principal' : ''}" ${breve ? 'aria-disabled="true"' : `id="${id}"`}>
+      ${extra}<span class="ic-caixa">${ic(icone)}</span><b>${titulo}</b><span class="d">${desc}</span></button>`;
+  $app.innerHTML = `<h1>Olá, ${esc(primeiroNome(est.usuario.nome))}</h1>
+    <div class="modulos">
+      ${mod('mSaidas', 'saida', 'Saídas e retornos', 'Veículo, destino, ferramentas e EPC', status, false, true)}
+      ${mod('', 'pino', 'Check-in em obra', 'Em breve', '', true)}
+      ${mod('', 'os', 'Ordem de serviço', 'Em breve', '', true)}
+      ${mod('', 'recibo', 'Despesas', 'Em breve', '', true)}
+    </div>
+    ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
+      ${mod('mAdmin', 'admin', 'Conferir e fechar', 'Itens devolvidos, saídas em aberto e fechamento do mês')}
+      ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
+    </div>` : ''}`;
+  document.getElementById('mSaidas').onclick = telaSaidas;
+  if (admin) { document.getElementById('mAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); }
+}
+
+function telaSaidas() {
+  topo('Saídas e retornos');
+  barra(`<div class="dentro"><button class="acao leve" id="ini" type="button">${ic('voltar')} Início</button></div>`);
+  const ab = est.dados.abertas;
   let etiqueta;
   if (ab.length) {
     const s = ab[0];
@@ -339,13 +377,11 @@ function telaInicio() {
       <button class="acao" id="bSaida" type="button">${ic('saida')} Registrar saída</button>
     </section>`;
   }
-  $app.innerHTML = `<h1>Olá, ${esc(primeiroNome(est.usuario.nome))}</h1>${etiqueta}
-    ${admin ? `<div class="atalhos"><button class="atalho" id="bAdmin" type="button">${ic('admin')}<b>Conferir e fechar</b><span>Itens devolvidos, saídas em aberto e fechamento do mês</span></button>
-      <button class="atalho" id="bAcessos" type="button">${ic('pessoas')}<b>Acessos</b><span>Redefinir o PIN de alguém</span></button></div>` : ''}
+  $app.innerHTML = `<h1>Saídas e retornos</h1>${etiqueta}
     <p class="regra">${ic('comb')}<span>Só são ressarcidas as saídas registradas aqui.</span></p>`;
+  document.getElementById('ini').onclick = () => telaInicio();
   document.getElementById('bSaida').onclick = () => fluxoSaida();
   if (ab.length) document.getElementById('bRetorno').onclick = () => ab.length === 1 ? telaRetorno(ab[0]) : telaEscolherRetorno();
-  if (admin) { document.getElementById('bAdmin').onclick = () => telaAdmin('aberto'); document.getElementById('bAcessos').onclick = () => telaAdmin('acessos'); }
 }
 
 // ---------- saída em passos ----------
@@ -359,7 +395,7 @@ function fluxoSaida() {
     <div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button>
     <button class="acao" id="prox" type="button" ${pode ? '' : 'disabled'}>${txtAvancar}</button></div>`);
   const ligar = () => {
-    document.getElementById('ant').onclick = () => { if (p === 0) telaInicio(); else { p--; desenhar(); } };
+    document.getElementById('ant').onclick = () => { if (p === 0) telaSaidas(); else { p--; desenhar(); } };
     const pr = document.getElementById('prox'); if (pr) pr.onclick = () => { if (p < 4) { p++; desenhar(); } else confirmar(); };
   };
   const avancarSozinho = () => setTimeout(() => { p++; desenhar(); }, 150);
@@ -466,7 +502,7 @@ function telaFeito(titulo, sub, semLocal, tardio) {
 function telaEscolherRetorno() {
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button></div>`);
   $app.innerHTML = `<h1>Qual saída está encerrando?</h1>${est.dados.abertas.map(s => `<button type="button" class="linha" data-n="${esc(s.n)}">${ic(icVeiculo(s.veiculo))}<span>${esc(s.destino)}<small>Saiu ${esc(s.saida)} · nº ${esc(s.n)}</small></span><span class="fim">${ic('seta')}</span></button>`).join('')}`;
-  document.getElementById('ant').onclick = () => telaInicio();
+  document.getElementById('ant').onclick = () => telaSaidas();
   $app.querySelectorAll('[data-n]').forEach(b => b.onclick = () => telaRetorno(est.dados.abertas.find(s => s.n === b.dataset.n)));
 }
 function telaRetorno(s) {
@@ -492,7 +528,7 @@ function telaRetorno(s) {
     estado[sg.dataset.p] = b.dataset.v;
     document.querySelector(`[data-obs="${CSS.escape(sg.dataset.p)}"]`).classList.toggle('oculto', b.dataset.v === 'OK');
   }));
-  document.getElementById('ant').onclick = () => telaInicio();
+  document.getElementById('ant').onclick = () => telaSaidas();
   document.getElementById('ok').onclick = () => executar(async () => {
     const valor = /colaborador/i.test(abast) ? Number(document.getElementById('valor').value.replace(/\./g, '').replace(',', '.')) || 0 : 0;
     if (/colaborador/i.test(abast) && !valor) throw new Error('Informe quanto você pagou no abastecimento.');
