@@ -150,6 +150,27 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 
 .cartao{background:var(--branco);border-radius:14px;padding:14px 16px;margin-bottom:10px}
 .cartao .t{font-weight:600}
+.cal-resumo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cal-qd{background:var(--branco);border:2px solid transparent;border-radius:12px;padding:10px 6px;text-align:center;border-top:5px solid var(--aco-esc)}
+.cal-qd b{display:block;font:700 26px/1.1 var(--tit)}
+.cal-qd span{display:block;font-size:12.5px;color:var(--cinza);margin-top:2px;line-height:1.2}
+.cal-qd.vermelho{border-top-color:var(--vermelho)}.cal-qd.vermelho b{color:var(--vermelho-esc)}
+.cal-qd.laranja{border-top-color:#E07800}.cal-qd.laranja b{color:#8A3B00}
+.cal-qd.amarelo{border-top-color:var(--amarelo)}
+.cal-qd.verde{border-top-color:var(--verde)}.cal-qd.verde b{color:var(--verde)}
+.cal-qd.ativo{border-color:var(--preto);border-top-width:5px}
+@media (max-width:380px){.cal-resumo{grid-template-columns:repeat(2,1fr)}}
+.cal-minis{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cal-mini{font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px}
+.cal-mini.vermelho{background:#FCE4E4;color:var(--vermelho-esc)}
+.cal-mini.laranja{background:#FFE2C2;color:#8A3B00}
+.cal-mini.amarelo{background:var(--amarelo-claro);color:#7A4A00}
+.cal-mini.verde{background:var(--verde-claro);color:var(--verde)}
+.sg-qtd.cal-vermelho{background:var(--vermelho);color:#fff}
+.sg-qtd.cal-laranja{background:#E07800;color:#fff}
+.sg-qtd.cal-amarelo{background:var(--amarelo);color:#000}
+.sg-qtd.cal-verde{background:var(--verde);color:#fff}
+.link{background:none;border:0;padding:0;color:var(--texto);text-decoration:underline;font:inherit;font-weight:600}
 .selo-txt{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-right:6px}
 .selo-txt.amarelo{background:var(--amarelo-claro);color:#7A4A00}
 .selo-txt.vermelho{background:#FCE4E4;color:var(--vermelho-esc)}
@@ -388,15 +409,67 @@ async function telaCalibracao() {
   document.getElementById('ini').onclick = () => carregarInicio();
   await executar(async () => {
     const r = await api('calibraveis');
-    const cor = st => st === 'Vencido' ? 'vermelho' : st === 'Vencendo' ? 'laranja' : st === 'Válido' ? 'verde' : 'amarelo';
-    const cont = st => r.itens.filter(i => i.status === st).length;
-    document.getElementById('lista').innerHTML = `<p class="suave">${cont('Vencido')} vencidos · ${cont('Vencendo')} vencendo em 60 dias · ${cont('Sem calibração')} sem calibração · ${cont('Válido')} válidos</p>` +
-      r.itens.map(i => `<button type="button" class="linha" data-p="${esc(i.pat)}" style="align-items:flex-start">
-        <span style="flex:1"><span class="pat" style="margin:0 6px 0 0">${esc(i.pat)}</span>${esc(i.desc)}
-        <small>${esc(i.marca)}${i.validade ? ` · válida até ${esc(i.validade)}` : ''}${i.dias != null ? ` (${i.dias < 0 ? 'há ' + (-i.dias) + ' dias' : i.dias + ' dias'})` : ''}</small>
-        <span class="selo-txt ${cor(i.status)}" style="margin-top:6px">${esc(i.status)}</span></span><span class="fim">${ic('seta')}</span></button>`).join('');
-    document.querySelectorAll('#lista [data-p]').forEach(b => b.onclick = () => telaCalItem(r.itens.find(x => x.pat === b.dataset.p), r.periodicidades));
+    calDados = r;
+    desenharCal();
   });
+}
+
+// Situações na ordem de gravidade; "Válido" aparece como "Em dia"
+const CAL_ST = [
+  { st: 'Vencido', rot: 'Vencidos', um: 'vencido', cor: 'vermelho' },
+  { st: 'Vencendo', rot: 'Vencendo', um: 'vencendo', cor: 'laranja' },
+  { st: 'Sem calibração', rot: 'Sem calibração', um: 'sem calibração', cor: 'amarelo' },
+  { st: 'Válido', rot: 'Em dia', um: 'em dia', cor: 'verde' }
+];
+let calDados = null, calFiltro = '', calAbertos = new Set();
+
+function desenharCal() {
+  const r = calDados, el = document.getElementById('lista');
+  if (!el) return;
+  const info = st => CAL_ST.find(c => c.st === st) || CAL_ST[2];
+  const cont = (lista, st) => lista.filter(i => i.status === st).length;
+
+  // Resumo geral: cada quadro filtra a lista
+  const resumo = `<div class="cal-resumo">` + CAL_ST.map(c => `<button type="button" class="cal-qd ${c.cor}${calFiltro === c.st ? ' ativo' : ''}" data-f="${c.st}" aria-pressed="${calFiltro === c.st}">
+      <b>${cont(r.itens, c.st)}</b><span>${c.rot}</span></button>`).join('') + `</div>
+    <p class="suave" style="margin:6px 0 12px">${r.itens.length} instrumentos${calFiltro ? ` · mostrando só ${info(calFiltro).rot.toLowerCase()} · <button type="button" class="link" id="limparF">ver todos</button>` : ' · toque num quadro para filtrar'}</p>`;
+
+  // Agrupa pela coluna Grupo (ou pela descrição, se o grupo estiver vazio)
+  const itens = calFiltro ? r.itens.filter(i => i.status === calFiltro) : r.itens;
+  const mapa = new Map();
+  itens.forEach(i => { const g = i.grupo || i.desc; if (!mapa.has(g)) mapa.set(g, []); mapa.get(g).push(i); });
+  const pior = l => Math.min(...l.map(i => { const k = CAL_ST.findIndex(c => c.st === i.status); return k < 0 ? 2 : k; }));
+  const grupos = [...mapa.entries()].sort((a, b) => pior(a[1]) - pior(b[1]) || a[0].localeCompare(b[0], 'pt'));
+
+  const linha = i => {
+    const dias = i.dias != null ? ` (${i.dias < 0 ? 'há ' + (-i.dias) + ' dias' : 'faltam ' + i.dias + ' dias'})` : '';
+    return `<button type="button" class="item dentro" data-p="${esc(i.pat)}">
+      <span style="flex:1"><span class="nome">${esc(i.grupo || i.desc)}${i.ident ? ' ' + esc(i.ident) : ''}<span class="pat">${esc(i.pat)}</span></span>
+      <span class="sub" style="display:block">${esc(i.marca)}</span>
+      <span class="cal${i.status === 'Vencido' ? ' ruim' : i.status === 'Vencendo' ? ' atencao' : ''}" style="display:block;margin-top:4px"><span class="selo-txt ${info(i.status).cor}">${i.status === 'Válido' ? 'Em dia' : esc(i.status)}</span>${i.validade ? 'Válida até ' + esc(i.validade) + dias : ''}</span></span>
+      <span class="fim">${ic('seta')}</span></button>`;
+  };
+
+  const blocos = grupos.map(([g, l]) => {
+    const resumoG = CAL_ST.filter(c => cont(l, c.st)).map(c => `<span class="cal-mini ${c.cor}">${cont(l, c.st)} ${c.um}</span>`).join('');
+    const p = pior(l), corQtd = p === 0 ? 'vermelho' : p === 1 ? 'laranja' : p === 2 ? 'amarelo' : 'verde';
+    const aberto = calAbertos.has(g) || !!calFiltro;
+    return `<div class="subgrupo${aberto ? ' aberto' : ''}" data-g="${esc(g)}">
+      <button type="button" class="sg-cab" aria-expanded="${aberto}"><span class="sg-qtd cal-${corQtd}">${l.length}</span>
+        <span class="sg-txt"><span class="nome">${esc(g)}</span><span class="cal-minis">${resumoG}</span></span>
+        <span class="seta-sg">${ic('seta')}</span></button>
+      <div class="sg-itens"${aberto ? '' : ' hidden'}>${l.map(linha).join('')}</div></div>`;
+  }).join('');
+
+  el.innerHTML = resumo + (blocos || '<p class="suave">Nenhum instrumento nessa situação.</p>');
+  el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { calFiltro = calFiltro === b.dataset.f ? '' : b.dataset.f; desenharCal(); });
+  const lf = document.getElementById('limparF'); if (lf) lf.onclick = () => { calFiltro = ''; desenharCal(); };
+  el.querySelectorAll('.subgrupo').forEach(s => s.querySelector('.sg-cab').onclick = () => {
+    const g = s.dataset.g, abrir = !s.classList.contains('aberto');
+    s.classList.toggle('aberto', abrir); s.querySelector('.sg-itens').hidden = !abrir; s.querySelector('.sg-cab').setAttribute('aria-expanded', abrir);
+    abrir ? calAbertos.add(g) : calAbertos.delete(g);
+  });
+  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => telaCalItem(r.itens.find(x => x.pat === b.dataset.p), r.periodicidades));
 }
 
 function telaCalItem(i, pers) {

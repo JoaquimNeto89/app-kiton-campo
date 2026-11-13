@@ -517,7 +517,8 @@ function calibraveis_() {
   const lista = t.linhas
     .filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' && (txt_(l.get('Tipo')) === 'Instrumento' || txt_(l.get('Periodicidade'))))
     .map(l => ({
-      pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
+      pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), grupo: txt_(l.get('Grupo')),
+      ident: txt_(l.get('Nº pintado / gravado') || l.get('Nº identificação')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
       data: dia_(l.get('Data da calibração')), cert: txt_(l.get('Nº certificado')), per: txt_(l.get('Periodicidade')),
       validade: dia_(l.get('Validade da calibração')), status: txt_(l.get('Status da calibração')) || 'Sem calibração',
       dias: l.get('Dias para vencer') === '' ? null : Number(l.get('Dias para vencer')),
