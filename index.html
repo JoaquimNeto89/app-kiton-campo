@@ -564,7 +564,7 @@ function telaInicio() {
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
       ${mod('mCad', 'tabela', 'Cadastros', 'Itens, pessoas e clientes na planilha')}
     </div>` : ''}
-    <a class="linha-meus" id="mAjuda" href="#" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="q" style="background:#25D366">?</span><span style="flex:1"><b>Ajuda e dúvidas</b><span class="suave" style="display:block">Fale com o Joaquim pelo WhatsApp</span></span>${ic('seta')}</a>
+    <a class="linha-meus" id="mAjuda" href="#" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="q" style="background:#25D366">?</span><span style="flex:1"><b>Ajuda e dúvidas</b><span class="suave" style="display:block">Falar com o Eng. Joaquim Neto pelo WhatsApp</span></span>${ic('seta')}</a>
     ${rodape()}`;
   document.getElementById('mAjuda').addEventListener('click', e => { e.currentTarget.href = linkAjuda(); });
   document.getElementById('mSaidas').onclick = telaSaidas;
@@ -1479,9 +1479,9 @@ function telaAPRBloqueada(r, corrigir) {
   $app.innerHTML = `<h1>Início bloqueado</h1><div id="erro"></div>
     ${msg('erro', `A APR nº ${r.apr} tem impedimento. A OS não pode ser iniciada.`)}
     <h2>Impedimentos</h2>${r.impedimentos.map(i => `<div class="apr-it"><p style="margin:0">${esc(i)}</p></div>`).join('')}
-    <p class="suave" style="margin-top:12px">A administração recebeu um e-mail com o resumo. Avise também o Eng. Joaquim pelo WhatsApp para a decisão.
+    <p class="suave" style="margin-top:12px">A administração recebeu um e-mail com o resumo. Avise também o Eng. Joaquim Neto pelo WhatsApp para a decisão.
       Se a liberação for por exceção, a APR aparece na tela de OS com o botão Iniciar.</p>
-    <a class="acao" href="${link}" target="_blank" rel="noopener" style="text-decoration:none;background:#25D366;color:#fff">Avisar o Eng. Joaquim pelo WhatsApp</a>
+    <a class="acao" href="${link}" target="_blank" rel="noopener" style="text-decoration:none;background:#25D366;color:#fff">Falar com o Eng. Joaquim Neto</a>
     <button type="button" class="acao leve" id="corr">Corrigir as respostas</button>`;
   barra(`<div class="dentro"><button class="acao leve" id="sairB" type="button">${ic('voltar')} Voltar para as OS</button></div>`);
   document.getElementById('corr').onclick = corrigir;
