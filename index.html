@@ -198,6 +198,8 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .apr-lin{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:15px}.apr-lin:last-child{border-bottom:0}.apr-lin .selo-txt{flex:none;margin:0}
 .pdfs{margin-top:4px}.pdfs .acao{margin:0;min-height:58px;font-size:15px;padding:8px 10px;gap:8px;text-decoration:none;text-align:left;justify-content:flex-start}
 .pdfs .acao small{display:block;font-weight:500;font-size:12.5px;color:var(--cinza)}
+.ver-apr{margin:8px 0 0;min-height:42px;font-size:15px;padding:6px 12px;width:auto}
+.mat .scan{margin:0;min-height:0;padding:0;display:grid;place-items:center}
 .menu-cab .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff}
 .menu-it{display:flex;align-items:center;gap:12px;width:calc(100% - 20px);margin:0 10px 6px;padding:12px;border:0;border-radius:12px;background:#fff;font-weight:600;font-size:16px;text-align:left;color:inherit;text-decoration:none}
 .menu-it span:not(.bolinha):not(.q){flex:1}.menu-it .q{width:26px;height:26px;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700}
@@ -375,7 +377,7 @@ function abrirMenu() {
     ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens')}
     ${admin ? `<div class="menu-sec">Administração</div>
       ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
-      ${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
+      ${item('a-aprovar', 'ok', 'OS para aprovar', pd.aprovar)}${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
       ${item('a-seg', 'admin', 'Segurança (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-pres', 'pino', 'Presença em obra')}
       ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
     <div class="menu-sec"></div>
@@ -393,11 +395,16 @@ function abrirMenu() {
 }
 document.getElementById('btnMenu').onclick = abrirMenu;
 // folha suspensa para consultas rápidas sem sair da tela
-function abrirFolha(titulo, html) {
+let aoFecharFolha = null;
+function abrirFolha(titulo, html, aoFechar) {
+  aoFecharFolha = aoFechar || null;
   document.getElementById('folhaTit').textContent = titulo; document.getElementById('folhaCorpo').innerHTML = html;
   document.getElementById('folha').classList.remove('oculto'); document.body.style.overflow = 'hidden';
 }
-function fecharFolha() { document.getElementById('folha').classList.add('oculto'); document.body.style.overflow = ''; }
+function fecharFolha() {
+  document.getElementById('folha').classList.add('oculto'); document.body.style.overflow = '';
+  const f = aoFecharFolha; aoFecharFolha = null; if (f) f();
+}
 document.getElementById('folhaX').onclick = fecharFolha; document.getElementById('folhaFundo').onclick = fecharFolha;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharFolha(); });
 /** Consulta da APR completa: por nº da APR ou pelo apontamento. */
@@ -416,11 +423,17 @@ async function verAPR(q) {
         ${linha('Ciência do cliente', esc(a.ciencia || 'Ainda não registrada'))}
       </dl>
       <h2>Triagem</h2><div class="cartao">${a.triagem.map(l => selo(l, true)).join('')}</div>
-      <h2>Checklist</h2><div class="cartao">${a.respostas.map(selo).join('')}</div>
+      <h2>Checklist</h2><div class="cartao">${a.respostas.map(l => selo(l)).join('')}</div>
       ${a.riscos.length ? `<h2>Riscos adicionais e medidas</h2><div class="cartao">${a.riscos.map(r => `<div class="apr-lin"><span>${esc(r)}</span></div>`).join('')}</div>` : ''}
       ${a.impedimentos.length ? `<h2>Impedimentos registrados</h2><div class="cartao">${a.impedimentos.map(r => `<div class="apr-lin"><span>${esc(r)}</span></div>`).join('')}</div>` : ''}
       ${a.decisor ? `<h2>Decisão da administração</h2><div class="cartao"><b>${esc(a.decisor)}</b><p class="suave" style="margin:4px 0 0">${esc(a.decisao)}</p></div>` : ''}
-      <p class="suave">Registrada por ${esc(a.registradoPor)}${a.lat ? ` · <a class="link" href="https://maps.google.com/?q=${esc(a.lat)},${esc(a.lng)}" target="_blank" rel="noopener">localização</a>` : ''}</p>`);
+      <p class="suave">Registrada por ${esc(a.registradoPor)}${a.lat ? ` · <a class="link" href="https://maps.google.com/?q=${esc(a.lat)},${esc(a.lng)}" target="_blank" rel="noopener">localização</a>` : ''}</p>
+      <button type="button" class="acao" id="aprImp" style="margin-bottom:8px">${ic('os')} Imprimir somente a APR</button>`);
+    document.getElementById('aprImp').onclick = () => {
+      const w = window.open('', '_blank');
+      if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Gerando o PDF da APR…</p>');
+      executar(async () => { try { const x = await api('pdfAPR', { n: a.n }); if (w) w.location.href = x.link; else window.location.href = x.link; } catch (e) { if (w) w.close(); throw e; } });
+    };
   });
 }
 document.getElementById('menuFundo').onclick = fecharMenu;
@@ -544,8 +557,8 @@ function telaInicio() {
     </div>
     <button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens</b><span class="suave" style="display:block">${nMeus ? 'Ferramentas e equipamentos no seu nome' : 'Nenhum item no seu nome'}</span></span>${ic('seta')}</button>
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0);
-        const det = [pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.treinos ? pd.treinos + ' pessoa(s) com treinamento vencendo' : ''].filter(Boolean).join(', ');
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0) + (pd.aprovar || 0);
+        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.treinos ? pd.treinos + ' pessoa(s) com treinamento vencendo' : ''].filter(Boolean).join(', ');
         return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, OS, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
@@ -559,7 +572,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = telaMeusItens;
-  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.treinos ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.aprovar ? 'aprovar' : pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.treinos ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -946,6 +959,8 @@ async function telaAdmin(aba) {
     await adminDespesas(box);
   } else if (aba === 'os') {
     await adminOS(box);
+  } else if (aba === 'aprovar') {
+    await adminAprovar(box);
   } else if (aba === 'seg') {
     box.innerHTML = '<h1>Segurança</h1><div id="aprBox"></div>'; await adminAPR(document.getElementById('aprBox'));
   } else if (aba === 'cli') {
@@ -1213,6 +1228,7 @@ function quandoOS(o) {
 function seloOS(o) {
   if (o.emExecucao) return '<span class="selo-txt verde">Em execução</span>';
   if (o.status === 'Finalizada') return '<span class="selo-txt verde">Finalizada</span>';
+  if (o.status === 'Aguardando aprovação') return '<span class="selo-txt amarelo">Aguardando aprovação</span>';
   if (o.status === 'Cancelada') return '<span class="selo-txt vermelho">Cancelada</span>';
   if (o.atrasada) return '<span class="selo-txt vermelho">Atrasada para iniciar</span>';
   if (o.parada) return '<span class="selo-txt laranja">Parada há mais de 2 dias</span>';
@@ -1282,24 +1298,20 @@ async function telaOSDetalhe(numero, admin) {
       ${o.revisao ? `<div><dt>Revisão</dt><dd>${String(o.revisao).padStart(2, '0')}${o.reaberta ? ` · reaberta ${o.reaberta}x` : ''}</dd></div>` : ''}
     </dl>
     ${o.historico ? `<p class="suave" style="white-space:pre-line">${esc(o.historico)}</p>` : ''}
+    ${o.status === 'Em andamento' && /Devolvida ao técnico/.test(o.observacoes || '') ? msg('erro', 'Devolvida pela administração. ' + o.observacoes.split('\n').filter(x => /Devolvida/.test(x)).pop()) : ''}
+    ${o.status === 'Aguardando aprovação' ? msg('info', `Finalizada pelo técnico em ${o.finalizadaEm}. Aguardando a revisão e aprovação da administração; o cliente ainda não recebeu.`) : ''}
+    ${o.aprovadaPor ? `<p class="suave">${/^Aprovada/.test(o.envio) ? esc(o.envio) : `Aprovada por ${esc(o.aprovadaPor)} em ${esc(o.aprovadaEm)}${o.envio ? ' · ' + esc(o.envio) : ''}`}</p>` : ''}
     ${o.pdf && o.status === 'Finalizada' ? `<div class="grade pdfs"><a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener">${ic('os')}<span>PDF final<small>${o.aprNoPdf === 'Sim' ? 'APR resumida' : 'Sem APR (como enviado)'}</small></span></a>
       <button type="button" class="acao leve" id="pdfComp">${ic('os')}<span>PDF final<small>APR completa</small></span></button></div>` : ''}
     ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + dur(a.horas) : ' · em execução'}</div>
       <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
       ${a.tipo ? `<span class="selo-txt ${a.tipo === 'Final' ? 'verde' : 'amarelo'}">${a.tipo === 'Final' ? 'Finalização' : 'Parcial'}</span>` : ''}
       ${a.ausente ? `<span class="selo-txt laranja">Cliente ausente</span>` : a.assinante ? `<span class="selo-txt">Assinado por ${esc(a.assinante)}</span>` : ''}
-      ${a.pdf ? `<a class="link" href="${esc(a.pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}${a.apr ? ` <button type="button" class="link" data-apr="${esc(a.apr)}">Ver APR nº ${esc(a.apr)}</button>` : ''}</div>`).join('') : ''}
+      ${a.apr ? `<button type="button" class="acao leve ver-apr" data-apr="${esc(a.apr)}">${ic('admin')} Ver APR nº ${esc(a.apr)}</button>` : ''}</div>`).join('') : ''}
     ${admin ? '<div id="adm"></div>' : ''}`;
   document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
   const pc = document.getElementById('pdfComp');
-  if (pc) pc.onclick = () => {
-    const w = window.open('', '_blank'); // abre já no toque para o celular não bloquear
-    if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Gerando o PDF com a APR completa…</p>');
-    executar(async () => {
-      try { const x = await api('pdfComAPR', { numero: o.numero }); if (w) w.location.href = x.link; else window.location.href = x.link; }
-      catch (e) { if (w) w.close(); throw e; }
-    });
-  };
+  if (pc) pc.onclick = () => abrirPdfComApr(o.numero);
   const ok = document.getElementById('ok');
   const pode = !admin && ['Programada', 'Em andamento'].includes(o.status) && !o.emExecucao && !sess;
   if (pode) { ok.disabled = false; ok.innerHTML = `${ic('saida')} Iniciar`; ok.onclick = () => telaIniciarOS(o); }
@@ -1613,7 +1625,7 @@ function telaProgramarOS() {
 function fluxoApontar(s) {
   topo('Apontar OS ' + s.numero);
   const d = est.dados, chave = 'kc_ap_' + s.n;
-  let f = { tipo: '', executado: '', materiais: [], pendencias: '', ausente: false, motivo: '', assinante: '', cargo: '', emails: null, extra: '', incluirAPR: '' };
+  let f = { tipo: '', executado: '', temMat: '', materiais: [], pendencias: '', ausente: false, motivo: '', assinante: '', cargo: '', emails: null, extra: '', incluirAPR: '' };
   try { Object.assign(f, JSON.parse(lerLocal(chave) || '{}')); } catch (e) { /* rascunho inválido */ }
   const fotos = []; let assinatura = null, tracos = 0, p = 0;
   const passos = ['Situação', 'Serviço', 'Fotos', 'Assinatura'];
@@ -1622,7 +1634,7 @@ function fluxoApontar(s) {
   function ler() {
     if (p === 1) {
       f.executado = val('aExec'); f.pendencias = val('aPend');
-      f.materiais = [...document.querySelectorAll('.mat')].map(r => ({ qtd: r.querySelector('[data-q]').value.trim(), desc: r.querySelector('[data-d]').value.trim() })).filter(m => m.desc);
+      f.materiais = f.temMat === 'Sim' ? [...document.querySelectorAll('.mat')].map(r => ({ qtd: r.querySelector('[data-q]').value.trim(), desc: r.querySelector('[data-d]').value.trim() })).filter(m => m.desc) : [];
     }
     if (p === 3) {
       f.assinante = val('aAss'); f.cargo = val('aCargo'); f.motivo = val('aMot'); f.extra = val('aExtra');
@@ -1633,6 +1645,9 @@ function fluxoApontar(s) {
   function validar() {
     if (p === 0 && !f.tipo) throw new Error('Escolha se é parcial ou finalização.');
     if (p === 1 && !f.executado) throw new Error('Descreva o que foi executado neste período.');
+    if (p === 1 && !f.temMat) throw new Error('Informe se houve material utilizado.');
+    if (p === 1 && f.temMat === 'Sim' && !f.materiais.length) throw new Error('Informe o material utilizado (quantidade e descrição ou código).');
+    if (p === 1 && f.temMat === 'Sim' && f.materiais.some(m => !m.qtd)) throw new Error('Informe a quantidade de cada material.');
   }
   const rodape = txt => {
     barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="prox" type="button">${txt}</button></div>`);
@@ -1645,18 +1660,37 @@ function fluxoApontar(s) {
     if (p === 0) {
       $app.innerHTML = `${cab()}<h1>Como fica a OS?</h1>
         <button type="button" class="opcao larga ${f.tipo === 'Parcial' ? 'sel' : ''}" data-t="Parcial" style="margin-bottom:10px">${ic('retorno')}<span>Apontamento parcial<small class="suave" style="display:block;font-weight:400">O serviço continua em outro momento ou outro dia</small></span></button>
-        <button type="button" class="opcao larga ${f.tipo === 'Final' ? 'sel' : ''}" data-t="Final">${ic('ok')}<span>Finalizar a OS<small class="suave" style="display:block;font-weight:400">Serviço concluído. O cliente recebe o PDF completo</small></span></button>
+        <button type="button" class="opcao larga ${f.tipo === 'Final' ? 'sel' : ''}" data-t="Final">${ic('ok')}<span>Finalizar a OS<small class="suave" style="display:block;font-weight:400">Serviço concluído. Vai para a aprovação da administração</small></span></button>
         <p class="suave" style="margin-top:12px">Início: ${esc(s.inicio)} · Equipe: ${esc(s.equipe.join(', '))}</p>`;
       document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { f.tipo = b.dataset.t; guardar(chave, JSON.stringify(f)); desenhar(); setTimeout(() => { p = 1; desenhar(); }, 150); });
       rodape('Continuar');
     } else if (p === 1) {
-      const linhaMat = (m = {}) => `<div class="mat grade" style="grid-template-columns:76px 1fr 44px;margin-bottom:8px"><input class="campo-txt" data-q placeholder="Qtd." value="${esc(m.qtd || '')}"><input class="campo-txt" data-d placeholder="Material" value="${esc(m.desc || '')}"><button type="button" class="acao leve" data-x style="margin:0;min-height:0;padding:0" aria-label="Remover">×</button></div>`;
+      const linhaMat = (m = {}) => `<div class="mat grade" style="grid-template-columns:64px 1fr 44px 40px;margin-bottom:8px;gap:6px"><input class="campo-txt" data-q placeholder="Qtd." inputmode="decimal" value="${esc(m.qtd || '')}"><input class="campo-txt" data-d placeholder="Material ou código" list="dlMat" value="${esc(m.desc || '')}"><button type="button" class="acao leve scan" data-scan aria-label="Ler código com a câmera">${ic('camera')}</button><button type="button" class="acao leve" data-x style="margin:0;min-height:0;padding:0" aria-label="Remover">×</button></div>`;
+      const mats = est.dados.materiais || [];
       $app.innerHTML = `${cab()}<h1>${f.tipo === 'Final' ? 'Finalização' : 'Apontamento parcial'}</h1>
         <label class="rotulo" for="aExec">O que foi executado neste período</label><textarea class="campo-txt" id="aExec" style="min-height:130px">${esc(f.executado)}</textarea>
-        <label class="rotulo">Materiais utilizados</label><div id="mats">${(f.materiais.length ? f.materiais : [{}]).map(linhaMat).join('')}</div>
+        <label class="rotulo">Houve material utilizado?</label>
+        <div class="segmento" id="aTemMat"><button type="button" data-v="Sim" class="${f.temMat === 'Sim' ? 'sel' : ''}">Sim</button><button type="button" data-v="Não" class="${f.temMat === 'Não' ? 'sel' : ''}">Não</button></div>
+        <div id="boxMat" class="${f.temMat === 'Sim' ? '' : 'oculto'}" style="margin-top:10px"><div id="mats">${(f.materiais.length ? f.materiais : [{}]).map(linhaMat).join('')}</div>
         <button type="button" class="link" id="addMat">+ Adicionar material</button>
+        <p class="suave" style="margin-top:6px">Digite a descrição ou o código (SKU), ou toque na câmera para ler o código de barras.</p>
+        <datalist id="dlMat">${mats.map(m => `<option value="${esc(m.desc + ' (' + m.sku + ')')}">${esc(m.sku)}</option>`).join('')}</datalist></div>
         ${f.tipo === 'Final' ? `<label class="rotulo" for="aPend">Pendências e recomendações</label><textarea class="campo-txt" id="aPend">${esc(f.pendencias)}</textarea>` : ''}`;
-      const ligarX = () => document.querySelectorAll('[data-x]').forEach(b => b.onclick = () => b.closest('.mat').remove());
+      const ligarX = () => {
+        document.querySelectorAll('[data-x]').forEach(b => b.onclick = () => b.closest('.mat').remove());
+        document.querySelectorAll('.mat [data-d]').forEach(i => i.onchange = () => { const m = materialDoCodigo(i.value.trim()); if (m) i.value = m; });
+        document.querySelectorAll('[data-scan]').forEach(b => b.onclick = async () => {
+          const cod = await lerCodigo(); if (!cod) return;
+          const campo = b.closest('.mat').querySelector('[data-d]'), achou = materialDoCodigo(cod);
+          campo.value = achou || cod; sujo = true;
+          if (!achou) erroTela(`Código ${cod} não está no catálogo de materiais. Complete a descrição.`);
+          const q = b.closest('.mat').querySelector('[data-q]'); if (!q.value) q.focus();
+        });
+      };
+      document.querySelectorAll('#aTemMat button').forEach(b => b.onclick = () => {
+        f.temMat = b.dataset.v; document.querySelectorAll('#aTemMat button').forEach(x => x.classList.toggle('sel', x === b));
+        document.getElementById('boxMat').classList.toggle('oculto', f.temMat !== 'Sim');
+      });
       document.getElementById('addMat').onclick = () => { document.getElementById('mats').insertAdjacentHTML('beforeend', linhaMat()); ligarX(); };
       ligarX(); rodape('Continuar');
     } else if (p === 2) {
@@ -1685,9 +1719,9 @@ function fluxoApontar(s) {
         <div id="boxAus" class="${f.ausente ? '' : 'oculto'}"><label class="rotulo" for="aMot">Por que não há assinatura?</label>
           <textarea class="campo-txt" id="aMot" placeholder="Ex.: fim de expediente, sem responsável no local">${esc(f.motivo)}</textarea>
           <p class="suave" style="margin-top:6px">Fica destacado para a administração e no PDF.</p></div>
-        ${f.tipo === 'Final' ? `<label class="rotulo">Enviar a OS para</label><div id="aMails">${cli.emails.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${f.emails.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Este cliente não tem e-mail cadastrado.</p>'}</div>
+        ${f.tipo === 'Final' ? `<label class="rotulo">E-mails do cliente para o envio</label><div id="aMails">${cli.emails.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${f.emails.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Este cliente não tem e-mail cadastrado.</p>'}</div>
           <input class="campo-txt" id="aExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)" value="${esc(f.extra)}">
-          <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>
+          <p class="suave" style="margin-top:8px">O envio ao cliente acontece depois da aprovação da administração.</p>
           <label class="rotulo">Enviar a APR junto no PDF do cliente?</label>
           <div class="segmento" id="aApr"><button type="button" data-v="Sim" class="${f.incluirAPR === 'Sim' ? 'sel' : ''}">Sim, incluir</button><button type="button" data-v="Não" class="${f.incluirAPR === 'Não' ? 'sel' : ''}">Não incluir</button></div>
           <p class="suave" style="margin-top:6px">Decisão do responsável técnico. A APR fica registrada na Kiton nos dois casos. <button type="button" class="link" id="aVerApr">Ver a APR deste serviço</button></p>` : `<p class="suave" style="margin-top:12px">O PDF deste apontamento vai só para a Kiton (contato@). O cliente recebe tudo na finalização.</p>`}
@@ -1731,7 +1765,7 @@ function fluxoApontar(s) {
 function telaEAgora(r) {
   topo('Ordem de serviço'); barra('');
   const resultado = r.tipo === 'Final'
-    ? (r.enviada ? msg('ok', `OS ${r.numero} finalizada e enviada para ${r.emails.length ? r.emails.join(', ') + ' e ' : ''}contato@.`) : msg('erro', `OS ${r.numero} finalizada, mas o e-mail não saiu. A administração pode reenviar.`))
+    ? msg('ok', `OS ${r.numero} finalizada e enviada para a aprovação da administração. O cliente recebe depois da aprovação.`)
     : msg('ok', `Apontamento parcial da OS ${r.numero} salvo (${dur(r.horas)}).`);
   $app.innerHTML = `<div id="erro">${resultado}</div><h1>E agora?</h1><p class="suave">${esc(r.cliente)}</p>
     <button type="button" class="opcao larga" id="eOutra" style="margin-bottom:10px">${ic('os')}<span>Outra OS neste cliente<small class="suave" style="display:block;font-weight:400">Continua no mesmo check-in</small></span></button>
@@ -1823,6 +1857,7 @@ async function adminOS(box) {
       ['Atrasada', 'Atrasadas p/ iniciar', o => o.atrasada, 'vermelho'],
       ['Andamento', 'Em andamento', o => o.status === 'Em andamento' && !o.parada, 'amarelo'],
       ['Parada', 'Paradas', o => o.parada, 'laranja'],
+      ['Aprovacao', 'Aguardando aprovação', o => o.status === 'Aguardando aprovação', 'amarelo'],
       ['Finalizada', 'Finalizadas', o => o.status === 'Finalizada', 'verde'],
       ['Cancelada', 'Canceladas', o => o.status === 'Cancelada', '']
     ];
@@ -1859,6 +1894,145 @@ async function adminOS(box) {
     document.querySelectorAll('#painel [data-f]').forEach(b => b.onclick = () => { f.status = f.status === b.dataset.f ? '' : b.dataset.f; f.visao = 'lista'; refazer(); });
     document.querySelectorAll('#painel [data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os, true));
   });
+}
+
+/** Revisão e aprovação da OS pela administração: o cliente só recebe depois daqui. */
+function telaAprovarOS(o, aps) {
+  topo('Aprovar OS ' + o.numero);
+  const fechados = aps.filter(a => a.fim), fotos = {};
+  const cli = est.dados.clientesInfo.find(c => c.nome === o.cliente) || { emails: [] };
+  const indicados = (o.emails || '').split(',').map(x => x.trim()).filter(Boolean);
+  const opcoes = [...new Set([...indicados, ...cli.emails])];
+  let incluirAPR = o.aprNoPdf === 'Sim';
+  $app.innerHTML = `<h1>Revisar e aprovar</h1><p class="suave">OS ${esc(o.numero)} · ${esc(o.cliente)}</p><div id="erro"></div>
+    ${msg('info', 'Revise o que o técnico registrou. Pode ajustar texto, materiais, fotos e pendências antes de aprovar. Assinatura, horários e localização não podem ser alterados.')}
+    <div class="grade pdfs" style="margin-bottom:12px"><button type="button" class="acao leve" id="apPrev">${ic('os')}<span>Prévia do PDF<small>como o cliente vai receber</small></span></button>
+      <button type="button" class="acao leve" id="apComp">${ic('os')}<span>Prévia do PDF<small>com APR completa</small></span></button></div>
+    ${fechados.map(a => `<div class="cartao" data-ap="${esc(a.n)}"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))} às ${esc(hora(a.fim))}${a.tipo === 'Final' ? ' · Finalização' : ' · Parcial'}</div>
+      <p class="suave" style="margin:2px 0 0">Equipe: ${esc(a.equipe.join(', '))} · ${a.ausente ? 'Cliente ausente: ' + esc(a.ausente) : 'Assinado por ' + esc(a.assinante)}</p>
+      <label class="rotulo">Serviço executado</label><textarea class="campo-txt" data-ex style="min-height:110px">${esc(a.executado)}</textarea>
+      <label class="rotulo">Materiais utilizados</label><textarea class="campo-txt" data-mat placeholder="Nenhum material">${esc(a.materiais)}</textarea>
+      <div data-fbox><button type="button" class="link" data-vf="${esc(a.n)}">Ver e alterar as fotos (${a.fotos})</button>${a.apr ? ` · <button type="button" class="link" data-apr="${esc(a.apr)}">Ver APR nº ${esc(a.apr)}</button>` : ''}</div></div>`).join('')}
+    <label class="rotulo" for="apPend">Pendências e recomendações</label><textarea class="campo-txt" id="apPend">${esc(o.pendencias)}</textarea>
+    <label class="rotulo">Incluir a APR no PDF do cliente?</label>
+    <div class="segmento" id="apApr"><button type="button" data-v="Sim" class="${incluirAPR ? 'sel' : ''}">Sim, incluir</button><button type="button" data-v="Não" class="${incluirAPR ? '' : 'sel'}">Não incluir</button></div>
+    <p class="suave" style="margin-top:6px">O técnico escolheu ${o.aprNoPdf === 'Sim' ? 'incluir' : 'não incluir'}.</p>
+    <label class="rotulo">Enviar para</label><div id="apMails">${opcoes.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${indicados.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Nenhum e-mail indicado.</p>'}</div>
+    <input class="campo-txt" id="apExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)">
+    <p class="suave" style="margin-top:8px">A Kiton (contato@) recebe cópia, e a equipe que participou recebe em cópia oculta.</p>
+    <button type="button" class="acao leve" id="apSemEnvio">Aprovar sem enviar ao cliente</button>
+    <button type="button" class="acao leve" id="apDevolver">Devolver ao técnico</button>`;
+  const pintar = n => {
+    const box = document.querySelector(`[data-ap="${n}"] [data-fbox]`);
+    box.innerHTML = `<label class="rotulo">Fotos (até 6)</label><div class="fotos">${fotos[n].map((f, i) => `<div class="foto"><img src="${f.src}" alt="Foto ${i + 1}"><button type="button" data-rmf="${i}" aria-label="Remover foto">×</button></div>`).join('')}</div>${botoesFoto('apF' + n, true)}`;
+    box.querySelectorAll('[data-rmf]').forEach(b => b.onclick = () => { fotos[n].splice(+b.dataset.rmf, 1); pintar(n); });
+    ligarFoto('apF' + n, e => executar(async () => { for (const a of [...e.target.files]) { if (fotos[n].length >= 6) break; fotos[n].push({ src: await comprimir(a, 1100, 0.7), novo: true }); } pintar(n); }));
+  };
+  document.querySelectorAll('[data-vf]').forEach(b => b.onclick = () => executar(async () => { const n = b.dataset.vf; fotos[n] = (await api('fotosAp', { n })).fotos.filter(f => f.src); pintar(n); }));
+  document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
+  document.querySelectorAll('#apApr button').forEach(b => b.onclick = () => { incluirAPR = b.dataset.v === 'Sim'; document.querySelectorAll('#apApr button').forEach(x => x.classList.toggle('sel', x === b)); });
+  const prev = fechados.filter(a => a.tipo === 'Final').pop();
+  document.getElementById('apPrev').onclick = () => { if (prev && prev.pdf) window.open(prev.pdf, '_blank'); else erroTela('A prévia não foi encontrada.'); };
+  document.getElementById('apComp').onclick = () => abrirPdfComApr(o.numero);
+  const dados = () => {
+    const apontamentos = [...document.querySelectorAll('[data-ap]')].map(c => {
+      const n = c.dataset.ap, x = { n, executado: c.querySelector('[data-ex]').value.trim(), materiais: c.querySelector('[data-mat]').value.trim() };
+      if (fotos[n]) x.fotos = fotos[n].map(f => f.novo ? f.src : f.id);
+      return x;
+    });
+    if (apontamentos.some(a => !a.executado)) throw new Error('O serviço executado não pode ficar vazio.');
+    const emails = [...document.querySelectorAll('#apMails input:checked')].map(x => x.value).concat(document.getElementById('apExtra').value.trim()).filter(Boolean);
+    if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
+    return { numero: o.numero, apontamentos, pendencias: document.getElementById('apPend').value.trim(), incluirAPR, emails };
+  };
+  const aprovar = enviar => executar(async () => {
+    const d = dados();
+    if (enviar && !d.emails.length) throw new Error('Marque ou digite pelo menos um e-mail do cliente.');
+    if (!enviar && !confirm('Aprovar sem enviar ao cliente? Você pode reenviar depois pelo detalhe da OS.')) return;
+    const r = await api('aprovarOS', Object.assign(d, { enviar }));
+    sujo = false; await recarregarDados(); await telaOSDetalhe(o.numero, true);
+    document.getElementById('erro').innerHTML = msg(/^Erro/.test(r.envio) ? 'erro' : 'ok', r.envio + '.');
+  });
+  document.getElementById('apSemEnvio').onclick = () => aprovar(false);
+  document.getElementById('apDevolver').onclick = () => { if (podeSair()) telaDevolverOS(o); };
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Aprovar e enviar</button></div>`);
+  document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
+  document.getElementById('ok').onclick = () => aprovar(true);
+}
+
+function telaDevolverOS(o) {
+  topo('Devolver OS ' + o.numero);
+  $app.innerHTML = `<h1>Devolver ao técnico</h1><p class="suave">OS ${esc(o.numero)} · ${esc(o.cliente)}</p><div id="erro"></div>
+    ${msg('info', 'A OS volta para Em andamento e aparece para os técnicos escolhidos, com o motivo. O cliente não recebeu nada ainda, então não gera revisão.')}
+    <label class="rotulo" for="dvMot">O que precisa ser feito ou corrigido</label><textarea class="campo-txt" id="dvMot" placeholder="Ex.: faltou o teste de isolação do motor"></textarea>
+    <label class="rotulo">Técnicos</label>${chips('dvTec', [...new Set([...(est.dados.equipeCampo || est.dados.colaboradores), ...o.tecnicos])], '')}`;
+  document.querySelectorAll('#dvTec .pessoa').forEach(b => { b.classList.toggle('sel', o.tecnicos.includes(b.dataset.v)); b.onclick = () => b.classList.toggle('sel'); });
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('retorno')} Devolver</button></div>`);
+  document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const motivo = document.getElementById('dvMot').value.trim();
+    if (!motivo) throw new Error('Informe o que precisa ser feito.');
+    const tecnicos = lerEquipe('dvTec'); if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
+    await api('devolverOS', { numero: o.numero, motivo, tecnicos });
+    sujo = false; await recarregarDados(); await telaOSDetalhe(o.numero, true);
+    document.getElementById('erro').innerHTML = msg('ok', 'OS devolvida. Ela aparece no app dos técnicos escolhidos.');
+  });
+}
+
+/** Abre o PDF com a APR completa (gerado no servidor). */
+function abrirPdfComApr(numero) {
+  const w = window.open('', '_blank');
+  if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Gerando o PDF com a APR completa…</p>');
+  executar(async () => {
+    try { const x = await api('pdfComAPR', { numero }); if (w) w.location.href = x.link; else window.location.href = x.link; }
+    catch (e) { if (w) w.close(); throw e; }
+  });
+}
+
+/** Lista de OS aguardando aprovação. */
+async function adminAprovar(box) {
+  box.innerHTML = '<h1>OS para aprovar</h1><div id="lista"><p class="suave">Carregando…</p></div>';
+  await executar(async () => {
+    const r = await api('painelOS', { de: '', ate: '' });
+    const L = r.lista.filter(o => o.status === 'Aguardando aprovação');
+    document.getElementById('lista').innerHTML = L.length ? L.map(o => cartaoOS(o, `<span class="selo-txt" style="margin-left:4px">${esc(o.tecnicos.join(', '))}</span>`)).join('') : msg('ok', 'Nenhuma OS aguardando aprovação.');
+    document.querySelectorAll('#lista [data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os, true));
+  });
+}
+
+/** Leitura de código de barras ou QR pela câmera. Devolve o texto lido ou null. */
+function carregarScript(src) { return new Promise((ok, erro) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('Não foi possível carregar o leitor.')); document.head.appendChild(s); }); }
+function lerCodigo() {
+  return new Promise(resolve => {
+    let stream = null, parar = false, zr = null, feito = false;
+    const fim = v => { if (feito) return; feito = true; parar = true; try { stream && stream.getTracks().forEach(t => t.stop()); } catch (e) { /* segue */ } try { zr && zr.reset(); } catch (e) { /* segue */ } fecharFolha(); resolve(v); };
+    abrirFolha('Ler código', `<video id="scVid" playsinline muted style="width:100%;border-radius:12px;background:#000;margin-top:8px;max-height:60vh"></video>
+      <p class="suave" style="margin-top:8px">Aponte a câmera para o código de barras ou o QR code do material.</p><div id="scErro"></div>`, () => fim(null));
+    const vid = document.getElementById('scVid');
+    (async () => {
+      try {
+        if ('BarcodeDetector' in window) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          vid.srcObject = stream; await vid.play();
+          const det = new BarcodeDetector();
+          const ciclo = async () => { if (parar) return; try { const r = await det.detect(vid); if (r.length) return fim(r[0].rawValue); } catch (e) { /* tenta de novo */ } setTimeout(ciclo, 250); };
+          ciclo();
+        } else {
+          if (!window.ZXing) await carregarScript('zxing.min.js');
+          zr = new ZXing.BrowserMultiFormatReader();
+          zr.decodeFromConstraints({ video: { facingMode: 'environment' } }, vid, r => { if (r && !parar) fim(r.getText()); });
+        }
+      } catch (e) {
+        const box = document.getElementById('scErro');
+        if (box) box.innerHTML = msg('erro', 'Não foi possível abrir a câmera. Libere o acesso à câmera para o app ou digite o código.');
+      }
+    })();
+  });
+}
+/** Procura o código lido no catálogo de materiais. */
+function materialDoCodigo(cod) {
+  const m = (est.dados.materiais || []).find(x => x.ean === cod || x.sku.toLowerCase() === cod.toLowerCase());
+  return m ? `${m.desc} (${m.sku})` : '';
 }
 
 /** Correção de OS finalizada: texto, materiais, fotos e pendências. Gera revisão do PDF. */
@@ -1939,6 +2113,11 @@ function adminEditarOS(o, aps) {
   const box = document.getElementById('adm');
   if (!box) return;
   const edita = ['Programada', 'Em andamento'].includes(o.status);
+  if (o.status === 'Aguardando aprovação') {
+    box.innerHTML = `<button class="acao" id="admAprovar" type="button">${ic('ok')} Revisar e aprovar</button>`;
+    document.getElementById('admAprovar').onclick = () => telaAprovarOS(o, aps || []);
+    return;
+  }
   box.innerHTML = (edita ? `<h2>Alterar</h2>
     <label class="rotulo">Técnicos (quem vai executar ou continuar)</label>${chips('admTec', [...new Set([...(est.dados.equipeCampo || est.dados.colaboradores), ...o.tecnicos])], '')}
     <label class="rotulo" for="admLocal">Local / setor</label><input class="campo-txt" id="admLocal" value="${esc(o.local)}">

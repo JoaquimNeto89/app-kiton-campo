@@ -41,7 +41,7 @@ const CAB = {
   'Ordens de serviço': ['Nº OS', 'Status', 'Cliente', 'Local / setor', 'Solicitante', 'Tipo de serviço', 'Solicitação / problema',
     'Início previsto', 'Término previsto', 'Técnicos designados', 'Programada por', 'Programada em', 'Evento na agenda', 'Iniciada em',
     'Início x programado', 'Último apontamento', 'Finalizada em', 'Prazo', 'Horas trabalhadas', 'Apontamentos', 'Pendências / recomendações',
-    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente', 'Revisão', 'Histórico de revisões', 'Reaberta', 'PDF com APR completa'],
+    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente', 'Revisão', 'Histórico de revisões', 'Reaberta', 'PDF com APR completa', 'Aprovada por', 'Aprovada em', 'Devolvida'],
   'Apontamentos de OS': ['Nº', 'Nº OS', 'Início', 'Fim', 'Horas', 'Tipo', 'Equipe', 'Serviço executado', 'Materiais utilizados', 'Fotos',
     'Assinatura', 'Assinado por', 'Cargo / setor de quem assinou', 'Cliente ausente (motivo)', 'PDF do apontamento', 'Check-in',
     'Lat. início', 'Long. início', 'Lat. fim', 'Long. fim', 'Registrado por', 'Iniciado lançado em', 'Fim lançado em', 'Lançamento tardio'],
@@ -112,6 +112,9 @@ function rotear_(req) {
     case 'fotosAp': exigirAdmin_(u); return fotosAp_(req);
     case 'verAPR': return verAPR_(u, req);
     case 'pdfComAPR': return comTrava_(() => pdfComAPR_(u, req));
+    case 'aprovarOS': exigirAdmin_(u); return comTrava_(() => aprovarOS_(u, req));
+    case 'devolverOS': exigirAdmin_(u); return comTrava_(() => devolverOS_(u, req));
+    case 'pdfAPR': return pdfAPR_(u, req);
     case 'corrigirOS': exigirAdmin_(u); return comTrava_(() => corrigirOS_(u, req));
     case 'reabrirOS': exigirAdmin_(u); return comTrava_(() => reabrirOS_(u, req));
     case 'aprPainel': exigirAdmin_(u); return aprPainel_();
@@ -408,6 +411,9 @@ function inicio_(u) {
     ultimosCheckins: ultimosCheckins_(u, 5),
     pendencias: u.perfil === 'Administrador' ? pendenciasAdmin_() : null,
     tiposOS: lista_('Tipo de OS'),
+    materiais: (() => { try { if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Materiais')) return [];
+      return ler_('Materiais').linhas.filter(l => txt_(l.get('Descrição'))).map(l => ({ sku: txt_(l.get('Código (SKU)')), ean: txt_(l.get('Código de barras (EAN)')), desc: txt_(l.get('Descrição')), un: txt_(l.get('Unidade')) })); }
+      catch (e) { return []; } })(),
     apr: { secoes: APR_SECOES, itens: APR_ITENS, riscos: APR_RISCOS, condicoes: APR_CONDICOES, triagem: APR_TRIAGEM, reduzida: tiposAprReduzida_(), treinos: TREINOS.map(x => x[0]) },
     treinamentos: (() => { const tr = treinamentos_(), o = {}; equipeCampo.forEach(n => { o[n] = {}; TREINOS.forEach(([k]) => { const d = (tr[n] || {})[k]; o[n][k] = d ? dia_(d) : ''; }); }); return o; })(),
     meusTreinos: (() => { const d = treinamentos_()[u.nome] || {}; return TREINOS.map(([k]) => ({ k, venc: d[k] ? dia_(d[k]) : '', dias: diasAte_(d[k]) }))
@@ -424,6 +430,7 @@ function pendenciasAdmin_() {
     clientes: pendentesCliente_().length,
     os: (() => { const b = baseOS_(); return b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))])).filter(o => o.atrasada || o.parada).length; })(),
     apr: aprBloqueadas_().length,
+    aprovar: ler_(ABA.os).linhas.filter(l => txt_(l.get('Status')) === ST_APROVACAO).length,
     treinos: situacaoTreinos_().filter(p => p.itens.some(i => i.dias !== null && i.dias <= AVISO_TREINO_DIAS)).length
   };
 }
@@ -1079,6 +1086,7 @@ function resumoOS_(l, aps) {
     inicioVsPrevisto: txt_(l.get('Início x programado')), prazo: txt_(l.get('Prazo')),
     pdf: txt_(l.get('PDF final')), envio: txt_(l.get('Envio')), emails: txt_(l.get('E-mails do cliente')),
     pendencias: txt_(l.get('Pendências / recomendações')), motivoCancel: txt_(l.get('Motivo do cancelamento')),
+    observacoes: txt_(l.get('Observações')), aprovadaPor: txt_(l.get('Aprovada por')), aprovadaEm: fmt_(l.get('Aprovada em')), devolvida: Number(l.get('Devolvida')) || 0,
     aprNoPdf: txt_(l.get('APR no PDF do cliente')), revisao: Number(l.get('Revisão')) || 0, historico: txt_(l.get('Histórico de revisões')), reaberta: Number(l.get('Reaberta')) || 0
   };
 }
@@ -1099,7 +1107,7 @@ function minhasOS_(u) {
     .map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
     .filter(o => o.envolvidos.indexOf(u.nome) >= 0)
     .sort((a, c) => (a.inicioPrevIso || '9') < (c.inicioPrevIso || '9') ? -1 : (a.inicioPrevIso || '9') > (c.inicioPrevIso || '9') ? 1 : a.numero.localeCompare(c.numero));
-  const finalizadas = b.os.linhas.filter(l => txt_(l.get('Status')) === 'Finalizada').map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
+  const finalizadas = b.os.linhas.filter(l => ['Finalizada', ST_APROVACAO].indexOf(txt_(l.get('Status'))) >= 0).map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
     .filter(o => o.envolvidos.indexOf(u.nome) >= 0).slice(-10).reverse();
   return { ok: true, abertas, finalizadas, sessao: sessaoAberta_(u, b), aprs: minhasAPR_(u) };
 }
@@ -1169,7 +1177,7 @@ function editarOS_(u, req) {
   const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
   if (!l) throw new Error('OS não encontrada.');
   const st = txt_(l.get('Status'));
-  if (['Finalizada', 'Cancelada'].indexOf(st) >= 0) throw new Error('OS ' + st.toLowerCase() + ' não pode ser alterada.');
+  if (['Finalizada', 'Cancelada', ST_APROVACAO].indexOf(st) >= 0) throw new Error('OS ' + st.toLowerCase() + ' não pode ser alterada.');
   const tecnicos = (req.tecnicos || []).map(txt_).filter(Boolean);
   if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
   set_(t, l._linha, 'Técnicos designados', tecnicos.join(', '));
@@ -1192,7 +1200,7 @@ function cancelarOS_(u, req) {
   const t = ler_(ABA.os);
   const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
   if (!l) throw new Error('OS não encontrada.');
-  if (['Finalizada', 'Cancelada'].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
+  if (['Finalizada', 'Cancelada', ST_APROVACAO].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
   if (!txt_(req.motivo)) throw new Error('Informe o motivo do cancelamento.');
   const ap = ler_(ABA.apont);
   if (ap.linhas.some(x => txt_(x.get('Nº OS')) === txt_(req.numero) && !txt_(x.get('Fim')))) throw new Error('Há um apontamento em execução. Peça para o técnico apontar antes.');
@@ -1224,7 +1232,7 @@ function iniciarOS_(u, req) {
   if (numero) {
     l = b.os.linhas.find(x => txt_(x.get('Nº OS')) === numero);
     if (!l) throw new Error('OS não encontrada.');
-    if (['Finalizada', 'Cancelada'].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
+    if (['Finalizada', 'Cancelada', ST_APROVACAO].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
     if (b.ap.linhas.some(x => txt_(x.get('Nº OS')) === numero && !txt_(x.get('Fim')))) throw new Error('Esta OS já está em execução por outra pessoa.');
     cliente = txt_(l.get('Cliente')); tipo = txt_(l.get('Tipo de serviço'));
   } else {
@@ -1601,20 +1609,20 @@ function apontarOS_(u, req) {
   let pdf, envio, link;
   const osInfo = resumoOS_(ler_(ABA.os).linhas.find(x => txt_(x.get('Nº OS')) === numero), todos);
   if (tipo === 'Final') {
-    set_(b.os, lo._linha, 'Status', 'Finalizada');
+    set_(b.os, lo._linha, 'Status', ST_APROVACAO);
     set_(b.os, lo._linha, 'Finalizada em', fim);
     set_(b.os, lo._linha, 'Pendências / recomendações', txt_(req.pendencias));
     set_(b.os, lo._linha, 'E-mails do cliente', emails.join(', '));
     const prevFim = data_(lo.get('Término previsto'));
     if (prevFim) set_(b.os, lo._linha, 'Prazo', fim.getTime() <= prevFim.getTime() ? 'Dentro do previsto' : 'Após o previsto');
     agendaFinal_(lo);
-    osInfo.pendencias = txt_(req.pendencias); osInfo.status = 'Finalizada'; osInfo.finalizadaEm = fmt_(fim);
+    osInfo.pendencias = txt_(req.pendencias); osInfo.status = ST_APROVACAO; osInfo.finalizadaEm = fmt_(fim); osInfo.previa = true;
     if (b.os.cab['APR no PDF do cliente'] !== undefined) set_(b.os, lo._linha, 'APR no PDF do cliente', req.incluirAPR === true ? 'Sim' : 'Não');
+    // o cliente só recebe depois da aprovação da administração; aqui vai a prévia para a Kiton
     pdf = pdfOS2_(osInfo, todos, 'final', req.incluirAPR === true);
     link = pasta.createFile(pdf).getUrl();
-    set_(b.os, lo._linha, 'PDF final', link);
-    try { enviarOS2_(osInfo, pdf, emails, 'final', todos); envio = 'Enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
-    catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
+    try { enviarOS2_(osInfo, pdf, emails, 'aprovacao', todos); envio = 'Aguardando aprovação (prévia enviada para a Kiton)'; }
+    catch (e) { envio = 'Aguardando aprovação (aviso por e-mail falhou: ' + (e && e.message ? e.message : e) + ')'; }
     set_(b.os, lo._linha, 'Envio', envio);
   } else {
     pdf = pdfOS2_(osInfo, todos.filter(x => txt_(x.get('Nº')) === txt_(req.n)), 'parcial');
@@ -1623,7 +1631,7 @@ function apontarOS_(u, req) {
     catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
   }
   set_(b.ap, la._linha, 'PDF do apontamento', link);
-  return { ok: true, numero, tipo, cliente: osInfo.cliente, horas, link, envio, enviada: !/^Erro/.test(envio), emails };
+  return { ok: true, numero, tipo, cliente: osInfo.cliente, horas, link, envio, enviada: !/^Erro/.test(envio), emails, aprovacao: tipo === 'Final' };
 }
 
 /** Ajusta o evento da agenda para o período real quando a OS termina. */
@@ -1677,20 +1685,9 @@ function corrigirOS_(u, req) {
   const motivo = txt_(req.motivo);
   if (!motivo) throw new Error('Informe o motivo da correção.');
   const numero = txt_(req.numero);
-  const ap = ler_(ABA.apont);
   const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]);
-  (req.apontamentos || []).forEach(c => {
-    const la = ap.linhas.find(x => txt_(x.get('Nº')) === txt_(c.n) && txt_(x.get('Nº OS')) === numero);
-    if (!la) throw new Error('Apontamento ' + c.n + ' não pertence a esta OS.');
-    if (!txt_(c.executado)) throw new Error('O serviço executado não pode ficar vazio.');
-    set_(ap, la._linha, 'Serviço executado', txt_(c.executado));
-    set_(ap, la._linha, 'Materiais utilizados', txt_(c.materiais));
-    if (Array.isArray(c.fotos)) {
-      const atuais = lista2_(la.get('Fotos'));
-      const ids = c.fotos.slice(0, 6).map((f, i) => /^data:/.test(f) ? salvarImagem_(pasta, f, 'image/jpeg', 'Apontamento ' + c.n + ' - foto corrigida ' + (i + 1) + '.jpg') : (atuais.indexOf(f) >= 0 ? f : '')).filter(Boolean);
-      set_(ap, la._linha, 'Fotos', ids.join(','));
-    }
-  });
+  aplicarEdicoes_(numero, req.apontamentos, pasta);
+
   if (req.pendencias !== undefined) set_(t, l._linha, 'Pendências / recomendações', txt_(req.pendencias));
   if (typeof req.incluirAPR === 'boolean' && t.cab['APR no PDF do cliente'] !== undefined) set_(t, l._linha, 'APR no PDF do cliente', req.incluirAPR ? 'Sim' : 'Não');
   const rev = registrarRevisao_(t, l, u, 'correção', motivo);
@@ -1758,6 +1755,21 @@ function paginaAPR_(x, a, o) {
     '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Base: NR-10 · Documento gerado pelo Kiton Hub</div></div>';
 }
 
+/** PDF somente da APR (uma folha), para imprimir. */
+function pdfAPR_(u, req) {
+  const l = ler_('APR').linhas.find(x => txt_(x.get('Nº APR')) === txt_(req.n));
+  if (!l) throw new Error('APR não encontrada.');
+  if (u.perfil !== 'Administrador' && lista2_(l.get('Equipe')).indexOf(u.nome) < 0) throw new Error('Só a administração e a equipe da APR podem imprimi-la.');
+  const numero = txt_(l.get('Nº OS'));
+  const lo = numero ? ler_(ABA.os).linhas.find(x => txt_(x.get('Nº OS')) === numero) : null;
+  const a = txt_(l.get('Apontamento')) ? ler_(ABA.apont).linhas.find(x => txt_(x.get('Nº')) === txt_(l.get('Apontamento'))) : null;
+  const o = { numero: numero || '-', local: lo ? txt_(lo.get('Local / setor')) : '' };
+  const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() + '.apr{page-break-before:auto}</style></head><body>' + paginaAPR_(l, a, o) + '</body></html>';
+  const pdf = Utilities.newBlob(html, 'text/html', 'APR.html').getAs('application/pdf').setName('APR ' + txt_(l.get('Nº APR')) + ' - OS ' + o.numero + ' - ' + txt_(l.get('Cliente')).replace(/[\\/:*?"<>|]/g, '') + '.pdf');
+  const link = pasta_(['Kiton Hub', 'APR', Utilities.formatDate(new Date(), TZ, 'yyyy')]).createFile(pdf).getUrl();
+  return { ok: true, link };
+}
+
 /** PDF final com a APR completa anexada (gera sob demanda e reaproveita enquanto a revisão não mudar). */
 function pdfComAPR_(u, req) {
   const t = ler_(ABA.os);
@@ -1767,15 +1779,88 @@ function pdfComAPR_(u, req) {
   const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
   const o = resumoOS_(l, aps);
   if (u.perfil !== 'Administrador' && o.envolvidos.indexOf(u.nome) < 0) throw new Error('Só a administração e a equipe da OS podem abrir este PDF.');
-  if (o.status !== 'Finalizada') throw new Error('O PDF final só existe depois da finalização.');
-  const chave = o.revisao + '|';
+  if (['Finalizada', ST_APROVACAO].indexOf(o.status) < 0) throw new Error('O PDF só existe depois da finalização.');
+  const chave = o.revisao + (o.status === ST_APROVACAO ? 'p' : '') + '|';
   const atual = t.cab['PDF com APR completa'] !== undefined ? txt_(l.get('PDF com APR completa')) : '';
   if (atual.indexOf(chave) === 0) return { ok: true, link: atual.slice(chave.length) };
+  if (o.status === ST_APROVACAO) o.previa = true;
   const pdf = pdfOS2_(o, aps, 'final', txt_(l.get('APR no PDF do cliente')) === 'Sim', true);
   pdf.setName('OS ' + numero + (o.revisao ? ' - Rev ' + revTxt_(o.revisao) : '') + ' - com APR completa - ' + o.cliente.replace(/[\\/:*?"<>|]/g, '') + '.pdf');
   const link = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]).createFile(pdf).getUrl();
   if (t.cab['PDF com APR completa'] !== undefined) set_(t, l._linha, 'PDF com APR completa', chave + link);
   return { ok: true, link };
+}
+
+// ----- aprovação da OS pela administração -----
+const ST_APROVACAO = 'Aguardando aprovação';
+
+/** Aplica edições de texto, materiais e fotos nos apontamentos (correção ou aprovação). */
+function aplicarEdicoes_(numero, lista, pasta) {
+  const ap = ler_(ABA.apont);
+  (lista || []).forEach(c => {
+    const la = ap.linhas.find(x => txt_(x.get('Nº')) === txt_(c.n) && txt_(x.get('Nº OS')) === numero);
+    if (!la) throw new Error('Apontamento ' + c.n + ' não pertence a esta OS.');
+    if (!txt_(c.executado)) throw new Error('O serviço executado não pode ficar vazio.');
+    set_(ap, la._linha, 'Serviço executado', txt_(c.executado));
+    set_(ap, la._linha, 'Materiais utilizados', txt_(c.materiais));
+    if (Array.isArray(c.fotos)) {
+      const atuais = lista2_(la.get('Fotos'));
+      const ids = c.fotos.slice(0, 6).map((f, i) => /^data:/.test(f) ? salvarImagem_(pasta, f, 'image/jpeg', 'Apontamento ' + c.n + ' - foto revisada ' + (i + 1) + '.jpg') : (atuais.indexOf(f) >= 0 ? f : '')).filter(Boolean);
+      set_(ap, la._linha, 'Fotos', ids.join(','));
+    }
+  });
+}
+
+function aprovarOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  if (txt_(l.get('Status')) !== ST_APROVACAO) throw new Error('Esta OS não está aguardando aprovação.');
+  const numero = txt_(req.numero);
+  const emails = (req.emails || []).map(txt_).filter(Boolean);
+  const inv = emails.find(e => !emailValido_(e));
+  if (inv) throw new Error('E-mail inválido: ' + inv);
+  if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
+  if (req.enviar && !emails.length) throw new Error('Informe pelo menos um e-mail do cliente para enviar.');
+  const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]);
+  aplicarEdicoes_(numero, req.apontamentos, pasta);
+  if (req.pendencias !== undefined) set_(t, l._linha, 'Pendências / recomendações', txt_(req.pendencias));
+  if (t.cab['APR no PDF do cliente'] !== undefined) set_(t, l._linha, 'APR no PDF do cliente', req.incluirAPR ? 'Sim' : 'Não');
+  set_(t, l._linha, 'E-mails do cliente', emails.join(', '));
+  set_(t, l._linha, 'Status', 'Finalizada');
+  if (t.cab['Aprovada por'] !== undefined) { set_(t, l._linha, 'Aprovada por', u.nome); set_(t, l._linha, 'Aprovada em', new Date()); }
+  const t2 = ler_(ABA.os), l2 = t2.linhas.find(x => txt_(x.get('Nº OS')) === numero);
+  const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
+  const o = resumoOS_(l2, aps);
+  const pdf = pdfOS2_(o, aps, 'final', !!req.incluirAPR);
+  const link = pasta.createFile(pdf).getUrl();
+  set_(t2, l2._linha, 'PDF final', link);
+  let envio = 'Aprovada por ' + u.nome + ' sem envio ao cliente';
+  if (req.enviar) {
+    try { enviarOS2_(o, pdf, emails, 'final', aps); envio = 'Aprovada por ' + u.nome + ' e enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
+    catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
+  }
+  set_(t2, l2._linha, 'Envio', envio);
+  return { ok: true, link, envio, enviada: !!req.enviar && !/^Erro/.test(envio) };
+}
+
+/** Devolve a OS ao técnico antes da aprovação: volta para Em andamento, sem revisão (o cliente ainda não recebeu). */
+function devolverOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  if (txt_(l.get('Status')) !== ST_APROVACAO) throw new Error('Esta OS não está aguardando aprovação.');
+  const motivo = txt_(req.motivo);
+  if (!motivo) throw new Error('Informe o motivo da devolução.');
+  set_(t, l._linha, 'Status', 'Em andamento');
+  set_(t, l._linha, 'Finalizada em', ''); set_(t, l._linha, 'Prazo', '');
+  if (req.tecnicos && req.tecnicos.length) set_(t, l._linha, 'Técnicos designados', req.tecnicos.map(txt_).filter(Boolean).join(', '));
+  // registro interno: fica em Observações (o histórico de revisões vai no PDF do cliente)
+  const obs = txt_(l.get('Observações'));
+  const linha = 'Devolvida ao técnico em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' por ' + u.nome + '. Motivo: ' + motivo;
+  set_(t, l._linha, 'Observações', obs ? obs + '\n' + linha : linha);
+  if (t.cab['Devolvida'] !== undefined) set_(t, l._linha, 'Devolvida', (Number(l.get('Devolvida')) || 0) + 1);
+  return { ok: true };
 }
 
 // ----- painel gerencial -----
@@ -1871,6 +1956,29 @@ function txtApont_(r) {
   return r.total + (r.total === 1 ? ' (finalização)' : ' (' + r.parciais + ' parcia' + (r.parciais === 1 ? 'l' : 'is') + ' e 1 de finalização)');
 }
 
+/** Estilos comuns aos PDFs da OS e da APR. */
+function estiloPDF_() {
+  return '@page{size:A4;margin:12mm 13mm 14mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1c1f23}' +
+    '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:8px}.cab td{vertical-align:middle;padding:0 0 6px}' +
+    '.emp{font-size:8pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:8.5pt;color:#5d6670}' +
+    'table.d{width:100%;border-collapse:collapse;margin:2px 0 6px}table.d td{padding:3px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
+    'td.r{width:150px;color:#5d6670;font-size:8.5pt}' +
+    '.b{margin:8px 0 6px;page-break-inside:avoid}.bt{font-weight:bold;font-size:10pt;color:#000000;border-bottom:2px solid #CD0000;padding:0 0 2px 0;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}' +
+    '.bc{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4}' +
+    '.quebra{page-break-before:always}.apt{font-weight:bold;font-size:11pt;border-top:2px solid #1c1f23;padding-top:5px;margin:6px 0 4px}' +
+    'table.f{width:100%;border-collapse:collapse;table-layout:fixed}table.f td{width:33.3%;height:112px;padding:3px;border:1px solid #9aa3ad;text-align:center;vertical-align:middle}' +
+    'table.f img{max-width:100%;max-height:106px}' +
+    'table.m{width:100%;border-collapse:collapse;margin:6px 0}table.m th,table.m td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;font-size:8.5pt}table.m th{font-weight:bold;border-bottom:2px solid #1c1f23}' +
+    '.ass{margin-top:8px;border:1px solid #9aa3ad;padding:6px 8px;page-break-inside:avoid}.ass img{height:60px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:3px;font-weight:bold}' +
+    '.ass .s{font-size:8pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold;padding:14px 0 4px}' +
+    '.rod{margin-top:10px;font-size:7.5pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:5px}' +
+    '.apr{page-break-before:always;page-break-inside:avoid;font-size:7.8pt}.apr .cab{margin-bottom:5px}.apr .num b{font-size:12pt}' +
+    'table.ak{width:100%;border-collapse:collapse;margin:0 0 3px;font-size:8pt}table.ak td{border:1px solid #c9ced4;padding:1.5px 4px;vertical-align:top;line-height:1.2}' +
+    'table.ak td.rr{width:30px;text-align:center;font-weight:bold}table.ak td.nao{color:#B00000}table.kv td.ka{width:82px;color:#5d6670;font-size:7pt}table.tri td{background:#f6f7f8}' +
+    '.at{font-weight:bold;font-size:8pt;text-transform:uppercase;border-bottom:1.5px solid #CD0000;margin:5px 0 2px;padding-bottom:1px}' +
+    '.ab{border:1px solid #c9ced4;padding:3px 5px;line-height:1.25}.cie img{height:36px;display:block;margin-bottom:1px}.apr .rod{margin-top:5px}';
+}
+
 function pdfOS2_(o, aps, modo, comAPR, aprCompleta) {
   const linha = (rot, val) => val ? '<tr><td class="r">' + rot + '</td><td>' + quebra_(val) + '</td></tr>' : '';
   const bloco = (tit, val) => val ? '<div class="b"><div class="bt">' + tit + '</div><div class="bc">' + quebra_(val) + '</div></div>' : '';
@@ -1920,27 +2028,8 @@ function pdfOS2_(o, aps, modo, comAPR, aprCompleta) {
           esc_(lista2_(a.get('Equipe')).join(', ')) + '</td><td>' + (txt_(a.get('Cliente ausente (motivo)')) ? 'Cliente ausente' : esc_(a.get('Assinado por'))) + '</td></tr>'; }).join('') + '</table>' : '') +
     bloco('Pendências e recomendações', o.pendencias) : '';
 
-  const titulo = modo === 'final' ? 'ORDEM DE SERVIÇO' : 'APONTAMENTO PARCIAL DA OS';
-  const html = '<html><head><meta charset="utf-8"><style>' +
-    '@page{size:A4;margin:12mm 13mm 14mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1c1f23}' +
-    '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:8px}.cab td{vertical-align:middle;padding:0 0 6px}' +
-    '.emp{font-size:8pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:8.5pt;color:#5d6670}' +
-    'table.d{width:100%;border-collapse:collapse;margin:2px 0 6px}table.d td{padding:3px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
-    'td.r{width:150px;color:#5d6670;font-size:8.5pt}' +
-    '.b{margin:8px 0 6px;page-break-inside:avoid}.bt{font-weight:bold;font-size:10pt;color:#000000;border-bottom:2px solid #CD0000;padding:0 0 2px 0;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}' +
-    '.bc{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4}' +
-    '.quebra{page-break-before:always}.apt{font-weight:bold;font-size:11pt;border-top:2px solid #1c1f23;padding-top:5px;margin:6px 0 4px}' +
-    'table.f{width:100%;border-collapse:collapse;table-layout:fixed}table.f td{width:33.3%;height:112px;padding:3px;border:1px solid #9aa3ad;text-align:center;vertical-align:middle}' +
-    'table.f img{max-width:100%;max-height:106px}' +
-    'table.m{width:100%;border-collapse:collapse;margin:6px 0}table.m th,table.m td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;font-size:8.5pt}table.m th{font-weight:bold;border-bottom:2px solid #1c1f23}' +
-    '.ass{margin-top:8px;border:1px solid #9aa3ad;padding:6px 8px;page-break-inside:avoid}.ass img{height:60px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:3px;font-weight:bold}' +
-    '.ass .s{font-size:8pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold;padding:14px 0 4px}' +
-    '.rod{margin-top:10px;font-size:7.5pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:5px}' +
-    '.apr{page-break-before:always;page-break-inside:avoid;font-size:7.8pt}.apr .cab{margin-bottom:5px}.apr .num b{font-size:12pt}' +
-    'table.ak{width:100%;border-collapse:collapse;margin:0 0 3px;font-size:8pt}table.ak td{border:1px solid #c9ced4;padding:1.5px 4px;vertical-align:top;line-height:1.2}' +
-    'table.ak td.rr{width:30px;text-align:center;font-weight:bold}table.ak td.nao{color:#B00000}table.kv td.ka{width:82px;color:#5d6670;font-size:7pt}table.tri td{background:#f6f7f8}' +
-    '.at{font-weight:bold;font-size:8pt;text-transform:uppercase;border-bottom:1.5px solid #CD0000;margin:5px 0 2px;padding-bottom:1px}' +
-    '.ab{border:1px solid #c9ced4;padding:3px 5px;line-height:1.25}.cie img{height:36px;display:block;margin-bottom:1px}.apr .rod{margin-top:5px}' +
+  const titulo = modo === 'final' ? (o.previa ? 'ORDEM DE SERVIÇO · PRÉVIA PARA APROVAÇÃO' : 'ORDEM DE SERVIÇO') : 'APONTAMENTO PARCIAL DA OS';
+  const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() +
     '</style></head><body>' +
     '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:170px;height:auto">' +
     '<div class="emp">' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div></td>' +
@@ -1998,6 +2087,11 @@ function enviarOS2_(o, pdf, emails, modo, aps) {
       '<p>Agradecemos a confiança no trabalho da nossa equipe. Se tiver qualquer dúvida sobre o serviço realizado, basta responder este e-mail que retornaremos o mais breve possível.</p>' +
       '<p>Para conhecer as nossas soluções e saber como podemos ajudar a sua empresa a performar ainda melhor, acesse <a href="https://' + SITE + '">' + SITE + '</a> ' +
       'ou fale com a gente pelo WhatsApp <a href="https://wa.me/' + WHATS_KITON + '">(44) 4141-0714</a>.</p>' + assinaturaEmail_() + '</div>';
+  } else if (modo === 'aprovacao') {
+    assunto = 'OS nº ' + o.numero + ' aguardando aprovação | Kiton Hub | ' + o.cliente;
+    corpo = '<div style="' + estilo + '"><p>O técnico finalizou a OS e ela aguarda a revisão e aprovação da administração no Kiton Hub (Menu > OS para aprovar). ' +
+      'O cliente só recebe depois da aprovação. Em anexo, a prévia do documento.</p>' +
+      '<p style="margin:12px 0 0"><b>OS nº ' + esc_(o.numero) + '</b></p>' + tabela + (emails.length ? '<p>E-mails do cliente indicados pelo técnico: ' + esc_(emails.join(', ')) + '</p>' : '') + '</div>';
   } else {
     assunto = 'Apontamento parcial da OS nº ' + o.numero + ' | Kiton Hub | ' + o.cliente;
     corpo = '<div style="' + estilo + '"><p>Apontamento parcial registrado no Kiton Hub. Documento interno: não foi enviado ao cliente.</p>' +
