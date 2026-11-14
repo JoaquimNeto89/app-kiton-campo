@@ -110,6 +110,7 @@ function rotear_(req) {
     case 'painelOS': exigirAdmin_(u); return painelOS_(req);
     case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
     case 'fotosAp': exigirAdmin_(u); return fotosAp_(req);
+    case 'verAPR': return verAPR_(u, req);
     case 'corrigirOS': exigirAdmin_(u); return comTrava_(() => corrigirOS_(u, req));
     case 'reabrirOS': exigirAdmin_(u); return comTrava_(() => reabrirOS_(u, req));
     case 'aprPainel': exigirAdmin_(u); return aprPainel_();
@@ -1077,7 +1078,7 @@ function resumoOS_(l, aps) {
     inicioVsPrevisto: txt_(l.get('Início x programado')), prazo: txt_(l.get('Prazo')),
     pdf: txt_(l.get('PDF final')), envio: txt_(l.get('Envio')), emails: txt_(l.get('E-mails do cliente')),
     pendencias: txt_(l.get('Pendências / recomendações')), motivoCancel: txt_(l.get('Motivo do cancelamento')),
-    revisao: Number(l.get('Revisão')) || 0, historico: txt_(l.get('Histórico de revisões')), reaberta: Number(l.get('Reaberta')) || 0
+    aprNoPdf: txt_(l.get('APR no PDF do cliente')), revisao: Number(l.get('Revisão')) || 0, historico: txt_(l.get('Histórico de revisões')), reaberta: Number(l.get('Reaberta')) || 0
   };
 }
 
@@ -1107,7 +1108,8 @@ function detalheOS_(u, req) {
   const l = b.os.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
   if (!l) throw new Error('OS não encontrada.');
   const aps = b.porOS[txt_(req.numero)] || [];
-  return { ok: true, os: resumoOS_(l, aps), apontamentos: aps.map(resumoAp_) };
+  const aprs = aprPorApontamento_();
+  return { ok: true, os: resumoOS_(l, aps), apontamentos: aps.map(a => Object.assign(resumoAp_(a), { apr: aprs[txt_(a.get('Nº'))] ? txt_(aprs[txt_(a.get('Nº'))].get('Nº APR')) : '' })) };
 }
 
 // ----- agenda -----
@@ -1491,6 +1493,23 @@ function situacaoTreinos_() {
   }));
 }
 
+/** APR completa para consulta (administração ou quem participou). */
+function verAPR_(u, req) {
+  const l = ler_('APR').linhas.find(x => req.ap ? txt_(x.get('Apontamento')) === txt_(req.ap) : txt_(x.get('Nº APR')) === txt_(req.n));
+  if (!l) throw new Error('APR não encontrada.');
+  const equipe = lista2_(l.get('Equipe'));
+  if (u.perfil !== 'Administrador' && equipe.indexOf(u.nome) < 0 && txt_(l.get('Registrado por')) !== u.nome) throw new Error('Só a administração e a equipe da APR podem consultá-la.');
+  const g = k => txt_(l.get(k));
+  return { ok: true, apr: {
+    n: g('Nº APR'), data: fmt_(l.get('Data')), numero: g('Nº OS'), apontamento: g('Apontamento'), cliente: g('Cliente'), tipo: g('Tipo de serviço'),
+    registradoPor: g('Registrado por'), responsavel: g('Responsável pela atividade'), equipe, modelo: g('Modelo'), triagem: lista3_(l.get('Triagem')),
+    pt: g('PT'), ptNumero: g('Nº da PT'), ptFoto: g('Foto da PT'), ptEmissor: g('Emissor da PT'), condicao: g('Condição da instalação'),
+    justificativa: g('Justificativa (energizado)'), respostas: lista3_(l.get('Respostas')), riscos: lista3_(l.get('Riscos adicionais e medidas')),
+    impedimentos: lista3_(l.get('Impedimentos')), situacao: g('Situação'), decisor: g('Decisão por'), decisao: g('Justificativa da decisão'),
+    ciencia: g('Ciência do cliente'), lat: g('Lat.'), lng: g('Long.')
+  } };
+}
+
 function aprPainel_() { return { ok: true, bloqueadas: aprBloqueadas_(), treinos: situacaoTreinos_() }; }
 
 function decidirAPR_(u, req) {
@@ -1672,6 +1691,7 @@ function corrigirOS_(u, req) {
     }
   });
   if (req.pendencias !== undefined) set_(t, l._linha, 'Pendências / recomendações', txt_(req.pendencias));
+  if (typeof req.incluirAPR === 'boolean' && t.cab['APR no PDF do cliente'] !== undefined) set_(t, l._linha, 'APR no PDF do cliente', req.incluirAPR ? 'Sim' : 'Não');
   const rev = registrarRevisao_(t, l, u, 'correção', motivo);
   const t2 = ler_(ABA.os), l2 = t2.linhas.find(x => txt_(x.get('Nº OS')) === numero);
   const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);

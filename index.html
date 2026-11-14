@@ -193,6 +193,9 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .menu-fundo{position:absolute;inset:0;background:rgba(0,0,0,.45)}
 .menu-painel{position:absolute;top:0;right:0;bottom:0;width:min(330px,88vw);background:var(--aco);overflow-y:auto;padding:0 0 calc(24px + env(safe-area-inset-bottom));box-shadow:-6px 0 24px rgba(0,0,0,.25)}
 .menu-cab{display:flex;align-items:center;justify-content:space-between;background:var(--preto);color:#fff;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));border-bottom:4px solid var(--vermelho);margin-bottom:8px}
+.folha-painel{position:absolute;left:0;right:0;bottom:0;top:6vh;max-width:600px;margin:0 auto;background:var(--aco);border-radius:16px 16px 0 0;overflow-y:auto;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.folha-painel .menu-cab{border-radius:16px 16px 0 0;position:sticky;top:0;z-index:1}.folha-corpo{padding:4px 16px}
+.apr-lin{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:15px}.apr-lin:last-child{border-bottom:0}.apr-lin .selo-txt{flex:none;margin:0}
 .menu-cab .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff}
 .menu-it{display:flex;align-items:center;gap:12px;width:calc(100% - 20px);margin:0 10px 6px;padding:12px;border:0;border-radius:12px;background:#fff;font-weight:600;font-size:16px;text-align:left;color:inherit;text-decoration:none}
 .menu-it span:not(.bolinha):not(.q){flex:1}.menu-it .q{width:26px;height:26px;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700}
@@ -239,6 +242,7 @@ select.campo-txt{appearance:auto}
 <div class="faixa"></div>
 <main id="app"></main>
 <div id="barra"></div>
+<div id="folha" class="menu oculto" role="dialog" aria-modal="true" aria-labelledby="folhaTit"><div class="menu-fundo" id="folhaFundo"></div><div class="folha-painel"><div class="menu-cab"><b id="folhaTit"></b><button type="button" class="icone-btn" id="folhaX" aria-label="Fechar"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div id="folhaCorpo" class="folha-corpo"></div></div></div>
 <div id="menu" class="menu oculto" role="dialog" aria-modal="true" aria-label="Menu"><div class="menu-fundo" id="menuFundo"></div><nav class="menu-painel" id="menuPainel"></nav></div>
 <div id="carregando" class="carregando oculto"><div>Aguarde…</div></div>
 <script src="config.js"></script>
@@ -386,6 +390,37 @@ function abrirMenu() {
   document.getElementById('menuAjuda').onclick = fecharMenu;
 }
 document.getElementById('btnMenu').onclick = abrirMenu;
+// folha suspensa para consultas rápidas sem sair da tela
+function abrirFolha(titulo, html) {
+  document.getElementById('folhaTit').textContent = titulo; document.getElementById('folhaCorpo').innerHTML = html;
+  document.getElementById('folha').classList.remove('oculto'); document.body.style.overflow = 'hidden';
+}
+function fecharFolha() { document.getElementById('folha').classList.add('oculto'); document.body.style.overflow = ''; }
+document.getElementById('folhaX').onclick = fecharFolha; document.getElementById('folhaFundo').onclick = fecharFolha;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharFolha(); });
+/** Consulta da APR completa: por nº da APR ou pelo apontamento. */
+async function verAPR(q) {
+  await executar(async () => {
+    const a = (await api('verAPR', q)).apr;
+    const selo = (l, neutro) => { const m = l.match(/^(.*?)\s(Sim|Não|N\/A)$/); return m ? `<div class="apr-lin"><span>${esc(m[1])}</span><span class="selo-txt ${neutro ? '' : m[2] === 'Sim' ? 'verde' : m[2] === 'Não' ? 'vermelho' : ''}">${m[2]}</span></div>` : `<div class="apr-lin"><span>${esc(l)}</span></div>`; };
+    const linha = (k, v) => v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : '';
+    abrirFolha(`APR nº ${a.n}`, `
+      <p style="margin:6px 0 10px"><span class="selo-txt ${/exceção/.test(a.situacao) ? 'laranja' : /Bloq/.test(a.situacao) ? 'vermelho' : 'verde'}">${esc(a.situacao)}</span><span class="selo-txt">APR ${esc(a.modelo.toLowerCase())}</span></p>
+      <dl class="resumo">
+        ${linha('Data', esc(a.data))}${linha('OS', esc(a.numero || 'nova'))}${linha('Cliente', esc(a.cliente))}${linha('Serviço', esc(a.tipo))}
+        ${linha('Responsável', esc(a.responsavel))}${linha('Equipe', esc(a.equipe.join(', ')))}
+        ${linha('PT', esc(a.pt) + (a.ptNumero ? ', nº ' + esc(a.ptNumero) : '') + (a.ptEmissor ? '<br>' + esc(a.ptEmissor) : '') + (a.ptFoto && /^http/.test(a.ptFoto) ? `<br><a class="link" href="${esc(a.ptFoto)}" target="_blank" rel="noopener">Ver foto da PT</a>` : ''))}
+        ${linha('Instalação', esc(a.condicao))}${linha('Justificativa', esc(a.justificativa))}
+        ${linha('Ciência do cliente', esc(a.ciencia || 'Ainda não registrada'))}
+      </dl>
+      <h2>Triagem</h2><div class="cartao">${a.triagem.map(l => selo(l, true)).join('')}</div>
+      <h2>Checklist</h2><div class="cartao">${a.respostas.map(selo).join('')}</div>
+      ${a.riscos.length ? `<h2>Riscos adicionais e medidas</h2><div class="cartao">${a.riscos.map(r => `<div class="apr-lin"><span>${esc(r)}</span></div>`).join('')}</div>` : ''}
+      ${a.impedimentos.length ? `<h2>Impedimentos registrados</h2><div class="cartao">${a.impedimentos.map(r => `<div class="apr-lin"><span>${esc(r)}</span></div>`).join('')}</div>` : ''}
+      ${a.decisor ? `<h2>Decisão da administração</h2><div class="cartao"><b>${esc(a.decisor)}</b><p class="suave" style="margin:4px 0 0">${esc(a.decisao)}</p></div>` : ''}
+      <p class="suave">Registrada por ${esc(a.registradoPor)}${a.lat ? ` · <a class="link" href="https://maps.google.com/?q=${esc(a.lat)},${esc(a.lng)}" target="_blank" rel="noopener">localização</a>` : ''}</p>`);
+  });
+}
 document.getElementById('menuFundo').onclick = fecharMenu;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharMenu(); });
 
@@ -1250,8 +1285,9 @@ async function telaOSDetalhe(numero, admin) {
       <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
       ${a.tipo ? `<span class="selo-txt ${a.tipo === 'Final' ? 'verde' : 'amarelo'}">${a.tipo === 'Final' ? 'Finalização' : 'Parcial'}</span>` : ''}
       ${a.ausente ? `<span class="selo-txt laranja">Cliente ausente</span>` : a.assinante ? `<span class="selo-txt">Assinado por ${esc(a.assinante)}</span>` : ''}
-      ${a.pdf ? `<a class="link" href="${esc(a.pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}</div>`).join('') : ''}
+      ${a.pdf ? `<a class="link" href="${esc(a.pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}${a.apr ? ` <button type="button" class="link" data-apr="${esc(a.apr)}">Ver APR nº ${esc(a.apr)}</button>` : ''}</div>`).join('') : ''}
     ${admin ? '<div id="adm"></div>' : ''}`;
+  document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
   const ok = document.getElementById('ok');
   const pode = !admin && ['Programada', 'Em andamento'].includes(o.status) && !o.emExecucao && !sess;
   if (pode) { ok.disabled = false; ok.innerHTML = `${ic('saida')} Iniciar`; ok.onclick = () => telaIniciarOS(o); }
@@ -1642,7 +1678,7 @@ function fluxoApontar(s) {
           <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>
           <label class="rotulo">Enviar a APR junto no PDF do cliente?</label>
           <div class="segmento" id="aApr"><button type="button" data-v="Sim" class="${f.incluirAPR === 'Sim' ? 'sel' : ''}">Sim, incluir</button><button type="button" data-v="Não" class="${f.incluirAPR === 'Não' ? 'sel' : ''}">Não incluir</button></div>
-          <p class="suave" style="margin-top:6px">Decisão do responsável técnico. A APR fica registrada na Kiton nos dois casos.</p>` : `<p class="suave" style="margin-top:12px">O PDF deste apontamento vai só para a Kiton (contato@). O cliente recebe tudo na finalização.</p>`}
+          <p class="suave" style="margin-top:6px">Decisão do responsável técnico. A APR fica registrada na Kiton nos dois casos. <button type="button" class="link" id="aVerApr">Ver a APR deste serviço</button></p>` : `<p class="suave" style="margin-top:12px">O PDF deste apontamento vai só para a Kiton (contato@). O cliente recebe tudo na finalização.</p>`}
         ${blocoHorario('hFim', 'Que horas terminou?')}`;
       ligarHorario('hFim');
       const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
@@ -1654,6 +1690,7 @@ function fluxoApontar(s) {
         document.getElementById('boxAss').classList.toggle('oculto', f.ausente); document.getElementById('boxAus').classList.toggle('oculto', !f.ausente);
         if (!f.ausente && !assinatura) montar();
       });
+      const va = document.getElementById('aVerApr'); if (va) va.onclick = () => verAPR({ ap: s.n });
       document.querySelectorAll('#aApr button').forEach(b => b.onclick = () => { f.incluirAPR = b.dataset.v; document.querySelectorAll('#aApr button').forEach(x => x.classList.toggle('sel', x === b)); });
       rodape(`${ic('ok')} ${f.tipo === 'Final' ? 'Finalizar OS' : 'Salvar parcial'}`);
     }
@@ -1817,7 +1854,7 @@ function telaCorrigirOS(o, aps) {
   topo('Corrigir OS ' + o.numero);
   const fechados = aps.filter(a => a.fim);
   const fotos = {}; // n -> [{id, src}] quando o administrador abre as fotos
-  let reenviar = '';
+  let reenviar = '', incluirAPR = o.aprNoPdf === 'Sim';
   $app.innerHTML = `<h1>Corrigir OS ${esc(o.numero)}</h1><div id="erro"></div>
     ${msg('info', `Gera a revisão ${String((o.revisao || 0) + 1).padStart(2, '0')} do PDF. O PDF anterior fica guardado no Drive. Assinatura, horários e localização não podem ser alterados.`)}
     ${fechados.map(a => `<div class="cartao" data-ap="${esc(a.n)}"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))} às ${esc(hora(a.fim))}${a.tipo === 'Final' ? ' · Finalização' : ' · Parcial'}</div>
@@ -1826,6 +1863,9 @@ function telaCorrigirOS(o, aps) {
       <div data-fbox><button type="button" class="link" data-vf="${esc(a.n)}">Ver e alterar as fotos (${a.fotos})</button></div></div>`).join('')}
     <label class="rotulo" for="cPend">Pendências e recomendações</label><textarea class="campo-txt" id="cPend">${esc(o.pendencias)}</textarea>
     <label class="rotulo" for="cMot">Motivo da correção</label><textarea class="campo-txt" id="cMot" placeholder="Ex.: material utilizado não informado no apontamento"></textarea>
+    <label class="rotulo">Incluir a APR no PDF do cliente?</label>
+    <div class="segmento" id="cApr"><button type="button" data-v="Sim" class="${o.aprNoPdf === 'Sim' ? 'sel' : ''}">Sim, incluir</button><button type="button" data-v="Não" class="${o.aprNoPdf !== 'Sim' ? 'sel' : ''}">Não incluir</button></div>
+    <p class="suave" style="margin-top:6px">${fechados.filter(a => a.apr).map(a => `<button type="button" class="link" data-apr="${esc(a.apr)}">Ver APR nº ${esc(a.apr)}</button>`).join(' · ') || 'Nenhuma APR registrada nesta OS.'}</p>
     <label class="rotulo">Reenviar a revisão ao cliente?</label>
     <div class="segmento" id="cReenv"><button type="button" data-v="1">Sim, reenviar</button><button type="button" data-v="0">Não, só arquivar</button></div>
     <p class="suave" style="margin-top:6px">Se reenviar, o e-mail informa o motivo e que esta versão substitui a anterior.</p>`;
@@ -1841,6 +1881,8 @@ function telaCorrigirOS(o, aps) {
   document.querySelectorAll('[data-vf]').forEach(b => b.onclick = () => executar(async () => {
     const n = b.dataset.vf; const r = await api('fotosAp', { n }); fotos[n] = r.fotos.filter(f => f.src); pintar(n);
   }));
+  document.querySelectorAll('#cApr button').forEach(b => b.onclick = () => { incluirAPR = b.dataset.v === 'Sim'; document.querySelectorAll('#cApr button').forEach(x => x.classList.toggle('sel', x === b)); });
+  document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
   document.querySelectorAll('#cReenv button').forEach(b => b.onclick = () => { reenviar = b.dataset.v; document.querySelectorAll('#cReenv button').forEach(x => x.classList.toggle('sel', x === b)); });
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar revisão</button></div>`);
   document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
@@ -1854,7 +1896,7 @@ function telaCorrigirOS(o, aps) {
       return x;
     });
     if (apontamentos.some(a => !a.executado)) throw new Error('O serviço executado não pode ficar vazio.');
-    const r = await api('corrigirOS', { numero: o.numero, motivo, apontamentos, pendencias: document.getElementById('cPend').value.trim(), reenviar: reenviar === '1' });
+    const r = await api('corrigirOS', { numero: o.numero, motivo, apontamentos, pendencias: document.getElementById('cPend').value.trim(), reenviar: reenviar === '1', incluirAPR });
     await telaOSDetalhe(o.numero, true);
     document.getElementById('erro').innerHTML = msg(/^Erro/.test(r.envio) ? 'erro' : 'ok', `Revisão ${String(r.revisao).padStart(2, '0')} gerada.${r.envio ? ' ' + r.envio + '.' : ' Arquivada sem reenvio.'}`);
   });
