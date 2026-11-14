@@ -29,6 +29,7 @@ const ABA = {
   histCal: 'Histórico de calibração',
   checkins: 'Check-ins',
   os: 'Ordens de serviço',
+  apont: 'Apontamentos de OS',
   despesas: 'Despesas'
 };
 
@@ -36,11 +37,14 @@ const ABA = {
 const CAB = {
   'Check-ins': ['Nº', 'Colaborador', 'Cliente', 'Chegada', 'Chegada lançada em', 'Lat. chegada', 'Long. chegada', 'Precisão chegada (m)',
     'Distância chegada (m)', 'Situação chegada', 'Mapa chegada', 'Saída do cliente', 'Saída lançada em', 'Lat. saída', 'Long. saída',
-    'Distância saída (m)', 'Situação saída', 'Mapa saída', 'Horas no cliente', 'Lançamento tardio', 'Observações', 'OS vinculada'],
-  'Ordens de serviço': ['Nº OS', 'Data', 'Cliente', 'Local / setor', 'Solicitante', 'Tipo de serviço', 'Início', 'Término', 'Técnicos',
-    'Solicitação / problema', 'Serviço executado', 'Materiais utilizados', 'Pendências / recomendações', 'Fotos', 'Assinado por',
-    'Cargo / setor de quem assinou', 'Assinado em', 'Lat. assinatura', 'Long. assinatura', 'E-mails', 'Envio', 'PDF', 'Check-in vinculado',
-    'Registrado por', 'Lançado em'],
+    'Distância saída (m)', 'Situação saída', 'Mapa saída', 'Horas no cliente', 'Lançamento tardio', 'Observações', 'OS vinculada', 'Destino após saída'],
+  'Ordens de serviço': ['Nº OS', 'Status', 'Cliente', 'Local / setor', 'Solicitante', 'Tipo de serviço', 'Solicitação / problema',
+    'Início previsto', 'Término previsto', 'Técnicos designados', 'Programada por', 'Programada em', 'Evento na agenda', 'Iniciada em',
+    'Início x programado', 'Último apontamento', 'Finalizada em', 'Prazo', 'Horas trabalhadas', 'Apontamentos', 'Pendências / recomendações',
+    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações'],
+  'Apontamentos de OS': ['Nº', 'Nº OS', 'Início', 'Fim', 'Horas', 'Tipo', 'Equipe', 'Serviço executado', 'Materiais utilizados', 'Fotos',
+    'Assinatura', 'Assinado por', 'Cargo / setor de quem assinou', 'Cliente ausente (motivo)', 'PDF do apontamento', 'Check-in',
+    'Lat. início', 'Long. início', 'Lat. fim', 'Long. fim', 'Registrado por', 'Iniciado lançado em', 'Fim lançado em', 'Lançamento tardio'],
   'Despesas': ['Nº', 'Data', 'Colaborador', 'Categoria', 'Valor (R$)', 'Pagamento', 'Cliente / obra', 'Descrição', 'Comprovante',
     'Saída vinculada', 'Lançado em', 'Situação', 'Conferido por', 'Data da conferência', 'Motivo da recusa', 'Reembolsado em']
 };
@@ -91,9 +95,16 @@ function rotear_(req) {
     case 'aceitarCliente': exigirAdmin_(u); return comTrava_(() => aceitarCliente_(u, req));
     case 'juntarCliente': exigirAdmin_(u); return comTrava_(() => juntarCliente_(u, req));
     // ordem de serviço
-    case 'salvarOS': return comTrava_(() => salvarOS_(u, req));
-    case 'listarOS': return listarOS_(u);
-    case 'reenviarOS': return reenviarOS_(u, req);
+    case 'minhasOS': return minhasOS_(u);
+    case 'detalheOS': return detalheOS_(u, req);
+    case 'programarOS': return comTrava_(() => programarOS_(u, req));
+    case 'iniciarOS': return comTrava_(() => iniciarOS_(u, req));
+    case 'apontarOS': return comTrava_(() => apontarOS_(u, req));
+    case 'encerrarAtendimento': return comTrava_(() => encerrarAtendimento_(u, req));
+    case 'editarOS': exigirAdmin_(u); return comTrava_(() => editarOS_(u, req));
+    case 'cancelarOS': exigirAdmin_(u); return comTrava_(() => cancelarOS_(u, req));
+    case 'painelOS': exigirAdmin_(u); return painelOS_(req);
+    case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
     // despesas
     case 'salvarDespesa': return comTrava_(() => salvarDespesa_(u, req));
     case 'minhasDespesas': return minhasDespesas_(u);
@@ -380,6 +391,9 @@ function inicio_(u) {
     meus,
     clientesInfo,
     checkin: checkinAberto_(u),
+    os: (() => { const m = minhasOS_(u); const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+      return { sessao: m.sessao, total: m.abertas.length, hoje: m.abertas.filter(o => o.inicioPrevIso.slice(0, 10) === hoje).length,
+        atrasadas: m.abertas.filter(o => o.atrasada).length }; })(),
     ultimosCheckins: ultimosCheckins_(u, 5),
     pendencias: u.perfil === 'Administrador' ? pendenciasAdmin_() : null,
     tiposOS: lista_('Tipo de OS'),
@@ -392,7 +406,8 @@ function pendenciasAdmin_() {
   return {
     itens: ler_(ABA.itensSaida).linhas.filter(l => ['Aguardando conferência', 'Avariado', 'Extraviado'].indexOf(txt_(l.get('Situação'))) >= 0 && !txt_(l.get('Conferido por'))).length,
     despesas: ler_(ABA.despesas).linhas.filter(l => txt_(l.get('Situação')) === 'Aguardando conferência').length,
-    clientes: pendentesCliente_().length
+    clientes: pendentesCliente_().length,
+    os: (() => { const b = baseOS_(); return b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))])).filter(o => o.atrasada || o.parada).length; })()
   };
 }
 
@@ -978,142 +993,476 @@ function definirLocalCliente_(req) {
   return { ok: true, cliente: txt_(ck.get('Cliente')) };
 }
 
-// ---------- ordem de serviço ----------
+// ---------- ordem de serviço: programação, apontamentos e painel ----------
+// Uma OS (aba "Ordens de serviço") tem um ou mais apontamentos (aba "Apontamentos de OS").
+// Iniciar a OS faz o check-in no cliente; cada apontamento é parcial ou final, sempre com
+// assinatura do cliente ou justificativa de ausência.
 
-function salvarOS_(u, req) {
-  const cliente = txt_(req.cliente);
-  if (!cliente) throw new Error('Escolha o cliente.');
-  if (!txt_(req.executado)) throw new Error('Descreva o serviço executado.');
-  if (!txt_(req.assinatura)) throw new Error('Falta a assinatura do cliente.');
-  if (!txt_(req.assinante)) throw new Error('Informe o nome de quem assinou.');
+const AGENDA_GERAL = 'family09001548568622898097@group.calendar.google.com';
+const DIAS_PARADA = 2; // OS em andamento sem apontamento há mais de 2 dias = parada
+
+function iso_(d) { return d ? Utilities.formatDate(d, TZ, "yyyy-MM-dd'T'HH:mm") : ''; }
+function dataIso_(s) {
+  const t = txt_(s);
+  if (!t) return null;
+  const d = Utilities.parseDate(t.replace('T', ' ').slice(0, 16), TZ, 'yyyy-MM-dd HH:mm');
+  if (isNaN(d)) throw new Error('Data e hora inválidas.');
+  return d;
+}
+function lista2_(v) { return txt_(v).split(',').map(txt_).filter(Boolean); }
+
+function proximaOS_() {
+  const ano = Utilities.formatDate(new Date(), TZ, 'yyyy');
+  let max = 0;
+  [ABA.os, 'Ordens de serviço (versão anterior)'].forEach(n => {
+    if (n !== ABA.os && !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(n)) return;
+    ler_(n).linhas.forEach(l => { const x = txt_(l.get('Nº OS')); if (x.indexOf(ano + '-') === 0) max = Math.max(max, Number(x.split('-')[1]) || 0); });
+  });
+  return ano + '-' + ('000' + (max + 1)).slice(-4);
+}
+
+/** Lê OS e apontamentos de uma vez. */
+function baseOS_() {
+  const os = ler_(ABA.os), ap = ler_(ABA.apont);
+  const porOS = {};
+  ap.linhas.forEach(l => { const n = txt_(l.get('Nº OS')); (porOS[n] = porOS[n] || []).push(l); });
+  return { os, ap, porOS };
+}
+
+function resumoAp_(l) {
+  return {
+    n: txt_(l.get('Nº')), numero: txt_(l.get('Nº OS')), inicio: fmt_(l.get('Início')), fim: fmt_(l.get('Fim')),
+    horas: l.get('Horas') === '' ? null : Number(l.get('Horas')), equipe: lista2_(l.get('Equipe')), tipo: txt_(l.get('Tipo')),
+    executado: txt_(l.get('Serviço executado')), materiais: txt_(l.get('Materiais utilizados')),
+    fotos: lista2_(l.get('Fotos')).length, assinante: txt_(l.get('Assinado por')), cargo: txt_(l.get('Cargo / setor de quem assinou')),
+    ausente: txt_(l.get('Cliente ausente (motivo)')), pdf: txt_(l.get('PDF do apontamento')), checkin: txt_(l.get('Check-in')),
+    registradoPor: txt_(l.get('Registrado por'))
+  };
+}
+
+function resumoOS_(l, aps) {
+  aps = aps || [];
+  const agora = new Date();
+  const ini = data_(l.get('Início previsto')), fim = data_(l.get('Término previsto'));
+  const status = txt_(l.get('Status'));
+  const ultimo = aps.reduce((m, a) => { const d = data_(a.get('Fim')) || data_(a.get('Início')); return d && (!m || d > m) ? d : m; }, null);
+  const emExecucao = aps.some(a => !txt_(a.get('Fim')));
+  const envolvidos = {};
+  lista2_(l.get('Técnicos designados')).forEach(n => envolvidos[n] = 1);
+  aps.forEach(a => lista2_(a.get('Equipe')).forEach(n => envolvidos[n] = 1));
+  return {
+    numero: txt_(l.get('Nº OS')), status, cliente: txt_(l.get('Cliente')), local: txt_(l.get('Local / setor')),
+    solicitante: txt_(l.get('Solicitante')), tipo: txt_(l.get('Tipo de serviço')), solicitacao: txt_(l.get('Solicitação / problema')),
+    inicioPrev: fmt_(ini), fimPrev: fmt_(fim), inicioPrevIso: iso_(ini), fimPrevIso: iso_(fim),
+    tecnicos: lista2_(l.get('Técnicos designados')), envolvidos: Object.keys(envolvidos),
+    programadaPor: txt_(l.get('Programada por')), iniciadaEm: fmt_(l.get('Iniciada em')), finalizadaEm: fmt_(l.get('Finalizada em')),
+    horas: Number(l.get('Horas trabalhadas')) || 0, apontamentos: aps.length, emExecucao,
+    atrasada: status === 'Programada' && !!ini && ini.getTime() < agora.getTime(),
+    parada: status === 'Em andamento' && !emExecucao && !!ultimo && agora.getTime() - ultimo.getTime() > DIAS_PARADA * 864e5,
+    inicioVsPrevisto: txt_(l.get('Início x programado')), prazo: txt_(l.get('Prazo')),
+    pdf: txt_(l.get('PDF final')), envio: txt_(l.get('Envio')), emails: txt_(l.get('E-mails do cliente')),
+    pendencias: txt_(l.get('Pendências / recomendações')), motivoCancel: txt_(l.get('Motivo do cancelamento'))
+  };
+}
+
+function sessaoAberta_(u, b) {
+  b = b || baseOS_();
+  const l = b.ap.linhas.filter(x => !txt_(x.get('Fim')) && lista2_(x.get('Equipe'))[0] === u.nome).pop()
+    || b.ap.linhas.filter(x => !txt_(x.get('Fim')) && txt_(x.get('Registrado por')) === u.nome).pop();
+  if (!l) return null;
+  const o = b.os.linhas.find(x => txt_(x.get('Nº OS')) === txt_(l.get('Nº OS')));
+  return Object.assign(resumoAp_(l), { cliente: o ? txt_(o.get('Cliente')) : '', os: o ? resumoOS_(o, b.porOS[txt_(o.get('Nº OS'))]) : null });
+}
+
+/** OS em que a pessoa está envolvida e que ainda não terminaram, na ordem da programação. */
+function minhasOS_(u) {
+  const b = baseOS_();
+  const abertas = b.os.linhas.filter(l => ['Programada', 'Em andamento'].indexOf(txt_(l.get('Status'))) >= 0)
+    .map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
+    .filter(o => o.envolvidos.indexOf(u.nome) >= 0)
+    .sort((a, c) => (a.inicioPrevIso || '9') < (c.inicioPrevIso || '9') ? -1 : (a.inicioPrevIso || '9') > (c.inicioPrevIso || '9') ? 1 : a.numero.localeCompare(c.numero));
+  const finalizadas = b.os.linhas.filter(l => txt_(l.get('Status')) === 'Finalizada').map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
+    .filter(o => o.envolvidos.indexOf(u.nome) >= 0).slice(-10).reverse();
+  return { ok: true, abertas, finalizadas, sessao: sessaoAberta_(u, b) };
+}
+
+function detalheOS_(u, req) {
+  const b = baseOS_();
+  const l = b.os.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  const aps = b.porOS[txt_(req.numero)] || [];
+  return { ok: true, os: resumoOS_(l, aps), apontamentos: aps.map(resumoAp_) };
+}
+
+// ----- agenda -----
+function textoAgenda_(o) {
+  return 'OS ' + o.numero + ' | ' + o.cliente + (o.local ? ' | ' + o.local : '');
+}
+function descAgenda_(o) {
+  return ['Tipo: ' + (o.tipo || '-'), 'Técnicos: ' + (o.tecnicos.join(', ') || '-'), o.solicitante ? 'Solicitante: ' + o.solicitante : '',
+    o.solicitacao ? 'Solicitação: ' + o.solicitacao : '', 'Programada pelo Kiton Hub'].filter(Boolean).join('\n');
+}
+function agendaCriar_(o, ini, fim) {
+  try {
+    const cal = CalendarApp.getCalendarById(AGENDA_GERAL);
+    const ev = cal.createEvent(textoAgenda_(o), ini, fim || new Date(ini.getTime() + 36e5), { description: descAgenda_(o) });
+    return ev.getId();
+  } catch (e) { return 'erro: ' + (e && e.message ? e.message : e); }
+}
+function agendaAtualizar_(id, o, ini, fim) {
+  if (!id || id.indexOf('erro') === 0) return agendaCriar_(o, ini, fim);
+  try {
+    const ev = CalendarApp.getCalendarById(AGENDA_GERAL).getEventById(id);
+    if (!ev) return agendaCriar_(o, ini, fim);
+    ev.setTime(ini, fim || new Date(ini.getTime() + 36e5)); ev.setTitle(textoAgenda_(o)); ev.setDescription(descAgenda_(o));
+    return id;
+  } catch (e) { return 'erro: ' + (e && e.message ? e.message : e); }
+}
+function agendaApagar_(id) {
+  if (!id || id.indexOf('erro') === 0) return;
+  try { const ev = CalendarApp.getCalendarById(AGENDA_GERAL).getEventById(id); if (ev) ev.deleteEvent(); } catch (e) { /* segue */ }
+}
+
+// ----- programar, editar, cancelar -----
+function programarOS_(u, req) {
+  const cliente = clientes_().find(c => c.nome === txt_(req.cliente));
+  if (!cliente) throw new Error('Escolha o cliente da lista. Cliente novo: cadastre na planilha ou pelo check-in.');
+  if (!txt_(req.tipo)) throw new Error('Escolha o tipo de serviço.');
+  const ini = dataIso_(req.inicioPrev), fim = dataIso_(req.fimPrev);
+  if (!ini) throw new Error('Informe o início previsto.');
+  if (fim && fim.getTime() < ini.getTime()) throw new Error('O término previsto está antes do início.');
+  const tecnicos = (req.tecnicos || []).map(txt_).filter(Boolean);
+  if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
+  const t = ler_(ABA.os);
+  const numero = proximaOS_();
+  const o = { numero, cliente: cliente.nome, local: txt_(req.local), tipo: txt_(req.tipo), tecnicos, solicitante: txt_(req.solicitante), solicitacao: txt_(req.solicitacao) };
+  const ev = agendaCriar_(o, ini, fim);
+  anexar_(t, {
+    'Nº OS': numero, 'Status': 'Programada', 'Cliente': cliente.nome, 'Local / setor': o.local, 'Solicitante': o.solicitante,
+    'Tipo de serviço': o.tipo, 'Solicitação / problema': o.solicitacao, 'Início previsto': ini, 'Término previsto': fim || '',
+    'Técnicos designados': tecnicos.join(', '), 'Programada por': u.nome, 'Programada em': new Date(), 'Evento na agenda': ev
+  });
+  return { ok: true, numero, agenda: ev.indexOf('erro') !== 0 };
+}
+
+function editarOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  const st = txt_(l.get('Status'));
+  if (['Finalizada', 'Cancelada'].indexOf(st) >= 0) throw new Error('OS ' + st.toLowerCase() + ' não pode ser alterada.');
+  const tecnicos = (req.tecnicos || []).map(txt_).filter(Boolean);
+  if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
+  set_(t, l._linha, 'Técnicos designados', tecnicos.join(', '));
+  if (txt_(req.local) !== '' || req.local === '') set_(t, l._linha, 'Local / setor', txt_(req.local));
+  if (req.solicitacao !== undefined) set_(t, l._linha, 'Solicitação / problema', txt_(req.solicitacao));
+  let ini = data_(l.get('Início previsto')), fim = data_(l.get('Término previsto'));
+  if (req.inicioPrev) {
+    ini = dataIso_(req.inicioPrev); fim = dataIso_(req.fimPrev);
+    if (fim && fim.getTime() < ini.getTime()) throw new Error('O término previsto está antes do início.');
+    set_(t, l._linha, 'Início previsto', ini); set_(t, l._linha, 'Término previsto', fim || '');
+  }
+  const o = { numero: txt_(req.numero), cliente: txt_(l.get('Cliente')), local: txt_(req.local), tipo: txt_(l.get('Tipo de serviço')), tecnicos,
+    solicitante: txt_(l.get('Solicitante')), solicitacao: req.solicitacao !== undefined ? txt_(req.solicitacao) : txt_(l.get('Solicitação / problema')) };
+  if (ini) set_(t, l._linha, 'Evento na agenda', agendaAtualizar_(txt_(l.get('Evento na agenda')), o, ini, fim));
+  set_(t, l._linha, 'Observações', [txt_(l.get('Observações')), 'Alterada por ' + u.nome + ' em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm')].filter(Boolean).join(' | '));
+  return { ok: true };
+}
+
+function cancelarOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  if (['Finalizada', 'Cancelada'].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
+  if (!txt_(req.motivo)) throw new Error('Informe o motivo do cancelamento.');
+  const ap = ler_(ABA.apont);
+  if (ap.linhas.some(x => txt_(x.get('Nº OS')) === txt_(req.numero) && !txt_(x.get('Fim')))) throw new Error('Há um apontamento em execução. Peça para o técnico apontar antes.');
+  set_(t, l._linha, 'Status', 'Cancelada');
+  set_(t, l._linha, 'Motivo do cancelamento', txt_(req.motivo) + ' (' + u.nome + ', ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy') + ')');
+  agendaApagar_(txt_(l.get('Evento na agenda')));
+  return { ok: true };
+}
+
+// ----- iniciar -----
+function iniciarOS_(u, req) {
+  const b = baseOS_();
+  if (sessaoAberta_(u, b)) throw new Error('Você já tem uma OS em execução. Aponte o fim dela antes de iniciar outra.');
+  let numero = txt_(req.numero), l = null, cliente;
+  const equipe = [u.nome].concat((req.equipe || []).map(txt_).filter(n => n && n !== u.nome));
+  if (numero) {
+    l = b.os.linhas.find(x => txt_(x.get('Nº OS')) === numero);
+    if (!l) throw new Error('OS não encontrada.');
+    if (['Finalizada', 'Cancelada'].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
+    if (b.ap.linhas.some(x => txt_(x.get('Nº OS')) === numero && !txt_(x.get('Fim')))) throw new Error('Esta OS já está em execução por outra pessoa.');
+    cliente = txt_(l.get('Cliente'));
+  } else {
+    cliente = txt_(req.cliente);
+    if (!cliente) throw new Error('Escolha o cliente.');
+    if (!txt_(req.tipo)) throw new Error('Escolha o tipo de serviço.');
+  }
+
+  // check-in: reaproveita o aberto no mesmo cliente; abre um novo se não houver
+  const agora = new Date();
+  const quando = horarioInformado_(req.horario, agora);
+  let ck = checkinAberto_(u);
+  if (ck && ck.cliente !== cliente) throw new Error('Você está com check-in aberto em ' + ck.cliente + '. Registre a saída de lá antes.');
+  let ckInfo = null;
+  if (!ck) {
+    ckInfo = checkin_(u, { cliente, novo: !numero && req.novo, cidade: req.cidade, horario: req.horario, geo: req.geo, obs: numero ? 'OS ' + numero : 'OS aberta em campo' });
+    cliente = ckInfo.cliente;
+    ck = checkinAberto_(u);
+  }
+
+  const t = b.os;
+  if (!numero) {
+    numero = proximaOS_();
+    anexar_(t, {
+      'Nº OS': numero, 'Status': 'Em andamento', 'Cliente': cliente, 'Local / setor': txt_(req.local), 'Solicitante': txt_(req.solicitante),
+      'Tipo de serviço': txt_(req.tipo), 'Solicitação / problema': txt_(req.solicitacao), 'Técnicos designados': equipe.join(', '),
+      'Programada por': u.nome + ' (aberta em campo)', 'Programada em': agora, 'Iniciada em': quando
+    });
+  } else {
+    if (!txt_(l.get('Iniciada em'))) {
+      set_(t, l._linha, 'Iniciada em', quando);
+      const prev = data_(l.get('Início previsto'));
+      if (prev) {
+        const a = Utilities.formatDate(quando, TZ, 'yyyyMMdd'), p = Utilities.formatDate(prev, TZ, 'yyyyMMdd');
+        set_(t, l._linha, 'Início x programado', a < p ? 'Antes do programado' : a === p ? 'No dia programado' : 'Depois do programado');
+      }
+    }
+    set_(t, l._linha, 'Status', 'Em andamento');
+  }
+  const ap = ler_(ABA.apont);
+  const n = proximoNumero_(ap, 'Nº');
+  const g = req.geo || null;
+  anexar_(ap, {
+    'Nº': n, 'Nº OS': numero, 'Início': quando, 'Equipe': equipe.join(', '), 'Check-in': ck ? ck.n : '',
+    'Lat. início': g ? g.lat : '', 'Long. início': g ? g.lng : '', 'Registrado por': u.nome, 'Iniciado lançado em': agora
+  });
+  if (ck) {
+    const cks = ler_(ABA.checkins);
+    const lc = cks.linhas.find(x => txt_(x.get('Nº')) === txt_(ck.n));
+    if (lc && lista2_(lc.get('OS vinculada')).indexOf(numero) < 0) set_(cks, lc._linha, 'OS vinculada', lista2_(lc.get('OS vinculada')).concat([numero]).join(', '));
+  }
+  return { ok: true, numero, apontamento: n, cliente, quando: fmt_(quando), checkinNovo: !!ckInfo, situacao: ckInfo ? ckInfo.situacao : '', dist: ckInfo ? ckInfo.dist : '' };
+}
+
+// ----- apontar (parcial ou final) -----
+function salvarImagem_(pasta, dado, mime, nome) {
+  const bl = blobDe_(dado, mime, nome);
+  return bl ? pasta.createFile(bl).getId() : '';
+}
+
+function apontarOS_(u, req) {
+  const b = baseOS_();
+  const la = b.ap.linhas.find(x => txt_(x.get('Nº')) === txt_(req.n));
+  if (!la) throw new Error('Apontamento não encontrado.');
+  if (txt_(la.get('Fim'))) throw new Error('Este apontamento já foi encerrado.');
+  if (lista2_(la.get('Equipe')).indexOf(u.nome) < 0 && u.perfil !== 'Administrador') throw new Error('Só quem está na equipe pode apontar.');
+  const tipo = req.tipo === 'Final' ? 'Final' : 'Parcial';
+  if (!txt_(req.executado)) throw new Error('Descreva o que foi executado.');
+  const ausente = txt_(req.ausente);
+  if (!ausente && !txt_(req.assinatura)) throw new Error('Falta a assinatura do cliente (ou marque cliente ausente com o motivo).');
+  if (!ausente && !txt_(req.assinante)) throw new Error('Informe o nome de quem assinou.');
   const emails = (req.emails || []).map(txt_).filter(Boolean);
-  const invalido = emails.find(e => !emailValido_(e));
-  if (invalido) throw new Error('E-mail inválido: ' + invalido);
+  const inv = emails.find(e => !emailValido_(e));
+  if (inv) throw new Error('E-mail inválido: ' + inv);
   if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
 
-  const t = ler_(ABA.os);
+  const numero = txt_(la.get('Nº OS'));
+  const lo = b.os.linhas.find(x => txt_(x.get('Nº OS')) === numero);
   const agora = new Date();
-  const ano = Utilities.formatDate(agora, TZ, 'yyyy');
-  const seq = t.linhas.filter(l => txt_(l.get('Nº OS')).indexOf(ano + '-') === 0)
-    .reduce((m, l) => Math.max(m, Number(txt_(l.get('Nº OS')).split('-')[1]) || 0), 0) + 1;
-  const numero = ano + '-' + ('000' + seq).slice(-4);
-  const dataServ = txt_(req.data) ? Utilities.parseDate(txt_(req.data), TZ, 'yyyy-MM-dd') : agora;
-
-  const os = {
-    numero, data: Utilities.formatDate(dataServ, TZ, 'dd/MM/yyyy'), cliente, local: txt_(req.local), solicitante: txt_(req.solicitante),
-    tipo: txt_(req.tipo), inicio: txt_(req.inicio), fim: txt_(req.fim), tecnicos: (req.tecnicos || []).map(txt_).filter(Boolean),
-    solicitacao: txt_(req.solicitacao), executado: txt_(req.executado),
-    materiais: (req.materiais || []).filter(m => txt_(m.desc)).map(m => ({ desc: txt_(m.desc), qtd: txt_(m.qtd) })),
-    pendencias: txt_(req.pendencias), fotos: (req.fotos || []).filter(Boolean).slice(0, 6),
-    assinatura: txt_(req.assinatura), assinante: txt_(req.assinante), cargo: txt_(req.cargo),
-    assinadoEm: Utilities.formatDate(agora, TZ, 'dd/MM/yyyy HH:mm'), geo: req.geo || null, registradoPor: u.nome
+  const fim = horarioInformado_(req.horario, agora);
+  const ini = data_(la.get('Início'));
+  if (ini && fim.getTime() < ini.getTime()) throw new Error('O fim não pode ser antes do início (' + fmt_(ini) + ').');
+  const horas = ini ? Math.round((fim.getTime() - ini.getTime()) / 36e4) / 10 : '';
+  const ano = numero.split('-')[0];
+  const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', ano, 'OS ' + numero]);
+  const fotos = (req.fotos || []).filter(Boolean).slice(0, 6).map((f, i) => salvarImagem_(pasta, f, 'image/jpeg', 'Apontamento ' + req.n + ' - foto ' + (i + 1) + '.jpg'));
+  const ass = ausente ? '' : salvarImagem_(pasta, req.assinatura, 'image/png', 'Apontamento ' + req.n + ' - assinatura.png');
+  const g = req.geo || null;
+  const mats = (req.materiais || []).filter(m => txt_(m.desc)).map(m => (txt_(m.qtd) ? txt_(m.qtd) + ' x ' : '') + txt_(m.desc)).join('; ');
+  const campos = {
+    'Fim': fim, 'Horas': horas, 'Tipo': tipo, 'Serviço executado': txt_(req.executado), 'Materiais utilizados': mats,
+    'Fotos': fotos.join(','), 'Assinatura': ass, 'Assinado por': ausente ? '' : txt_(req.assinante), 'Cargo / setor de quem assinou': ausente ? '' : txt_(req.cargo),
+    'Cliente ausente (motivo)': ausente, 'Lat. fim': g ? g.lat : '', 'Long. fim': g ? g.lng : '', 'Fim lançado em': agora,
+    'Lançamento tardio': tardio_(fim, agora) ? 'Fim' : ''
   };
-  if (!os.tecnicos.length) os.tecnicos = [u.nome];
+  Object.keys(campos).forEach(k => set_(b.ap, la._linha, k, campos[k]));
 
-  const pdf = pdfOS_(os);
-  const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', ano]);
-  const arq = pasta.createFile(pdf);
-  const link = arq.getUrl();
+  // totais na OS
+  const todos = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
+  const total = Math.round(todos.reduce((s, x) => s + (Number(x.get('Horas')) || 0), 0) * 10) / 10;
+  set_(b.os, lo._linha, 'Horas trabalhadas', total);
+  set_(b.os, lo._linha, 'Apontamentos', todos.length);
+  set_(b.os, lo._linha, 'Último apontamento', fim);
 
-  let envio;
+  let pdf, envio, link;
+  const osInfo = resumoOS_(ler_(ABA.os).linhas.find(x => txt_(x.get('Nº OS')) === numero), todos);
+  if (tipo === 'Final') {
+    set_(b.os, lo._linha, 'Status', 'Finalizada');
+    set_(b.os, lo._linha, 'Finalizada em', fim);
+    set_(b.os, lo._linha, 'Pendências / recomendações', txt_(req.pendencias));
+    set_(b.os, lo._linha, 'E-mails do cliente', emails.join(', '));
+    const prevFim = data_(lo.get('Término previsto'));
+    if (prevFim) set_(b.os, lo._linha, 'Prazo', fim.getTime() <= prevFim.getTime() ? 'Dentro do previsto' : 'Após o previsto');
+    agendaFinal_(lo);
+    osInfo.pendencias = txt_(req.pendencias); osInfo.status = 'Finalizada';
+    pdf = pdfOS2_(osInfo, todos, 'final');
+    link = pasta.createFile(pdf).getUrl();
+    set_(b.os, lo._linha, 'PDF final', link);
+    try { enviarOS2_(osInfo, pdf, emails, 'final'); envio = 'Enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
+    catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
+    set_(b.os, lo._linha, 'Envio', envio);
+  } else {
+    pdf = pdfOS2_(osInfo, todos.filter(x => txt_(x.get('Nº')) === txt_(req.n)), 'parcial');
+    link = pasta.createFile(pdf).getUrl();
+    try { enviarOS2_(osInfo, pdf, [], 'parcial'); envio = 'Enviado para a Kiton'; }
+    catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
+  }
+  set_(b.ap, la._linha, 'PDF do apontamento', link);
+  return { ok: true, numero, tipo, cliente: osInfo.cliente, horas, link, envio, enviada: !/^Erro/.test(envio), emails };
+}
+
+/** Ajusta o evento da agenda para o período real quando a OS termina. */
+function agendaFinal_(lo) {
+  const id = txt_(lo.get('Evento na agenda'));
+  if (!id || id.indexOf('erro') === 0) return;
   try {
-    enviarOS_(os, pdf, emails);
-    envio = 'Enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
-  } catch (e) {
-    envio = 'Erro no envio: ' + (e && e.message ? e.message : e);
-  }
+    const ev = CalendarApp.getCalendarById(AGENDA_GERAL).getEventById(id);
+    if (ev) ev.setTitle('✓ ' + ev.getTitle().replace(/^✓ /, ''));
+  } catch (e) { /* segue */ }
+}
 
-  anexar_(t, {
-    'Nº OS': numero, 'Data': dataServ, 'Cliente': cliente, 'Local / setor': os.local, 'Solicitante': os.solicitante,
-    'Tipo de serviço': os.tipo, 'Início': os.inicio, 'Término': os.fim, 'Técnicos': os.tecnicos.join(', '),
-    'Solicitação / problema': os.solicitacao, 'Serviço executado': os.executado,
-    'Materiais utilizados': os.materiais.map(m => (m.qtd ? m.qtd + ' x ' : '') + m.desc).join('; '),
-    'Pendências / recomendações': os.pendencias, 'Fotos': os.fotos.length, 'Assinado por': os.assinante,
-    'Cargo / setor de quem assinou': os.cargo, 'Assinado em': agora, 'Lat. assinatura': os.geo ? os.geo.lat : '',
-    'Long. assinatura': os.geo ? os.geo.lng : '', 'E-mails': emails.join(', '), 'Envio': envio, 'PDF': link,
-    'Check-in vinculado': txt_(req.checkin), 'Registrado por': u.nome, 'Lançado em': agora
+/** Encerra o atendimento no cliente: saída do check-in com o destino. */
+function encerrarAtendimento_(u, req) {
+  const ck = checkinAberto_(u);
+  if (!ck) return { ok: true, semCheckin: true };
+  if (sessaoAberta_(u)) throw new Error('Há uma OS em execução. Aponte o fim dela antes de sair do cliente.');
+  const destino = ['Retorno à base', 'Ida para casa', 'Outro cliente'].indexOf(txt_(req.destino)) >= 0 ? txt_(req.destino) : '';
+  if (!destino) throw new Error('Informe para onde vai.');
+  const r = checkout_(u, { n: ck.n, horario: req.horario, geo: req.geo, obs: req.obs });
+  const t = ler_(ABA.checkins);
+  const l = t.linhas.find(x => txt_(x.get('Nº')) === txt_(ck.n));
+  if (l && t.cab['Destino após saída'] !== undefined) set_(t, l._linha, 'Destino após saída', destino);
+  return Object.assign(r, { cliente: ck.cliente, destino });
+}
+
+// ----- painel gerencial -----
+function painelOS_(req) {
+  const mes = txt_(req.mes);
+  const b = baseOS_();
+  const lista = b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
+    .filter(o => {
+      const ref = o.inicioPrevIso || '';
+      const ab = data_(b.os.linhas.find(x => txt_(x.get('Nº OS')) === o.numero).get('Programada em'));
+      return ['Programada', 'Em andamento'].indexOf(o.status) >= 0 || (ref ? ref.slice(0, 7) === mes : ab && Utilities.formatDate(ab, TZ, 'yyyy-MM') === mes);
+    });
+  // horas por técnico no mês (apontamentos do mês)
+  const tecnicos = {};
+  b.ap.linhas.forEach(a => {
+    const d = data_(a.get('Início'));
+    if (!d || Utilities.formatDate(d, TZ, 'yyyy-MM') !== mes) return;
+    const os = b.os.linhas.find(x => txt_(x.get('Nº OS')) === txt_(a.get('Nº OS')));
+    lista2_(a.get('Equipe')).forEach(n => {
+      const p = tecnicos[n] || (tecnicos[n] = { nome: n, horas: 0, apontamentos: 0, os: {}, finalizadas: {}, noPrazo: 0, aposPrazo: 0, ausente: 0 });
+      p.horas += Number(a.get('Horas')) || 0; p.apontamentos++; p.os[txt_(a.get('Nº OS'))] = 1;
+      if (txt_(a.get('Cliente ausente (motivo)'))) p.ausente++;
+      if (txt_(a.get('Tipo')) === 'Final' && os) {
+        p.finalizadas[txt_(a.get('Nº OS'))] = 1;
+        if (txt_(os.get('Prazo')) === 'Dentro do previsto') p.noPrazo++;
+        if (txt_(os.get('Prazo')) === 'Após o previsto') p.aposPrazo++;
+      }
+    });
   });
-  if (txt_(req.checkin)) {
-    const ck = ler_(ABA.checkins);
-    const lc = ck.linhas.find(x => txt_(x.get('Nº')) === txt_(req.checkin));
-    if (lc) set_(ck, lc._linha, 'OS vinculada', [txt_(lc.get('OS vinculada')), numero].filter(Boolean).join(', '));
-  }
-  return { ok: true, numero, link, envio, enviada: envio.indexOf('Enviada') === 0, emails };
+  const porTecnico = Object.keys(tecnicos).sort().map(k => {
+    const p = tecnicos[k];
+    return { nome: p.nome, horas: Math.round(p.horas * 10) / 10, apontamentos: p.apontamentos, os: Object.keys(p.os).length,
+      finalizadas: Object.keys(p.finalizadas).length, noPrazo: p.noPrazo, aposPrazo: p.aposPrazo, ausente: p.ausente };
+  });
+  return { ok: true, mes, lista: lista.reverse(), porTecnico };
 }
 
-function enviarOS_(os, pdf, emails) {
-  const assunto = 'Ordem de serviço nº ' + os.numero + ' | Kiton Engenharia | ' + os.cliente;
-  const corpo = '<p>Olá,</p><p>Segue em anexo a ordem de serviço nº <b>' + esc_(os.numero) + '</b>, referente ao atendimento de ' + esc_(os.data) +
-    ' em ' + esc_(os.cliente) + (os.local ? ' (' + esc_(os.local) + ')' : '') + ', assinada por ' + esc_(os.assinante) + '.</p>' +
-    '<p>Qualquer dúvida, é só responder este e-mail.</p><p>Atenciosamente,<br><b>Kiton Engenharia Integrada</b><br>' +
-    esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</p>';
-  const para = emails.length ? emails.join(',') : EMAIL_KITON;
-  const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Engenharia', replyTo: EMAIL_KITON };
-  if (emails.length) opc.cc = EMAIL_KITON;
-  MailApp.sendEmail(para, assunto, 'Segue em anexo a ordem de serviço nº ' + os.numero + '.', opc);
+// ----- PDF e e-mail -----
+function esc_(s) { return txt_(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function quebra_(s) { return esc_(s).replace(/\n/g, '<br>'); }
+function imgDrive_(id) {
+  try { const bl = DriveApp.getFileById(id).getBlob(); return 'data:' + bl.getContentType() + ';base64,' + Utilities.base64Encode(bl.getBytes()); }
+  catch (e) { return ''; }
 }
 
-function listarOS_(u) {
-  const admin = u.perfil === 'Administrador';
-  const lista = ler_(ABA.os).linhas.filter(l => admin || txt_(l.get('Registrado por')) === u.nome || txt_(l.get('Técnicos')).indexOf(u.nome) >= 0)
-    .slice(-30).reverse().map(l => ({
-      numero: txt_(l.get('Nº OS')), data: dia_(l.get('Data')), cliente: txt_(l.get('Cliente')), tipo: txt_(l.get('Tipo de serviço')),
-      assinante: txt_(l.get('Assinado por')), envio: txt_(l.get('Envio')), pdf: txt_(l.get('PDF')), emails: txt_(l.get('E-mails'))
-    }));
-  return { ok: true, lista };
+function pdfOS2_(o, aps, modo) {
+  const linha = (rot, val) => val ? '<tr><td class="r">' + rot + '</td><td>' + quebra_(val) + '</td></tr>' : '';
+  const bloco = (tit, val) => val ? '<div class="b"><div class="bt">' + tit + '</div><div class="bc">' + quebra_(val) + '</div></div>' : '';
+  const ordenados = aps.slice().sort((a, c) => (data_(a.get('Início')) || 0) - (data_(c.get('Início')) || 0));
+  const dias = ordenados.map((a, i) => {
+    const mats = lista2_(txt_(a.get('Materiais utilizados')).replace(/;/g, ','));
+    const fotos = lista2_(a.get('Fotos')).map(imgDrive_).filter(Boolean);
+    const ass = txt_(a.get('Assinatura')) ? imgDrive_(txt_(a.get('Assinatura'))) : '';
+    const ini = data_(a.get('Início')), fim = data_(a.get('Fim'));
+    return '<div class="dia"><div class="dt">' + (modo === 'final' ? 'Apontamento ' + (i + 1) + ' de ' + ordenados.length + ' · ' : '') +
+      (ini ? Utilities.formatDate(ini, TZ, 'dd/MM/yyyy') : '') + ' · ' + (ini ? Utilities.formatDate(ini, TZ, 'HH:mm') : '') + ' às ' +
+      (fim ? Utilities.formatDate(fim, TZ, 'HH:mm') : '') + ' · ' + String(a.get('Horas')).replace('.', ',') + ' h · ' + esc_(txt_(a.get('Tipo')) === 'Final' ? 'Finalização' : 'Parcial') + '</div>' +
+      '<table class="d">' + linha('Equipe', lista2_(a.get('Equipe')).join(', ')) + '</table>' +
+      bloco('Serviço executado', txt_(a.get('Serviço executado'))) +
+      (mats.length ? '<div class="b"><div class="bt">Materiais utilizados</div><div class="bc">' + mats.map(esc_).join('<br>') + '</div></div>' : '') +
+      (fotos.length ? '<div class="b"><div class="bt">Registro fotográfico</div><table class="f"><tr>' + fotos.map((f, k) => (k && k % 2 === 0 ? '</tr><tr>' : '') + '<td><img src="' + f + '"></td>').join('') + '</tr></table></div>' : '') +
+      '<div class="ass">' + (ass ? '<img src="' + ass + '"><div class="n">' + esc_(a.get('Assinado por')) + (txt_(a.get('Cargo / setor de quem assinou')) ? ' · ' + esc_(a.get('Cargo / setor de quem assinou')) : '') + '</div>' +
+        '<div class="s">Assinado na tela do aparelho do técnico em ' + fmt_(a.get('Fim lançado em')) + (txt_(a.get('Lat. fim')) ? ' · localização ' + txt_(a.get('Lat. fim')) + ', ' + txt_(a.get('Long. fim')) : '') + '</div>'
+        : '<div class="aus">Cliente ausente no momento do apontamento. Justificativa: ' + esc_(a.get('Cliente ausente (motivo)')) + '</div>') + '</div></div>';
+  }).join('');
+  const totalH = ordenados.reduce((s, a) => s + (Number(a.get('Horas')) || 0), 0);
+  const titulo = modo === 'final' ? 'ORDEM DE SERVIÇO' : 'APONTAMENTO PARCIAL DA OS';
+  const html = '<html><head><meta charset="utf-8"><style>' +
+    '@page{size:A4;margin:14mm 14mm 16mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#1c1f23}' +
+    '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:10px}.cab td{vertical-align:middle;padding:0 0 8px}' +
+    '.emp span{display:block;font-size:8.5pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:9pt;color:#5d6670}' +
+    'table.d{width:100%;border-collapse:collapse;margin:4px 0 8px}table.d td{padding:4px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
+    'td.r{width:130px;color:#5d6670;font-size:9pt}.b{margin:8px 0;page-break-inside:avoid}.bt{background:#000;color:#fff;font-weight:bold;font-size:9.5pt;padding:4px 8px}' +
+    '.bc{border:1px solid #c7ccd3;border-top:0;padding:7px 8px;line-height:1.4}.dia{margin:14px 0;border-top:2px solid #1c1f23;padding-top:6px}' +
+    '.dt{font-weight:bold;font-size:11pt;margin-bottom:4px}' +
+    'table.f{width:100%;border-collapse:collapse}table.f td{width:50%;padding:4px;border:1px solid #c7ccd3;text-align:center}table.f img{max-width:100%;max-height:220px}' +
+    '.ass{margin-top:8px;border:1px solid #c7ccd3;padding:8px;page-break-inside:avoid}.ass img{height:70px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:4px;font-weight:bold}' +
+    '.ass .s{font-size:8.5pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold}.tot{margin-top:10px;font-weight:bold}' +
+    '.rod{margin-top:14px;font-size:8pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:6px}' +
+    '</style></head><body>' +
+    '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:180px;height:auto">' +
+    '<div class="emp"><span>' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</span></div></td>' +
+    '<td class="num"><span>' + titulo + '</span><b>Nº ' + esc_(o.numero) + '</b><span>' + esc_(modo === 'final' ? 'Finalizada em ' + o.finalizadaEm : 'Situação: em andamento') + '</span></td></tr></table>' +
+    '<table class="d">' + linha('Cliente', o.cliente) + linha('Local / setor', o.local) + linha('Solicitante', o.solicitante) + linha('Tipo de serviço', o.tipo) +
+    linha('Programação', o.inicioPrev ? o.inicioPrev + (o.fimPrev ? ' a ' + o.fimPrev : '') : 'Aberta em campo') + '</table>' +
+    bloco('Solicitação / problema relatado', o.solicitacao) + dias +
+    (modo === 'final' ? '<div class="tot">Total: ' + ordenados.length + ' apontamento(s) · ' + String(Math.round(totalH * 10) / 10).replace('.', ',') + ' h trabalhadas</div>' +
+      bloco('Pendências e recomendações', o.pendencias) : '') +
+    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div></body></html>';
+  const cli = o.cliente.replace(/[\\/:*?"<>|]/g, '');
+  return Utilities.newBlob(html, 'text/html', 'OS.html').getAs('application/pdf')
+    .setName(modo === 'final' ? 'OS ' + o.numero + ' - ' + cli + '.pdf' : 'OS ' + o.numero + ' - parcial ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm') + ' - ' + cli + '.pdf');
+}
+
+function enviarOS2_(o, pdf, emails, modo) {
+  const assunto = (modo === 'final' ? 'Ordem de serviço nº ' : 'Apontamento parcial da OS nº ') + o.numero + ' | Kiton Engenharia | ' + o.cliente;
+  const corpo = modo === 'final'
+    ? '<p>Olá,</p><p>Segue em anexo a ordem de serviço nº <b>' + esc_(o.numero) + '</b>, referente ao serviço em ' + esc_(o.cliente) +
+      (o.local ? ' (' + esc_(o.local) + ')' : '') + ', finalizado em ' + esc_(o.finalizadaEm) + '.</p><p>Qualquer dúvida, é só responder este e-mail.</p>' +
+      '<p>Atenciosamente,<br><b>Kiton Engenharia Integrada</b><br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</p>'
+    : '<p>Apontamento parcial registrado no Kiton Hub.</p><p><b>OS ' + esc_(o.numero) + '</b> · ' + esc_(o.cliente) + '<br>Total até agora: ' +
+      String(o.horas).replace('.', ',') + ' h em ' + o.apontamentos + ' apontamento(s).</p><p>Documento interno: não foi enviado ao cliente.</p>';
+  const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Hub', replyTo: EMAIL_KITON };
+  if (modo === 'final' && emails.length) { opc.cc = EMAIL_KITON; MailApp.sendEmail(emails.join(','), assunto, assunto, opc); }
+  else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
 }
 
 function reenviarOS_(u, req) {
   const t = ler_(ABA.os);
   const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
   if (!l) throw new Error('OS não encontrada.');
-  const id = (txt_(l.get('PDF')).match(/[-\w]{25,}/) || [])[0];
-  if (!id) throw new Error('PDF da OS não encontrado.');
-  const pdf = DriveApp.getFileById(id).getBlob();
-  const emails = txt_(l.get('E-mails')).split(',').map(txt_).filter(Boolean);
-  enviarOS_({ numero: txt_(l.get('Nº OS')), data: dia_(l.get('Data')), cliente: txt_(l.get('Cliente')), local: txt_(l.get('Local / setor')), assinante: txt_(l.get('Assinado por')) }, pdf, emails);
+  const id = (txt_(l.get('PDF final')).match(/[-\w]{25,}/) || [])[0];
+  if (!id) throw new Error('PDF final da OS não encontrado.');
+  const o = resumoOS_(l, []);
+  enviarOS2_(o, DriveApp.getFileById(id).getBlob(), lista2_(l.get('E-mails do cliente')), 'final');
   set_(t, l._linha, 'Envio', 'Reenviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' por ' + u.nome);
   return { ok: true };
-}
-
-function esc_(s) { return txt_(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function quebra_(s) { return esc_(s).replace(/\n/g, '<br>'); }
-
-function pdfOS_(os) {
-  const linha = (rot, val) => val ? '<tr><td class="r">' + rot + '</td><td>' + quebra_(val) + '</td></tr>' : '';
-  const bloco = (tit, val) => val ? '<div class="b"><div class="bt">' + tit + '</div><div class="bc">' + quebra_(val) + '</div></div>' : '';
-  const mats = os.materiais.length ? '<div class="b"><div class="bt">Materiais utilizados</div><table class="m"><tr><th style="width:70px">Qtd.</th><th>Descrição</th></tr>' +
-    os.materiais.map(m => '<tr><td>' + esc_(m.qtd) + '</td><td>' + esc_(m.desc) + '</td></tr>').join('') + '</table></div>' : '';
-  const fotos = os.fotos.length ? '<div class="b"><div class="bt">Registro fotográfico</div><table class="f"><tr>' +
-    os.fotos.map((f, i) => (i && i % 2 === 0 ? '</tr><tr>' : '') + '<td><img src="' + f + '"></td>').join('') + '</tr></table></div>' : '';
-  const html = '<html><head><meta charset="utf-8"><style>' +
-    '@page{size:A4;margin:14mm 14mm 16mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#1c1f23}' +
-    '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:10px}.cab td{vertical-align:middle;padding:0 0 8px}' +
-    '.emp{font-size:13pt;font-weight:bold}.emp span{display:block;font-size:8.5pt;font-weight:normal;color:#5d6670}' +
-    '.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:9pt;color:#5d6670}' +
-    'table.d{width:100%;border-collapse:collapse;margin:4px 0 8px}table.d td{padding:4px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
-    'td.r{width:120px;color:#5d6670;font-size:9pt}.b{margin:8px 0;page-break-inside:avoid}.bt{background:#000;color:#fff;font-weight:bold;font-size:9.5pt;padding:4px 8px}' +
-    '.bc{border:1px solid #c7ccd3;border-top:0;padding:7px 8px;line-height:1.4}' +
-    'table.m{width:100%;border-collapse:collapse}table.m th,table.m td{border:1px solid #c7ccd3;padding:4px 6px;text-align:left;font-size:9.5pt}table.m th{background:#e6e9ed}' +
-    'table.f{width:100%;border-collapse:collapse}table.f td{width:50%;padding:4px;border:1px solid #c7ccd3;text-align:center}table.f img{max-width:100%;max-height:230px}' +
-    '.ass{margin-top:12px;border:1px solid #c7ccd3;padding:8px;page-break-inside:avoid}.ass img{height:80px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:4px;font-weight:bold}' +
-    '.rod{margin-top:14px;font-size:8pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:6px}' +
-    '</style></head><body>' +
-    '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:180px;height:auto">' +
-    '<div class="emp"><span>' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</span></div></td>' +
-    '<td class="num"><span>ORDEM DE SERVIÇO</span><b>Nº ' + esc_(os.numero) + '</b><span>' + esc_(os.data) + '</span></td></tr></table>' +
-    '<table class="d">' + linha('Cliente', os.cliente) + linha('Local / setor', os.local) + linha('Solicitante', os.solicitante) +
-    linha('Tipo de serviço', os.tipo) + linha('Horário', [os.inicio, os.fim].filter(Boolean).join(' às ')) + linha('Técnicos Kiton', os.tecnicos.join(', ')) + '</table>' +
-    bloco('Solicitação / problema relatado', os.solicitacao) + bloco('Serviço executado', os.executado) + mats +
-    bloco('Pendências e recomendações', os.pendencias) + fotos +
-    '<div class="ass"><div style="font-size:9pt;color:#5d6670">Declaro que o serviço descrito acima foi executado e acompanhado.</div>' +
-    '<img src="' + os.assinatura + '"><div class="n">' + esc_(os.assinante) + (os.cargo ? ' · ' + esc_(os.cargo) : '') + '</div>' +
-    '<div style="font-size:8.5pt;color:#5d6670">Assinado na tela do aparelho do técnico em ' + esc_(os.assinadoEm) +
-    (os.geo ? ' · localização ' + os.geo.lat + ', ' + os.geo.lng : '') + ' · registrado por ' + esc_(os.registradoPor) + '</div></div>' +
-    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div>' +
-    '</body></html>';
-  return Utilities.newBlob(html, 'text/html', 'OS.html').getAs('application/pdf')
-    .setName('OS ' + os.numero + ' - ' + os.cliente.replace(/[\\/:*?"<>|]/g, '') + '.pdf');
 }
 
 // ---------- despesas ----------
@@ -1256,13 +1605,15 @@ function novoItem_(u, req) {
 
 /** Rode uma vez pelo editor para autorizar o script e conferir a leitura da planilha. */
 function testarConfiguracao() {
-  [ABA.itens, ABA.colab, ABA.clientes, ABA.saidas, ABA.itensSaida, ABA.listas, ABA.checkins, ABA.os, ABA.despesas].forEach(n => {
+  [ABA.itens, ABA.colab, ABA.clientes, ABA.saidas, ABA.itensSaida, ABA.listas, ABA.checkins, ABA.os, ABA.apont, ABA.despesas].forEach(n => {
     Logger.log(n + ': ' + ler_(n).linhas.length + ' linhas');
   });
   segredo_();
   // pede as permissões de Drive (PDF da OS e comprovantes) e de e-mail (envio da OS)
   Logger.log('Pasta: ' + pasta_(['Kiton Hub']).getName());
   Logger.log('Cota de e-mails hoje: ' + MailApp.getRemainingDailyQuota());
+  // pede a permissão da agenda (eventos das OS programadas na agenda GERAL)
+  Logger.log('Agenda: ' + CalendarApp.getCalendarById(AGENDA_GERAL).getName());
   Logger.log('Tudo certo.');
 }
 

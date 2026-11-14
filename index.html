@@ -83,7 +83,7 @@ svg.i{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.9;stro
 .passo-nome{font-size:14px;color:var(--cinza);margin-bottom:6px}
 .grade{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .opcao{background:var(--branco);border:2px solid transparent;border-radius:14px;padding:16px 14px;text-align:left;display:flex;flex-direction:column;gap:10px;min-height:96px;font-weight:600;font-size:16px;line-height:1.2}
-.opcao.larga{grid-column:1/-1;flex-direction:row;align-items:center;min-height:64px}
+.opcao.larga{width:100%;grid-column:1/-1;flex-direction:row;align-items:center;min-height:64px}
 .opcao.sel{border-color:var(--preto);box-shadow:inset 0 0 0 1px var(--preto)}
 .opcao.sel svg.i{color:var(--vermelho)}
 .linha{display:flex;align-items:center;gap:12px;width:100%;background:var(--branco);border:0;border-radius:12px;padding:14px;margin-bottom:8px;text-align:left;font-weight:600;min-height:56px}
@@ -419,14 +419,16 @@ function telaInicio() {
     <div class="modulos">
       ${mod('mSaidas', 'saida', 'Saídas e retornos', 'Veículo, destino, ferramentas e EPC', status, false, true)}
       ${mod('mCheckin', 'pino', 'Check-in em obra', d.checkin ? 'Em ' + esc(d.checkin.cliente) + ' desde ' + esc(hora(d.checkin.chegada)) : 'Chegada e saída no cliente', stCk)}
-      ${mod('mOS', 'os', 'Ordem de serviço', 'Serviço executado e assinatura do cliente')}
+      ${(() => { const o = d.os || {}; const st = o.sessao ? '<span class="status campo">Em execução</span>' : o.atrasadas ? `<span class="status campo">${o.atrasadas} atrasada${o.atrasadas > 1 ? 's' : ''}</span>` : o.hoje ? `<span class="status">${o.hoje} hoje</span>` : '';
+        const ds = o.sessao ? 'OS ' + esc(o.sessao.numero) + ' em ' + esc(o.sessao.cliente) : o.total ? `${o.total} OS para você${o.hoje ? `, ${o.hoje} hoje` : ''}` : 'Programar, executar e apontar';
+        return mod('mOS', 'os', 'Ordem de serviço', ds, st); })()}
       ${mod('mDesp', 'recibo', 'Despesas', 'Comprovantes e reembolso')}
     </div>
     <button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens</b><span class="suave" style="display:block">${nMeus ? 'Ferramentas e equipamentos no seu nome' : 'Nenhum item no seu nome'}</span></span>${ic('seta')}</button>
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0);
-        const det = [pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : ''].filter(Boolean).join(', ');
-        return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0);
+        const det = [pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : ''].filter(Boolean).join(', ');
+        return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, OS, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
       ${mod('mCad', 'tabela', 'Cadastros', 'Itens, pessoas e clientes na planilha')}
@@ -439,7 +441,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = telaMeusItens;
-  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -795,7 +797,7 @@ function telaRetorno(s) {
 async function telaAdmin(aba) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
-  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
+  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['os', 'OS', 'os'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
     const n = pk && est.dados.pendencias ? est.dados.pendencias[pk] : 0;
     return `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}${n ? `<span class="bolinha">${n}</span>` : ''}</button>`; }).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
   $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
@@ -826,6 +828,8 @@ async function telaAdmin(aba) {
     });
   } else if (aba === 'desp') {
     await adminDespesas(box);
+  } else if (aba === 'os') {
+    await adminOS(box);
   } else if (aba === 'cli') {
     await adminClientes(box);
   } else if (aba === 'pres') {
@@ -967,9 +971,9 @@ function telaCheckin() {
       <section class="etiqueta campo"><span class="furo"></span><span class="estado">No cliente desde ${esc(hora(ck.chegada))}</span>
         <div class="onde">${esc(ck.cliente)}</div><div class="det">${selo(ck.situacao)}${ck.dist !== '' && ck.dist != null ? ` a ${distTxt(ck.dist)} do endereço` : ''}</div>
         <button class="acao" id="bSai" type="button">${ic('saida')} Registrar saída do cliente</button></section>
-      <button class="acao leve" id="bOS" type="button">${ic('os')} Fazer a OS deste atendimento</button>${historico}`;
+      <button class="acao leve" id="bOS" type="button">${ic('os')} Minhas OS / abrir OS neste cliente</button>${historico}`;
     document.getElementById('bSai').onclick = () => telaCheckout(ck);
-    document.getElementById('bOS').onclick = () => fluxoOS({ cliente: ck.cliente, checkin: ck.n, inicio: hora(ck.chegada), data: ck.chegada });
+    document.getElementById('bOS').onclick = () => telaOutraOSCliente(ck.cliente);
   } else {
     $app.innerHTML = `<h1>Check-in em obra</h1><div id="erro"></div>
       <p class="suave" id="gpsInfo">Buscando a sua localização…</p>
@@ -1058,159 +1062,448 @@ function telaConfirmarCheckin(c, geo) {
 
 function telaCheckout(ck) {
   $app.innerHTML = `<h1>Saída de ${esc(ck.cliente)}</h1><p class="suave">Chegou ${esc(ck.chegada)}</p><div id="erro"></div>
+    <label class="rotulo">Para onde vai?</label>${chips('dest', ['Retorno à base', 'Outro cliente', 'Ida para casa'], '')}
     ${blocoHorario('hCo', 'Que horas você saiu do cliente?')}
     <label class="rotulo" for="obs">Observação (opcional)</label><textarea class="campo-txt" id="obs"></textarea>`;
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('saida')} Registrar saída</button></div>`);
   ligarHorario('hCo');
+  let destino = '';
+  ligarChips('dest', v => destino = v);
   document.getElementById('ant').onclick = () => telaCheckin();
   document.getElementById('ok').onclick = () => executar(async () => {
+    if (!destino) throw new Error('Escolha para onde vai.');
     const horario = lerHorario('hCo');
     const geo = await localizacao();
-    const r = await api('checkout', { n: ck.n, horario, geo, obs: document.getElementById('obs').value });
+    const r = await api('encerrarAtendimento', { destino, horario, geo, obs: document.getElementById('obs').value });
     telaFeito(`Saída de ${ck.cliente} registrada`, `Saída às ${hora(r.quando)} · ${String(r.horas).replace('.', ',')} h no cliente`, r.semLocalizacao, r.tardio);
   });
 }
 
 // ---------- ordem de serviço ----------
-async function telaOS() {
+const hojeTxt = () => { const d = new Date(); return `${doisDig(d.getDate())}/${doisDig(d.getMonth() + 1)}/${d.getFullYear()}`; };
+function quandoOS(o) {
+  if (!o.inicioPrev) return o.iniciadaEm ? 'Aberta em campo ' + o.iniciadaEm.slice(0, 5) + ' às ' + hora(o.iniciadaEm) : 'Sem data programada';
+  const [d, h] = o.inicioPrev.split(' ');
+  return (d === hojeTxt() ? 'Hoje' : d.slice(0, 5)) + ' às ' + h;
+}
+function seloOS(o) {
+  if (o.emExecucao) return '<span class="selo-txt verde">Em execução</span>';
+  if (o.status === 'Finalizada') return '<span class="selo-txt verde">Finalizada</span>';
+  if (o.status === 'Cancelada') return '<span class="selo-txt vermelho">Cancelada</span>';
+  if (o.atrasada) return '<span class="selo-txt vermelho">Atrasada para iniciar</span>';
+  if (o.parada) return '<span class="selo-txt laranja">Parada há mais de 2 dias</span>';
+  if (o.status === 'Em andamento') return '<span class="selo-txt amarelo">Em andamento</span>';
+  return '<span class="selo-txt">Programada</span>';
+}
+const cartaoOS = (o, extra = '') => `<button type="button" class="linha" data-os="${esc(o.numero)}" style="align-items:flex-start">
+  <span style="flex:1"><span class="pat" style="margin:0 6px 0 0">OS ${esc(o.numero)}</span>${esc(o.cliente)}
+  <small>${esc(quandoOS(o))}${o.local ? ' · ' + esc(o.local) : ''}${o.tipo ? ' · ' + esc(o.tipo) : ''}${o.apontamentos ? ` · ${o.apontamentos} apontamento(s), ${String(o.horas).replace('.', ',')} h` : ''}</small>
+  <span style="display:block;margin-top:6px">${seloOS(o)}${extra}</span></span><span class="fim">${ic('seta')}</span></button>`;
+
+async function telaOS(aviso) {
+  if (typeof aviso !== 'string') aviso = '';
   topo('Ordem de serviço'); voltarInicio();
-  $app.innerHTML = `<h1>Ordem de serviço</h1><div id="erro"></div>
-    <button class="acao" id="nova" type="button">${ic('os')} Nova OS</button>
-    ${lerLocal('kc_os_rascunho') ? `<button class="acao leve" id="rasc" type="button">Continuar OS não finalizada</button>` : ''}
-    <h2>Últimas OS</h2><div id="lista"><p class="suave">Carregando…</p></div>`;
-  document.getElementById('ini').onclick = () => telaInicio();
-  document.getElementById('nova').onclick = () => { guardar('kc_os_rascunho', null); fluxoOS(est.dados.checkin ? { cliente: est.dados.checkin.cliente, checkin: est.dados.checkin.n, inicio: hora(est.dados.checkin.chegada) } : {}); };
-  const rasc = document.getElementById('rasc');
-  if (rasc) rasc.onclick = () => { try { fluxoOS(JSON.parse(lerLocal('kc_os_rascunho'))); } catch (e) { fluxoOS({}); } };
+  $app.innerHTML = `<h1>Ordem de serviço</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="osBox"><p class="suave">Carregando…</p></div>`;
+  document.getElementById('ini').onclick = () => carregarInicio();
   await executar(async () => {
-    const r = await api('listarOS');
-    document.getElementById('lista').innerHTML = r.lista.length ? r.lista.map(o => `<div class="cartao"><div class="t">OS ${esc(o.numero)} · ${esc(o.cliente)}</div>
-      <p class="suave" style="margin:2px 0 6px">${esc(o.data)}${o.tipo ? ' · ' + esc(o.tipo) : ''} · assinada por ${esc(o.assinante)}</p>
-      <span class="selo-txt ${/^Enviada|^Reenviada/.test(o.envio) ? 'verde' : 'vermelho'}">${esc(/^Enviada|^Reenviada/.test(o.envio) ? 'Enviada' : 'Não enviada')}</span>
-      ${o.pdf ? `<a class="link" href="${esc(o.pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
-      ${/^Erro/.test(o.envio) ? ` · <button type="button" class="link" data-r="${esc(o.numero)}">Tentar enviar de novo</button>` : ''}</div>`).join('') : msg('info', 'Nenhuma OS ainda.');
-    document.querySelectorAll('[data-r]').forEach(b => b.onclick = () => executar(async () => { await api('reenviarOS', { numero: b.dataset.r }); telaOS(); }));
+    const r = await api('minhasOS');
+    est.minhasOS = r;
+    const s = r.sessao;
+    const topoHtml = s ? `<section class="etiqueta campo"><span class="furo"></span><span class="estado">Em execução desde ${esc(hora(s.inicio))}</span>
+        <div class="onde">${esc(s.cliente)}</div><div class="det"><b>OS ${esc(s.numero)}</b>${s.os && s.os.local ? ' · ' + esc(s.os.local) : ''}<br>Equipe: ${esc(s.equipe.join(', '))}</div>
+        <button class="acao" id="bApontar" type="button">${ic('ok')} Apontar fim</button></section>`
+      : `<div class="grade" style="margin-top:4px"><button type="button" class="opcao" id="bAgora">${ic('os')}Abrir OS agora<span class="suave" style="font-weight:400;font-size:14px">Serviço que surgiu em campo</span></button>
+         <button type="button" class="opcao" id="bProg">${ic('calib')}Programar OS<span class="suave" style="font-weight:400;font-size:14px">Para outro dia ou outro técnico</span></button></div>`;
+    document.getElementById('osBox').innerHTML = topoHtml +
+      `<h2>Suas OS</h2>` + (r.abertas.length ? r.abertas.map(o => cartaoOS(o)).join('') : msg('info', 'Nenhuma OS programada para você.')) +
+      (r.finalizadas.length ? `<h2>Finalizadas recentemente</h2>` + r.finalizadas.map(o => cartaoOS(o)).join('') : '');
+    if (s) document.getElementById('bApontar').onclick = () => fluxoApontar(s);
+    else { document.getElementById('bAgora').onclick = () => telaNovaOSCampo({}); document.getElementById('bProg').onclick = () => telaProgramarOS(); }
+    document.querySelectorAll('[data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os));
   });
 }
 
-function fluxoOS(pre) {
+async function telaOSDetalhe(numero, admin) {
+  topo('OS ' + numero);
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button" disabled>Carregando…</button></div>`);
+  $app.innerHTML = `<h1>OS ${esc(numero)}</h1><div id="erro"></div><div id="det"></div>`;
+  document.getElementById('ant').onclick = () => admin ? telaAdmin('os') : telaOS();
+  let r;
+  await executar(async () => { r = await api('detalheOS', { numero }); });
+  if (!r) return;
+  const o = r.os, sess = est.minhasOS && est.minhasOS.sessao;
+  document.getElementById('det').innerHTML = `<p style="margin:0 0 10px">${seloOS(o)}</p>
+    <dl class="resumo">
+      <div><dt>Cliente</dt><dd>${esc(o.cliente)}${o.local ? '<br>' + esc(o.local) : ''}</dd></div>
+      <div><dt>Tipo</dt><dd>${esc(o.tipo || '-')}</dd></div>
+      <div><dt>Programação</dt><dd>${o.inicioPrev ? esc(o.inicioPrev) + (o.fimPrev ? '<br>até ' + esc(o.fimPrev) : '') : 'Aberta em campo'}</dd></div>
+      <div><dt>Técnicos</dt><dd>${esc(o.tecnicos.join(', '))}</dd></div>
+      ${o.solicitante ? `<div><dt>Solicitante</dt><dd>${esc(o.solicitante)}</dd></div>` : ''}
+      ${o.solicitacao ? `<div><dt>Solicitação</dt><dd style="font-weight:400;text-align:left">${esc(o.solicitacao)}</dd></div>` : ''}
+      ${o.apontamentos ? `<div><dt>Trabalhado</dt><dd>${String(o.horas).replace('.', ',')} h em ${o.apontamentos} apontamento(s)</dd></div>` : ''}
+      ${o.inicioVsPrevisto ? `<div><dt>Início</dt><dd>${esc(o.inicioVsPrevisto)}</dd></div>` : ''}
+      ${o.prazo ? `<div><dt>Prazo</dt><dd>${esc(o.prazo)}</dd></div>` : ''}
+      ${o.motivoCancel ? `<div><dt>Cancelamento</dt><dd>${esc(o.motivoCancel)}</dd></div>` : ''}
+    </dl>
+    ${o.pdf ? `<a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener" style="text-decoration:none">${ic('os')} Abrir PDF final</a>` : ''}
+    ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + String(a.horas).replace('.', ',') + ' h' : ' · em execução'}</div>
+      <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
+      ${a.tipo ? `<span class="selo-txt ${a.tipo === 'Final' ? 'verde' : 'amarelo'}">${a.tipo === 'Final' ? 'Finalização' : 'Parcial'}</span>` : ''}
+      ${a.ausente ? `<span class="selo-txt laranja">Cliente ausente</span>` : a.assinante ? `<span class="selo-txt">Assinado por ${esc(a.assinante)}</span>` : ''}
+      ${a.pdf ? `<a class="link" href="${esc(a.pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}</div>`).join('') : ''}
+    ${admin ? '<div id="adm"></div>' : ''}`;
+  const ok = document.getElementById('ok');
+  const pode = !admin && ['Programada', 'Em andamento'].includes(o.status) && !o.emExecucao && !sess;
+  if (pode) { ok.disabled = false; ok.innerHTML = `${ic('saida')} Iniciar`; ok.onclick = () => telaIniciarOS(o); }
+  else if (!admin && sess && sess.numero === o.numero) { ok.disabled = false; ok.innerHTML = `${ic('ok')} Apontar fim`; ok.onclick = () => fluxoApontar(sess); }
+  else if (admin) { ok.remove(); adminEditarOS(o); }
+  else { ok.textContent = o.emExecucao ? 'Em execução' : sess ? 'Aponte a OS em execução antes' : o.status; }
+}
+
+function blocoEquipe(id, sel) {
+  const outros = (est.dados.equipeCampo || est.dados.colaboradores).filter(n => n !== est.usuario.nome);
+  return outros.length ? `<label class="rotulo">Quem está com você hoje?</label>${chips(id, outros, '')}<p class="suave" style="margin-top:6px">Opcional. As horas contam para todos os marcados.</p>` : '';
+}
+function lerEquipe(id) { return [...document.querySelectorAll(`#${id} .pessoa.sel`)].map(b => b.dataset.v); }
+
+function telaIniciarOS(o) {
+  const ck = est.dados.checkin;
+  $app.innerHTML = `<h1>Iniciar OS ${esc(o.numero)}</h1><p class="suave">${esc(o.cliente)}${o.local ? ' · ' + esc(o.local) : ''}</p><div id="erro"></div>
+    ${ck && ck.cliente === o.cliente ? msg('info', `Você já está com check-in em ${ck.cliente}. A OS usa o mesmo check-in.`) : ck ? msg('erro', `Você está com check-in aberto em ${ck.cliente}. Registre a saída de lá antes.`) : msg('info', 'Ao iniciar, o check-in no cliente é feito junto (hora e localização).')}
+    ${blocoEquipe('eqIni')}
+    ${blocoHorario('hIni', 'Que horas começou?')}`;
+  document.querySelectorAll('#eqIni .pessoa').forEach(b => b.onclick = () => b.classList.toggle('sel'));
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('saida')} Iniciar</button></div>`);
+  ligarHorario('hIni');
+  document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const horario = lerHorario('hIni');
+    const geo = await localizacao();
+    const r = await api('iniciarOS', { numero: o.numero, equipe: lerEquipe('eqIni'), horario, geo });
+    await recarregarDados();
+    telaOS(`OS ${r.numero} iniciada às ${hora(r.quando)}.${r.checkinNovo ? ' Check-in em ' + r.cliente + ' registrado.' : ''}`);
+  });
+}
+
+async function recarregarDados() { try { const r = await api('inicio'); est.dados = r; est.usuario = r.usuario; } catch (e) { /* segue com os dados atuais */ } }
+
+/** OS que surgiu em campo: cria e já inicia. */
+function telaNovaOSCampo(pre) {
   topo('Ordem de serviço');
-  const d = est.dados;
-  const f = Object.assign({ cliente: '', local: '', solicitante: '', tipo: '', data: hojeISO(), inicio: '', fim: '', tecnicos: [est.usuario.nome],
-    solicitacao: '', executado: '', materiais: [], pendencias: '', emails: null, extra: '', assinante: '', cargo: '' }, pre || {});
-  if (f.data && /\//.test(f.data)) { const m = f.data.match(/(\d{2})\/(\d{2})\/(\d{4})/); f.data = m ? `${m[3]}-${m[2]}-${m[1]}` : hojeISO(); }
-  const fotos = []; let assinatura = null, tracos = 0;
-  const passos = ['Atendimento', 'Serviço', 'Fotos', 'Assinatura'];
-  let p = 0;
-  const salvarRascunho = () => { const { ...x } = f; guardar('kc_os_rascunho', JSON.stringify(x)); };
-  const cab = () => `<div class="passos">${passos.map((_, i) => `<i class="${i < p ? 'feito' : i === p ? 'atual' : ''}"></i>`).join('')}</div><div class="passo-nome">Passo ${p + 1} de ${passos.length} · ${passos[p]}</div><div id="erro"></div>`;
+  const d = est.dados, ck = d.checkin;
+  const fixo = ck ? ck.cliente : pre.cliente || '';
+  const f = { tipo: '' };
+  $app.innerHTML = `<h1>Abrir OS agora</h1><div id="erro"></div>
+    ${ck ? msg('info', `Check-in aberto em ${ck.cliente}: a OS fica neste cliente.`) : ''}
+    <label class="rotulo" for="nCli">Cliente</label>
+    ${fixo ? `<input class="campo-txt" id="nCli" value="${esc(fixo)}" disabled>` : `<select class="campo-txt" id="nCli"><option value="">Escolha…</option>${d.clientesInfo.map(c => `<option>${esc(c.nome)}</option>`).join('')}<option value="__novo">+ Cliente novo</option></select>
+    <div id="boxNovo" class="oculto"><input class="campo-txt" id="nNome" placeholder="Nome do cliente (nome fantasia)" style="margin-top:8px"><p class="suave" id="nPrev" style="margin-top:6px"></p><div id="nParec"></div>
+      <input class="campo-txt" id="nCid" placeholder="Cidade (ex.: Sarandi-PR)"></div>`}
+    <label class="rotulo" for="nLocal">Local / setor / equipamento</label><input class="campo-txt" id="nLocal" placeholder="Ex.: Prensa 2, quadro geral">
+    <label class="rotulo">Tipo de serviço</label>${chips('nTipo', d.tiposOS, '')}
+    <label class="rotulo" for="nSol">Quem solicitou</label><input class="campo-txt" id="nSol">
+    <label class="rotulo" for="nSolic">Solicitação / problema relatado</label><textarea class="campo-txt" id="nSolic"></textarea>
+    ${blocoEquipe('eqNova')}
+    ${blocoHorario('hNova', 'Que horas começou?')}`;
+  ligarChips('nTipo', v => f.tipo = v);
+  document.querySelectorAll('#eqNova .pessoa').forEach(b => b.onclick = () => b.classList.toggle('sel'));
+  ligarHorario('hNova');
+  if (!fixo) {
+    const sel = document.getElementById('nCli'), nome = document.getElementById('nNome');
+    sel.onchange = () => document.getElementById('boxNovo').classList.toggle('oculto', sel.value !== '__novo');
+    nome.oninput = () => {
+      const p = padronizarCliente(nome.value), par = parecidos(nome.value, d.clientesInfo);
+      document.getElementById('nPrev').innerHTML = p ? `Vai ser salvo como: <b>${esc(p)}</b>` : '';
+      document.getElementById('nParec').innerHTML = par.length ? msg('erro', 'Parece com cliente já cadastrado: ' + par.map(c => c.nome).join(', ') + '. Se for o mesmo, escolha na lista.') : '';
+    };
+  }
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('saida')} Abrir e iniciar</button></div>`);
+  document.getElementById('ant').onclick = () => telaOS();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    let cliente = fixo, novo = false, cidade = '';
+    if (!fixo) {
+      const v = document.getElementById('nCli').value;
+      if (!v) throw new Error('Escolha o cliente.');
+      if (v === '__novo') {
+        cliente = padronizarCliente(document.getElementById('nNome').value); cidade = padronizarCidade(document.getElementById('nCid').value); novo = true;
+        if (cliente.length < 3) throw new Error('Digite o nome do cliente novo.');
+        if (!cidade) throw new Error('Informe a cidade do cliente novo.');
+        const par = parecidos(cliente, d.clientesInfo);
+        if (par.some(c => chaveCliente(c.nome) === chaveCliente(cliente))) throw new Error('Esse cliente já está cadastrado. Escolha na lista.');
+        if (par.length && !confirm(`Confirma que "${cliente}" é diferente de ${par.map(c => c.nome).join(', ')}?`)) return;
+      } else cliente = v;
+    }
+    if (!f.tipo) throw new Error('Escolha o tipo de serviço.');
+    const horario = lerHorario('hNova');
+    const geo = await localizacao();
+    const r = await api('iniciarOS', { cliente, novo, cidade, tipo: f.tipo, local: document.getElementById('nLocal').value, solicitante: document.getElementById('nSol').value,
+      solicitacao: document.getElementById('nSolic').value, equipe: lerEquipe('eqNova'), horario, geo });
+    await recarregarDados();
+    telaOS(`OS ${r.numero} aberta e iniciada às ${hora(r.quando)}.${r.checkinNovo ? ' Check-in em ' + r.cliente + ' registrado.' : ''}`);
+  });
+}
+
+function telaProgramarOS() {
+  topo('Programar OS');
+  const d = est.dados, f = { tipo: '' };
+  const amanha = new Date(Date.now() + 864e5); const base = `${amanha.getFullYear()}-${doisDig(amanha.getMonth() + 1)}-${doisDig(amanha.getDate())}`;
+  $app.innerHTML = `<h1>Programar OS</h1><div id="erro"></div>
+    <label class="rotulo" for="pCli">Cliente</label><select class="campo-txt" id="pCli"><option value="">Escolha…</option>${d.clientesInfo.map(c => `<option>${esc(c.nome)}</option>`).join('')}</select>
+    <label class="rotulo" for="pLocal">Local / setor / equipamento</label><input class="campo-txt" id="pLocal">
+    <label class="rotulo">Tipo de serviço</label>${chips('pTipo', d.tiposOS, '')}
+    <label class="rotulo" for="pSol">Quem solicitou</label><input class="campo-txt" id="pSol">
+    <label class="rotulo" for="pSolic">Solicitação / o que deve ser feito</label><textarea class="campo-txt" id="pSolic"></textarea>
+    <label class="rotulo" for="pIni">Início previsto</label><input class="campo-txt" id="pIni" type="datetime-local" value="${base}T08:00">
+    <label class="rotulo" for="pFim">Término previsto</label><input class="campo-txt" id="pFim" type="datetime-local" value="${base}T12:00">
+    <label class="rotulo">Técnicos</label>${chips('pTec', d.equipeCampo || d.colaboradores, '')}
+    <p class="suave" style="margin-top:8px">A OS aparece no app dos técnicos escolhidos e entra na agenda GERAL.</p>`;
+  ligarChips('pTipo', v => f.tipo = v);
+  document.querySelectorAll('#pTec .pessoa').forEach(b => { if (b.dataset.v === est.usuario.nome && est.usuario.perfil !== 'Administrador') b.classList.add('sel'); b.onclick = () => b.classList.toggle('sel'); });
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">Programar</button></div>`);
+  document.getElementById('ant').onclick = () => telaOS();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const tecnicos = lerEquipe('pTec');
+    if (!document.getElementById('pCli').value) throw new Error('Escolha o cliente.');
+    if (!f.tipo) throw new Error('Escolha o tipo de serviço.');
+    if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
+    const r = await api('programarOS', { cliente: document.getElementById('pCli').value, local: document.getElementById('pLocal').value, tipo: f.tipo,
+      solicitante: document.getElementById('pSol').value, solicitacao: document.getElementById('pSolic').value,
+      inicioPrev: document.getElementById('pIni').value, fimPrev: document.getElementById('pFim').value, tecnicos });
+    telaOS(`OS ${r.numero} programada para ${tecnicos.join(', ')}.${r.agenda ? ' Evento criado na agenda GERAL.' : ' Não foi possível criar o evento na agenda.'}`);
+  });
+}
+
+/** Apontamento do fim: parcial ou final, com assinatura ou justificativa. */
+function fluxoApontar(s) {
+  topo('Apontar OS ' + s.numero);
+  const d = est.dados, chave = 'kc_ap_' + s.n;
+  let f = { tipo: '', executado: '', materiais: [], pendencias: '', ausente: false, motivo: '', assinante: '', cargo: '', emails: null, extra: '' };
+  try { Object.assign(f, JSON.parse(lerLocal(chave) || '{}')); } catch (e) { /* rascunho inválido */ }
+  const fotos = []; let assinatura = null, tracos = 0, p = 0;
+  const passos = ['Situação', 'Serviço', 'Fotos', 'Assinatura'];
+  const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  const cab = () => `<div class="passos">${passos.map((_, i) => `<i class="${i < p ? 'feito' : i === p ? 'atual' : ''}"></i>`).join('')}</div><div class="passo-nome">OS ${esc(s.numero)} · ${esc(s.cliente)} · passo ${p + 1} de 4</div><div id="erro"></div>`;
+  function ler() {
+    if (p === 1) {
+      f.executado = val('aExec'); f.pendencias = val('aPend');
+      f.materiais = [...document.querySelectorAll('.mat')].map(r => ({ qtd: r.querySelector('[data-q]').value.trim(), desc: r.querySelector('[data-d]').value.trim() })).filter(m => m.desc);
+    }
+    if (p === 3) {
+      f.assinante = val('aAss'); f.cargo = val('aCargo'); f.motivo = val('aMot'); f.extra = val('aExtra');
+      f.emails = [...document.querySelectorAll('#aMails input:checked')].map(x => x.value);
+    }
+    guardar(chave, JSON.stringify(f));
+  }
+  function validar() {
+    if (p === 0 && !f.tipo) throw new Error('Escolha se é parcial ou finalização.');
+    if (p === 1 && !f.executado) throw new Error('Descreva o que foi executado neste período.');
+  }
   const rodape = txt => {
     barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="prox" type="button">${txt}</button></div>`);
     document.getElementById('ant').onclick = () => { ler(); if (p === 0) telaOS(); else { p--; desenhar(); } };
     document.getElementById('prox').onclick = () => { ler(); try { validar(); } catch (e) { return erroTela(e.message); } if (p < 3) { p++; desenhar(); } else finalizar(); };
   };
-  const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
-  function ler() {
-    if (p === 0) { f.local = val('oLocal'); f.solicitante = val('oSol'); f.data = val('oData'); f.inicio = val('oIni'); f.fim = val('oFim'); }
-    if (p === 1) {
-      f.solicitacao = val('oSolic'); f.executado = val('oExec'); f.pendencias = val('oPend');
-      f.materiais = [...document.querySelectorAll('.mat')].map(r => ({ qtd: r.querySelector('[data-q]').value.trim(), desc: r.querySelector('[data-d]').value.trim() })).filter(m => m.desc);
-    }
-    if (p === 3) { f.assinante = val('oAss'); f.cargo = val('oCargo'); f.extra = val('oExtra'); f.emails = [...document.querySelectorAll('#oMails input:checked')].map(x => x.value); }
-    salvarRascunho();
-  }
-  function validar() {
-    if (p === 0 && !f.cliente) throw new Error('Escolha o cliente.');
-    if (p === 0 && !f.tipo) throw new Error('Escolha o tipo de serviço.');
-    if (p === 0 && f.inicio && f.fim && f.fim < f.inicio) throw new Error('O término está antes do início. Confira os horários.');
-    if (p === 1 && !f.executado) throw new Error('Descreva o serviço executado.');
-  }
   function desenhar() {
     window.scrollTo(0, 0);
     if (p === 0) {
-      $app.innerHTML = `${cab()}<h1>Atendimento</h1>
-        <label class="rotulo">Cliente</label><select class="campo-txt" id="oCli"><option value="">Escolha…</option>${d.clientesInfo.map(c => `<option ${c.nome === f.cliente ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select>
-        <label class="rotulo" for="oLocal">Local / setor / equipamento</label><input class="campo-txt" id="oLocal" value="${esc(f.local)}" placeholder="Ex.: Prensa 2, quadro geral">
-        <label class="rotulo" for="oSol">Quem solicitou</label><input class="campo-txt" id="oSol" value="${esc(f.solicitante)}">
-        <label class="rotulo">Tipo de serviço</label>${chips('oTipo', d.tiposOS, f.tipo)}
-        <label class="rotulo" for="oData">Data</label><input class="campo-txt" id="oData" type="date" max="${hojeISO()}" value="${esc(f.data)}">
-        <div class="grade" style="margin-top:0"><div><label class="rotulo" for="oIni">Início</label><input class="campo-txt" id="oIni" type="time" value="${esc(f.inicio)}"></div>
-        <div><label class="rotulo" for="oFim">Término</label><input class="campo-txt" id="oFim" type="time" value="${esc(f.fim)}"></div></div>
-        <label class="rotulo">Técnicos da Kiton</label>${chips('oTec', [...new Set([...(d.equipeCampo || d.colaboradores), ...f.tecnicos])], '')}`;
-      document.getElementById('oCli').onchange = e => { f.cliente = e.target.value; f.emails = null; };
-      ligarChips('oTipo', v => f.tipo = v);
-      document.querySelectorAll('#oTec .pessoa').forEach(b => b.classList.toggle('sel', f.tecnicos.includes(b.dataset.v)));
-      ligarChips('oTec', (v, on) => { f.tecnicos = on ? [...new Set([...f.tecnicos, v])] : f.tecnicos.filter(x => x !== v); }, true);
+      $app.innerHTML = `${cab()}<h1>Como fica a OS?</h1>
+        <button type="button" class="opcao larga ${f.tipo === 'Parcial' ? 'sel' : ''}" data-t="Parcial" style="margin-bottom:10px">${ic('retorno')}<span>Apontamento parcial<small class="suave" style="display:block;font-weight:400">O serviço continua em outro momento ou outro dia</small></span></button>
+        <button type="button" class="opcao larga ${f.tipo === 'Final' ? 'sel' : ''}" data-t="Final">${ic('ok')}<span>Finalizar a OS<small class="suave" style="display:block;font-weight:400">Serviço concluído. O cliente recebe o PDF completo</small></span></button>
+        <p class="suave" style="margin-top:12px">Início: ${esc(s.inicio)} · Equipe: ${esc(s.equipe.join(', '))}</p>`;
+      document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { f.tipo = b.dataset.t; guardar(chave, JSON.stringify(f)); desenhar(); setTimeout(() => { p = 1; desenhar(); }, 150); });
       rodape('Continuar');
     } else if (p === 1) {
       const linhaMat = (m = {}) => `<div class="mat grade" style="grid-template-columns:76px 1fr 44px;margin-bottom:8px"><input class="campo-txt" data-q placeholder="Qtd." value="${esc(m.qtd || '')}"><input class="campo-txt" data-d placeholder="Material" value="${esc(m.desc || '')}"><button type="button" class="acao leve" data-x style="margin:0;min-height:0;padding:0" aria-label="Remover">×</button></div>`;
-      $app.innerHTML = `${cab()}<h1>Serviço</h1>
-        <label class="rotulo" for="oSolic">Solicitação / problema relatado</label><textarea class="campo-txt" id="oSolic">${esc(f.solicitacao)}</textarea>
-        <label class="rotulo" for="oExec">Serviço executado</label><textarea class="campo-txt" id="oExec" style="min-height:130px">${esc(f.executado)}</textarea>
+      $app.innerHTML = `${cab()}<h1>${f.tipo === 'Final' ? 'Finalização' : 'Apontamento parcial'}</h1>
+        <label class="rotulo" for="aExec">O que foi executado neste período</label><textarea class="campo-txt" id="aExec" style="min-height:130px">${esc(f.executado)}</textarea>
         <label class="rotulo">Materiais utilizados</label><div id="mats">${(f.materiais.length ? f.materiais : [{}]).map(linhaMat).join('')}</div>
         <button type="button" class="link" id="addMat">+ Adicionar material</button>
-        <label class="rotulo" for="oPend">Pendências e recomendações</label><textarea class="campo-txt" id="oPend">${esc(f.pendencias)}</textarea>`;
+        ${f.tipo === 'Final' ? `<label class="rotulo" for="aPend">Pendências e recomendações</label><textarea class="campo-txt" id="aPend">${esc(f.pendencias)}</textarea>` : ''}`;
       const ligarX = () => document.querySelectorAll('[data-x]').forEach(b => b.onclick = () => b.closest('.mat').remove());
       document.getElementById('addMat').onclick = () => { document.getElementById('mats').insertAdjacentHTML('beforeend', linhaMat()); ligarX(); };
-      ligarX();
-      rodape('Continuar');
+      ligarX(); rodape('Continuar');
     } else if (p === 2) {
-      $app.innerHTML = `${cab()}<h1>Fotos (opcional)</h1><p class="suave">Até 6 fotos do serviço. Elas entram no PDF da OS.</p>
+      $app.innerHTML = `${cab()}<h1>Fotos (opcional)</h1><p class="suave">Até 6 fotos deste período. Elas entram no PDF.</p>
         <div class="fotos" id="fotos"></div>
-        <label class="acao leve" for="oFoto" style="cursor:pointer">${ic('ok')} Tirar ou escolher foto</label>
-        <input id="oFoto" type="file" accept="image/*" capture="environment" multiple class="oculto">`;
-      const pintarFotos = () => {
+        <label class="acao leve" for="aFoto" style="cursor:pointer">${ic('ok')} Tirar ou escolher foto</label>
+        <input id="aFoto" type="file" accept="image/*" capture="environment" multiple class="oculto">`;
+      const pintar = () => {
         document.getElementById('fotos').innerHTML = fotos.map((x, i) => `<div class="foto"><img src="${x}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Remover foto">×</button></div>`).join('');
-        document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { fotos.splice(+b.dataset.rm, 1); pintarFotos(); });
+        document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { fotos.splice(+b.dataset.rm, 1); pintar(); });
       };
-      document.getElementById('oFoto').onchange = e => executar(async () => {
+      document.getElementById('aFoto').onchange = e => executar(async () => {
         for (const a of [...e.target.files]) { if (fotos.length >= 6) break; fotos.push(await comprimir(a, 1100, 0.7)); }
-        e.target.value = ''; pintarFotos();
+        e.target.value = ''; pintar();
       });
-      pintarFotos();
-      rodape('Continuar');
+      pintar(); rodape('Continuar');
     } else {
-      const cli = d.clientesInfo.find(c => c.nome === f.cliente) || { emails: [] };
+      const cli = d.clientesInfo.find(c => c.nome === s.cliente) || { emails: [] };
       if (!f.emails) f.emails = cli.emails.slice();
       $app.innerHTML = `${cab()}<h1>Assinatura do cliente</h1>
-        <dl class="resumo">
-          <div><dt>Cliente</dt><dd>${esc(f.cliente)}${f.local ? '<br>' + esc(f.local) : ''}</dd></div>
-          <div><dt>Serviço</dt><dd>${esc(f.tipo)} · ${esc(f.data.split('-').reverse().join('/'))}${f.inicio ? ' · ' + esc(f.inicio) + (f.fim ? ' às ' + esc(f.fim) : '') : ''}</dd></div>
-          <div><dt>Executado</dt><dd style="font-weight:400;text-align:left">${esc(f.executado).replace(/\n/g, '<br>')}</dd></div>
-          ${f.materiais.length ? `<div><dt>Materiais</dt><dd>${f.materiais.map(m => esc((m.qtd ? m.qtd + ' x ' : '') + m.desc)).join('<br>')}</dd></div>` : ''}
-          ${fotos.length ? `<div><dt>Fotos</dt><dd>${fotos.length}</dd></div>` : ''}
-        </dl>
-        <label class="rotulo">Assine no quadro abaixo</label>
-        <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>
-        <label class="rotulo" for="oAss">Nome de quem assinou</label><input class="campo-txt" id="oAss" value="${esc(f.assinante)}" autocomplete="off">
-        <label class="rotulo" for="oCargo">Cargo / setor (opcional)</label><input class="campo-txt" id="oCargo" value="${esc(f.cargo)}">
-        <label class="rotulo">Enviar a OS para</label>
-        <div id="oMails">${cli.emails.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${f.emails.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Este cliente não tem e-mail cadastrado.</p>'}</div>
-        <input class="campo-txt" id="oExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)" value="${esc(f.extra)}">
-        <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>`;
-      montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
-      document.getElementById('limpar').onclick = () => { montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; }); assinatura = null; tracos = 0; };
-      rodape(`${ic('ok')} Finalizar e enviar`);
+        <div class="segmento" id="aModo"><button type="button" class="${f.ausente ? '' : 'sel'}" data-v="0">Cliente presente</button><button type="button" class="${f.ausente ? 'sel ruim' : ''}" data-v="1">Cliente ausente</button></div>
+        <div id="boxAss" class="${f.ausente ? 'oculto' : ''}">
+          <label class="rotulo">Assine no quadro abaixo</label>
+          <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>
+          <label class="rotulo" for="aAss">Nome de quem assinou</label><input class="campo-txt" id="aAss" value="${esc(f.assinante)}" autocomplete="off">
+          <label class="rotulo" for="aCargo">Cargo / setor (opcional)</label><input class="campo-txt" id="aCargo" value="${esc(f.cargo)}"></div>
+        <div id="boxAus" class="${f.ausente ? '' : 'oculto'}"><label class="rotulo" for="aMot">Por que não há assinatura?</label>
+          <textarea class="campo-txt" id="aMot" placeholder="Ex.: fim de expediente, sem responsável no local">${esc(f.motivo)}</textarea>
+          <p class="suave" style="margin-top:6px">Fica destacado para a administração e no PDF.</p></div>
+        ${f.tipo === 'Final' ? `<label class="rotulo">Enviar a OS para</label><div id="aMails">${cli.emails.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${f.emails.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Este cliente não tem e-mail cadastrado.</p>'}</div>
+          <input class="campo-txt" id="aExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)" value="${esc(f.extra)}">
+          <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>` : `<p class="suave" style="margin-top:12px">O PDF deste apontamento vai só para a Kiton (contato@). O cliente recebe tudo na finalização.</p>`}
+        ${blocoHorario('hFim', 'Que horas terminou?')}`;
+      ligarHorario('hFim');
+      const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+      if (!f.ausente) montar();
+      document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+      document.querySelectorAll('#aModo button').forEach(b => b.onclick = () => {
+        f.ausente = b.dataset.v === '1';
+        document.querySelectorAll('#aModo button').forEach(x => x.className = x === b ? 'sel' + (f.ausente ? ' ruim' : '') : '');
+        document.getElementById('boxAss').classList.toggle('oculto', f.ausente); document.getElementById('boxAus').classList.toggle('oculto', !f.ausente);
+        if (!f.ausente && !assinatura) montar();
+      });
+      rodape(`${ic('ok')} ${f.tipo === 'Final' ? 'Finalizar OS' : 'Salvar parcial'}`);
     }
   }
   function finalizar() {
     executar(async () => {
-      if (!assinatura || tracos < 1) throw new Error('Peça para o cliente assinar no quadro.');
-      if (!f.assinante) throw new Error('Informe o nome de quem assinou.');
-      const emails = [...f.emails, f.extra].filter(Boolean);
+      if (f.ausente && !f.motivo) throw new Error('Explique por que não há assinatura.');
+      if (!f.ausente && (!assinatura || tracos < 1)) throw new Error('Peça para o cliente assinar no quadro.');
+      if (!f.ausente && !f.assinante) throw new Error('Informe o nome de quem assinou.');
+      const emails = f.tipo === 'Final' ? [...(f.emails || []), f.extra].filter(Boolean) : [];
       if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
+      const horario = lerHorario('hFim');
       const geo = await localizacao();
-      const r = await api('salvarOS', { ...f, emails, fotos, assinatura, geo });
-      guardar('kc_os_rascunho', null);
-      barra(`<div class="dentro"><button class="acao preta" id="fim" type="button">Voltar ao início</button></div>`);
-      $app.innerHTML = `<div class="feito-tela"><div class="selo">${ic('ok')}</div><h1>OS ${esc(r.numero)} registrada</h1>
-        <p class="suave">${esc(f.cliente)} · assinada por ${esc(f.assinante)}</p>
-        ${r.enviada ? msg('ok', `Enviada para ${r.emails.length ? r.emails.join(', ') + ' e ' : ''}contato@kitonengenharia.com.br.`) : msg('erro', 'A OS foi salva, mas o e-mail não saiu. Em "Ordem de serviço" dá para tentar enviar de novo.')}
-        <a class="acao leve" href="${esc(r.link)}" target="_blank" rel="noopener" style="text-decoration:none">${ic('os')} Abrir o PDF</a></div>`;
-      document.getElementById('fim').onclick = () => carregarInicio();
+      const r = await api('apontarOS', { n: s.n, tipo: f.tipo, executado: f.executado, materiais: f.materiais, pendencias: f.pendencias, fotos,
+        assinatura: f.ausente ? '' : assinatura, assinante: f.assinante, cargo: f.cargo, ausente: f.ausente ? f.motivo : '', emails, horario, geo });
+      guardar(chave, null);
+      await recarregarDados();
+      telaEAgora(r);
     });
   }
   desenhar();
+}
+
+/** Depois do apontamento: outra OS aqui, outro cliente ou encerrar o dia. */
+function telaEAgora(r) {
+  topo('Ordem de serviço'); barra('');
+  const resultado = r.tipo === 'Final'
+    ? (r.enviada ? msg('ok', `OS ${r.numero} finalizada e enviada para ${r.emails.length ? r.emails.join(', ') + ' e ' : ''}contato@.`) : msg('erro', `OS ${r.numero} finalizada, mas o e-mail não saiu. A administração pode reenviar.`))
+    : msg('ok', `Apontamento parcial da OS ${r.numero} salvo (${String(r.horas).replace('.', ',')} h).`);
+  $app.innerHTML = `<div id="erro">${resultado}</div><h1>E agora?</h1><p class="suave">${esc(r.cliente)}</p>
+    <button type="button" class="opcao larga" id="eOutra" style="margin-bottom:10px">${ic('os')}<span>Outra OS neste cliente<small class="suave" style="display:block;font-weight:400">Continua no mesmo check-in</small></span></button>
+    <button type="button" class="opcao larga" id="eCliente" style="margin-bottom:10px">${ic('cliente')}<span>Vou para outro cliente<small class="suave" style="display:block;font-weight:400">Registra a saída deste cliente</small></span></button>
+    <button type="button" class="opcao larga" id="eFim">${ic('interno')}<span>Encerrar o dia<small class="suave" style="display:block;font-weight:400">Retorno à base ou ida para casa</small></span></button>
+    ${r.link ? `<p style="margin-top:16px"><a class="link" href="${esc(r.link)}" target="_blank" rel="noopener">Abrir o PDF deste apontamento</a></p>` : ''}`;
+  document.getElementById('eOutra').onclick = () => telaOutraOSCliente(r.cliente);
+  document.getElementById('eCliente').onclick = () => executar(async () => {
+    const geo = await localizacao();
+    const x = await api('encerrarAtendimento', { destino: 'Outro cliente', geo });
+    await recarregarDados();
+    telaOS(x.semCheckin ? '' : `Saída de ${x.cliente} registrada às ${hora(x.quando)}. Escolha a próxima OS.`);
+  });
+  document.getElementById('eFim').onclick = () => {
+    $app.querySelector('h1').textContent = 'Para onde vai?';
+    ['eOutra', 'eCliente', 'eFim'].forEach(id => document.getElementById(id).remove());
+    $app.insertAdjacentHTML('beforeend', `<button type="button" class="opcao larga" data-d="Retorno à base" style="margin-bottom:10px">${ic('interno')}<span>Retorno à base</span></button>
+      <button type="button" class="opcao larga" data-d="Ida para casa">${ic('carro')}<span>Vou para casa</span></button>`);
+    document.querySelectorAll('[data-d]').forEach(b => b.onclick = () => executar(async () => {
+      const geo = await localizacao();
+      const x = await api('encerrarAtendimento', { destino: b.dataset.d, geo });
+      await recarregarDados();
+      const ab = est.dados.abertas || [];
+      const lembrete = ab.length ? (b.dataset.d === 'Retorno à base' ? `Ao chegar na base, registre o retorno da saída nº ${ab[0].n} (veículo e ferramentas).` : `A saída nº ${ab[0].n} continua aberta. Registre o retorno quando voltar à base.`) : '';
+      telaFeito(x.semCheckin ? 'Dia encerrado' : `Saída de ${x.cliente} registrada`, `${b.dataset.d}${x.quando ? ' · ' + hora(x.quando) : ''}`, x.semLocalizacao, x.tardio, lembrete);
+    }));
+  };
+}
+
+async function telaOutraOSCliente(cliente) {
+  topo('Ordem de serviço'); voltarInicio();
+  $app.innerHTML = `<h1>Outra OS em ${esc(cliente)}</h1><div id="erro"></div><div id="lista"><p class="suave">Carregando…</p></div>`;
+  document.getElementById('ini').onclick = () => telaEAgora({ cliente, numero: '', tipo: '' });
+  await executar(async () => {
+    const r = await api('minhasOS'); est.minhasOS = r;
+    const daqui = r.abertas.filter(o => o.cliente === cliente);
+    document.getElementById('lista').innerHTML = (daqui.length ? daqui.map(o => cartaoOS(o)).join('') : msg('info', 'Nenhuma outra OS sua neste cliente.')) +
+      `<button class="acao" id="nova" type="button">${ic('os')} Abrir nova OS neste cliente</button>`;
+    document.querySelectorAll('[data-os]').forEach(b => b.onclick = () => telaIniciarOS(daqui.find(o => o.numero === b.dataset.os)));
+    document.getElementById('nova').onclick = () => telaNovaOSCampo({ cliente });
+  });
+}
+
+// ---------- administração: painel de OS ----------
+async function adminOS(box) {
+  const h = new Date(), mes = `${h.getFullYear()}-${doisDig(h.getMonth() + 1)}`;
+  box.innerHTML = `<h1>Ordens de serviço</h1><button class="acao" id="progAdm" type="button" style="margin-top:0">${ic('calib')} Programar OS</button>
+    <input class="campo-txt" id="mesOS" type="month" value="${mes}" style="margin-top:12px"><div id="painel" style="margin-top:12px"></div>`;
+  document.getElementById('progAdm').onclick = () => telaProgramarOS();
+  let filtro = '';
+  const carregar = () => executar(async () => {
+    const r = await api('painelOS', { mes: document.getElementById('mesOS').value });
+    const L = r.lista;
+    const grupos = [
+      ['Programada', 'Programadas', o => o.status === 'Programada' && !o.atrasada, ''],
+      ['Atrasada', 'Atrasadas p/ iniciar', o => o.atrasada, 'vermelho'],
+      ['Andamento', 'Em andamento', o => o.status === 'Em andamento' && !o.parada, 'amarelo'],
+      ['Parada', 'Paradas', o => o.parada, 'laranja'],
+      ['Finalizada', 'Finalizadas', o => o.status === 'Finalizada', 'verde'],
+      ['Cancelada', 'Canceladas', o => o.status === 'Cancelada', '']
+    ];
+    const fin = L.filter(o => o.status === 'Finalizada');
+    const cnt = (lista, k, v) => lista.filter(o => o[k] === v).length;
+    const visiveis = filtro ? L.filter(grupos.find(g => g[0] === filtro)[2]) : L;
+    document.getElementById('painel').innerHTML = `<div class="cal-resumo" style="grid-template-columns:repeat(3,1fr)">` +
+      grupos.map(g => `<button type="button" class="cal-qd ${g[3]}${filtro === g[0] ? ' ativo' : ''}" data-f="${g[0]}"><b>${L.filter(g[2]).length}</b><span>${g[1]}</span></button>`).join('') + `</div>
+      <div class="cartao" style="margin-top:12px"><div class="t">Execução das finalizadas (${fin.length})</div><table><tbody>
+        <tr><td>Iniciadas antes do programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'Antes do programado')}</td></tr>
+        <tr><td>Iniciadas no dia programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'No dia programado')}</td></tr>
+        <tr><td>Iniciadas depois do programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'Depois do programado')}</td></tr>
+        <tr><td>Concluídas dentro do previsto</td><td class="n">${cnt(fin, 'prazo', 'Dentro do previsto')}</td></tr>
+        <tr><td>Concluídas após o previsto</td><td class="n">${cnt(fin, 'prazo', 'Após o previsto')}</td></tr>
+        <tr><td>Horas trabalhadas</td><td class="n">${String(Math.round(fin.reduce((s, o) => s + o.horas, 0) * 10) / 10).replace('.', ',')}</td></tr>
+      </tbody></table></div>
+      ${r.porTecnico.length ? `<div class="cartao"><div class="t">Por técnico no mês</div><table><thead><tr><th>Técnico</th><th class="n">OS</th><th class="n">Horas</th><th class="n">Final.</th><th class="n">No prazo</th><th class="n">Sem assin.</th></tr></thead><tbody>
+        ${r.porTecnico.map(t => `<tr><td>${esc(t.nome)}</td><td class="n">${t.os}</td><td class="n">${String(t.horas).replace('.', ',')}</td><td class="n">${t.finalizadas}</td><td class="n">${t.noPrazo}${t.aposPrazo ? ` / <span style="color:var(--vermelho-esc)">${t.aposPrazo} após</span>` : ''}</td><td class="n">${t.ausente}</td></tr>`).join('')}
+      </tbody></table></div>` : ''}
+      <h2>${filtro ? esc(grupos.find(g => g[0] === filtro)[1]) : 'Todas as OS'} (${visiveis.length})</h2>
+      ${visiveis.length ? visiveis.map(o => cartaoOS(o, `<span class="selo-txt" style="margin-left:4px">${esc(o.tecnicos.join(', '))}</span>`)).join('') : msg('info', 'Nenhuma OS neste filtro.')}`;
+    document.querySelectorAll('#painel [data-f]').forEach(b => b.onclick = () => { filtro = filtro === b.dataset.f ? '' : b.dataset.f; carregar(); });
+    document.querySelectorAll('#painel [data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os, true));
+  });
+  document.getElementById('mesOS').onchange = carregar; carregar();
+}
+
+function adminEditarOS(o) {
+  const box = document.getElementById('adm');
+  if (!box) return;
+  const edita = ['Programada', 'Em andamento'].includes(o.status);
+  box.innerHTML = (edita ? `<h2>Alterar</h2>
+    <label class="rotulo">Técnicos (quem vai executar ou continuar)</label>${chips('admTec', [...new Set([...(est.dados.equipeCampo || est.dados.colaboradores), ...o.tecnicos])], '')}
+    <label class="rotulo" for="admLocal">Local / setor</label><input class="campo-txt" id="admLocal" value="${esc(o.local)}">
+    ${o.status === 'Programada' ? `<label class="rotulo" for="admIni">Início previsto</label><input class="campo-txt" id="admIni" type="datetime-local" value="${esc(o.inicioPrevIso)}">
+    <label class="rotulo" for="admFim">Término previsto</label><input class="campo-txt" id="admFim" type="datetime-local" value="${esc(o.fimPrevIso)}">` : ''}
+    <button class="acao" id="admSalvar" type="button">Salvar alterações</button>
+    <button class="acao leve" id="admCancelar" type="button">Cancelar OS</button>` : '') +
+    (o.status === 'Finalizada' && /^Erro/.test(o.envio) ? `<button class="acao" id="admReenv" type="button">Reenviar ao cliente</button>` : '');
+  if (edita) {
+    document.querySelectorAll('#admTec .pessoa').forEach(b => { b.classList.toggle('sel', o.tecnicos.includes(b.dataset.v)); b.onclick = () => b.classList.toggle('sel'); });
+    document.getElementById('admSalvar').onclick = () => executar(async () => {
+      const ini = document.getElementById('admIni');
+      await api('editarOS', { numero: o.numero, tecnicos: lerEquipe('admTec'), local: document.getElementById('admLocal').value,
+        inicioPrev: ini ? ini.value : '', fimPrev: ini ? document.getElementById('admFim').value : '' });
+      await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS alterada. A agenda foi atualizada.');
+    });
+    document.getElementById('admCancelar').onclick = () => executar(async () => {
+      const motivo = prompt('Motivo do cancelamento:') || '';
+      if (!motivo.trim()) return;
+      await api('cancelarOS', { numero: o.numero, motivo });
+      await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS cancelada e retirada da agenda.');
+    });
+  }
+  const re = document.getElementById('admReenv');
+  if (re) re.onclick = () => executar(async () => { await api('reenviarOS', { numero: o.numero }); document.getElementById('erro').innerHTML = msg('ok', 'OS reenviada.'); });
 }
 
 /** Quadro de assinatura com dedo ou caneta. Devolve PNG com fundo branco. */
