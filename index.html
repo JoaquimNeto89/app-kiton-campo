@@ -28,6 +28,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .topo .ajuda{background:#1E2227;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#25D366}
 .rodape{margin:28px 0 0;text-align:center;font-size:12.5px;line-height:1.5;color:var(--cinza)}
 .rodape b{font-weight:600;color:var(--texto)}
+.ir-inicio{all:unset;display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer}
+.ir-inicio:focus-visible{outline:3px solid var(--amarelo);outline-offset:2px;border-radius:8px}
 .topo .marca{font:700 19px/1 var(--tit);letter-spacing:.2px;flex:1}
 .topo .marca span{display:block;font:500 13px/1.3 var(--corpo);color:#B9C0C8;letter-spacing:0}
 .topo .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center}
@@ -222,8 +224,7 @@ select.campo-txt{appearance:auto}
 </head>
 <body>
 <header class="topo">
-  <img src="logo-redondo.png?v=2" alt="">
-  <div class="marca" id="marca">Kiton Hub</div>
+  <button type="button" class="ir-inicio" id="irInicio" aria-label="Ir para a tela inicial"><img src="logo-redondo.png?v=2" alt=""><div class="marca" id="marca">Kiton Hub</div></button>
   <a class="ajuda" id="btnAjuda" href="#" target="_blank" rel="noopener" aria-label="Ajuda pelo WhatsApp"><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 19z"/><path d="M9.5 9.5c0 3 2 5 5 5l1-1.4-1.6-.8-.8.8c-1-.4-1.8-1.2-2.2-2.2l.8-.8-.8-1.6z" fill="currentColor" stroke="none"/></svg></a>
   <button class="icone-btn oculto" id="btnSair" type="button" aria-label="Sair do app"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg></button>
 </header>
@@ -324,6 +325,13 @@ function erroTela(t) {
 function sair() {
   est.token = null; est.usuario = null; est.dados = null; guardar('kc_token', null); telaLogin();
 }
+// logo e nome no topo levam à tela inicial; em tela com formulário preenchido, confirma antes
+document.getElementById('irInicio').onclick = () => {
+  if (!est.token || !est.dados || telaAtual === est.usuario.nome) return;
+  const preenchido = [...$app.querySelectorAll('input:not([type=checkbox]):not([type=month]):not([type=file]), textarea')].some(e => e.value && e.value !== e.defaultValue) || $app.querySelector('canvas');
+  if (preenchido && !confirm('Voltar para a tela inicial? O que não foi salvo nesta tela será perdido.')) return;
+  carregarInicio();
+};
 document.getElementById('btnSair').onclick = () => { if (confirm('Sair do app neste celular?')) sair(); };
 
 // ---------- calibração na lista de itens ----------
