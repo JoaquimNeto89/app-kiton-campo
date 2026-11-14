@@ -1,0 +1,12 @@
+const {chromium}=require('playwright');const {call,sheets}=require('./lib.js');require('./aprsetup.js')(sheets);
+require('fs');eval(require('fs').readFileSync('t6.js','utf8').split('\n').slice(1,13).join('\n'));
+(async()=>{const b=await chromium.launch();const c=await b.newContext({viewport:{width:390,height:844}});const p=await c.newPage();p.on('pageerror',e=>console.log('PAGEERR',e.message));
+ await p.route('**/config.js',r=>r.fulfill({body:"window.API_URL='https://script.google.com/macros/s/X/exec';",contentType:'application/javascript'}));
+ await p.route('https://fonts.**',r=>r.abort());
+ await p.route('https://script.google.com/**',r=>{let res;try{res=call(JSON.parse(r.request().postData()))}catch(e){res={ok:false,erro:String(e)}};r.fulfill({body:JSON.stringify(res),contentType:'application/json'})});
+ await p.goto('file:///home/claude/app-kiton-campo/index.html');await p.waitForTimeout(300);
+ await p.click(`[data-n="Eng. Joaquim Neto"]`);await p.fill('#pin','731846');await p.click('#entrar');await p.waitForTimeout(500);
+ await p.click('#btnMenu');await p.click('[data-menu="a-os"]');await p.waitForTimeout(600);await p.click('#painel [data-os]');await p.waitForTimeout(500);
+ const el=await p.$('.pdfs');await el.scrollIntoViewIfNeeded();await p.screenshot({path:'g_pdfs.png'});
+ const [pop]=await Promise.all([p.waitForEvent('popup'),p.click('#pdfComp')]);await p.waitForTimeout(800);console.log('popup url',pop.url());
+ await b.close();})();

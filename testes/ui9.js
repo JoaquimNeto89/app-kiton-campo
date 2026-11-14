@@ -1,0 +1,14 @@
+const {chromium}=require('playwright');const {call,sheets}=require('./lib.js');require('./aprsetup.js')(sheets);
+(async()=>{const b=await chromium.launch();const c=await b.newContext({viewport:{width:390,height:844}});const p=await c.newPage();
+ p.on('pageerror',e=>console.log('PAGEERR',e.message));p.on('dialog',d=>{console.log('DIALOG',d.message());d.accept();});
+ await p.route('**/config.js',r=>r.fulfill({body:"window.API_URL='https://script.google.com/macros/s/X/exec';",contentType:'application/javascript'}));
+ await p.route('https://fonts.**',r=>r.abort());
+ await p.route('https://script.google.com/**',r=>{let res;try{res=call(JSON.parse(r.request().postData()))}catch(e){res={ok:false,erro:String(e)}};r.fulfill({body:JSON.stringify(res),contentType:'application/json'})});
+ await p.goto('file:///home/claude/app-kiton-campo/index.html');await p.waitForTimeout(300);
+ await p.click('#irInicio');await p.waitForTimeout(200);console.log('login ainda:',await p.isVisible('#pin')||await p.isVisible('[data-n]'));
+ await p.click(`[data-n="Eng. Joaquim Neto"]`);await p.fill('#pin','123456');await p.click('#entrar');await p.waitForTimeout(300);
+ await p.fill('#p1','731846');await p.fill('#p2','731846');await p.click('#ok');await p.waitForTimeout(400);
+ await p.click('#mAdmin');await p.waitForTimeout(500);await p.click('#irInicio');await p.waitForTimeout(400);console.log('home:',await p.isVisible('#mOS'));
+ await p.click('#mOS');await p.waitForTimeout(300);await p.click('#bAgora');await p.waitForTimeout(200);await p.fill('#nLocal','Prensa');
+ await p.click('#irInicio');await p.waitForTimeout(400);console.log('home2:',await p.isVisible('#mOS'));
+ await p.screenshot({path:'d_top.png',clip:{x:0,y:0,width:390,height:70}});await b.close();})();

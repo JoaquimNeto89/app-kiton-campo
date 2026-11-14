@@ -1,0 +1,15 @@
+const {call,sheets,drive}=require('./lib.js');require('./aprsetup.js')(sheets);
+const tk=n=>{let r=call({acao:'login',nome:n,pin:'123456'});return call({acao:'trocarPin',token:r.token,novo:'731846'}).token;};
+const lz=tk('Eng. Luiz Henrique'),adm=tk('Eng. Joaquim Neto');
+const resp={};call({acao:'inicio',token:lz}).apr.itens.forEach(i=>resp[i.id]='Sim');resp.g4='N/A';resp.d3='N/A';
+const img='data:image/jpeg;base64,'+require('fs').readFileSync('foto.jpg').toString('base64');
+const sig='data:image/png;base64,'+require('fs').readFileSync('/home/claude/app-kiton-campo/icon-192.png').toString('base64');
+call({acao:'iniciarOS',token:lz,cliente:'Perfileve',tipo:'Manutenção corretiva',local:'Quadro geral',equipe:['Henrique Barrocal'].slice(0,0),apr:{pt:'Sim',ptNumero:'PT-88',ptEmissor:'Carlos Souza, técnico de segurança',triagem:{zona:true,altura:false,confinado:false,sep:false},modelo:'Completa',responsavel:'Eng. Luiz Henrique',condicao:'Desenergizada',respostas:resp,riscos:[{risco:'Trabalho em altura',medida:'Cinto paraquedista com talabarte duplo e linha de vida'},{risco:'Ruído',medida:'Protetor auricular tipo plug'}],declaracao:true},geo:{lat:-23.4123,lng:-51.9311}});
+let s=call({acao:'minhasOS',token:lz}).sessao;
+call({acao:'apontarOS',token:lz,n:s.n,tipo:'Parcial',executado:'Desmontagem',assinatura:sig,assinante:'Getulio',cargo:'Manutenção',fotos:[img]});
+call({acao:'iniciarOS',token:lz,numero:'2026-0001',equipe:[],apr:{pt:'Não',triagem:{zona:false,altura:false,confinado:false,sep:false},modelo:'Completa',responsavel:'Eng. Luiz Henrique',condicao:'Sem intervenção elétrica',respostas:resp,riscos:[],declaracao:true}});
+s=call({acao:'minhasOS',token:lz}).sessao;
+call({acao:'apontarOS',token:lz,n:s.n,tipo:'Final',executado:'Montagem e testes',assinatura:sig,assinante:'Getulio',cargo:'Manutenção',fotos:[img,img],emails:[],incluirAPR:false});
+let r=call({acao:'pdfComAPR',token:lz,numero:'2026-0001'});console.log(r);
+console.log('cache',call({acao:'pdfComAPR',token:adm,numero:'2026-0001'}).link===r.link);
+const k=r.link.match(/FILE\w+/)[0];require('fs').writeFileSync('os_aprc.html',Buffer.from(drive[k].bytes).toString('utf8'));

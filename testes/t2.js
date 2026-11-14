@@ -1,0 +1,10 @@
+const {call,sheets}=require('./lib.js');
+sheets['Clientes'][0].push('Cadastrado por');
+const show=(t,x)=>console.log(t,'=>',JSON.stringify(x).slice(0,220));
+let r=call({acao:'login',nome:'Eng. Luiz Henrique',pin:'123456'});r=call({acao:'trocarPin',token:r.token,novo:'482915'});const t=r.token;
+show('nao existe',call({acao:'checkin',token:t,cliente:'Perfil Sul'}));
+show('nao padrao',call({acao:'checkin',token:t,cliente:'perfil sul ltda',novo:true,cidade:'Sarandi'}));
+show('sem cidade',call({acao:'checkin',token:t,cliente:'Perfil Sul',novo:true}));
+show('dup',call({acao:'checkin',token:t,cliente:'Perfiléve',novo:true,cidade:'Maringá'}));
+show('novo',call({acao:'checkin',token:t,cliente:'Perfil Sul',novo:true,cidade:'Sarandi-PR',geo:{lat:-23.44,lng:-51.87,acc:10}}));
+show('clientes',sheets['Clientes'].slice(-1));

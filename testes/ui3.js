@@ -1,0 +1,25 @@
+const {chromium}=require('playwright');const {call,sheets}=require('./lib.js');
+sheets['Clientes'][0].push('Cadastrado por');
+const tk=n=>{let r=call({acao:'login',nome:n,pin:'123456'});return call({acao:'trocarPin',token:r.token,novo:'482915'}).token;};
+const t1=tk('Henrique Barrocal'),t2=tk('Eng. Luiz Henrique');
+call({acao:'checkin',token:t1,cliente:'Perfilev Aluminio',novo:true,cidade:'Maringá-PR',geo:{lat:-23.41,lng:-51.94,acc:10}});
+call({acao:'salvarDespesa',token:t1,categoria:'Alimentação',valor:30,cliente:'Perfilev Aluminio',semFotoMotivo:'x'});
+call({acao:'checkin',token:t2,cliente:'Metalurgica Nova Era',novo:true,cidade:'Sarandi-PR',geo:{lat:-23.44,lng:-51.87,acc:10}});
+(async()=>{
+ const b=await chromium.launch();const c=await b.newContext({viewport:{width:390,height:844}});
+ const p=await c.newPage();p.on('pageerror',e=>console.log('PAGEERR',e.message));p.on('dialog',d=>d.accept());
+ await p.route('**/config.js',r=>r.fulfill({body:"window.API_URL='https://script.google.com/macros/s/X/exec';",contentType:'application/javascript'}));
+ await p.route('https://fonts.**',r=>r.abort());
+ await p.route('https://script.google.com/**',r=>{let res;try{res=call(JSON.parse(r.request().postData()))}catch(e){res={ok:false,erro:String(e)}};r.fulfill({body:JSON.stringify(res),contentType:'application/json'})});
+ await p.goto('file:///home/claude/app-kiton-campo/index.html');await p.waitForTimeout(300);
+ await p.click('[data-n="Eng. Joaquim Neto"]');await p.fill('#pin','123456');await p.click('#entrar');await p.waitForTimeout(300);
+ await p.fill('#p1','731846');await p.fill('#p2','731846');await p.click('#ok');await p.waitForTimeout(300);
+ await p.screenshot({path:'k1.png'});
+ await p.click('#mAdmin');await p.waitForTimeout(400);await p.click('[data-t="cli"]');await p.waitForTimeout(400);await p.screenshot({path:'k2.png',fullPage:true});
+ await p.click('[data-i="0"] [data-a="juntar"]');await p.selectOption('[data-i="0"] [data-k="destino"]','Perfileve');await p.screenshot({path:'k3.png',fullPage:true});
+ await p.click('[data-i="0"] [data-ok="juntar"]');await p.waitForTimeout(400);
+ await p.click('[data-i="0"] [data-a="aceitar"]');await p.fill('[data-i="0"] [data-k="novoNome"]','Metalúrgica Nova Era');await p.fill('[data-i="0"] [data-e="0"]','compras@novaera.test');
+ await p.screenshot({path:'k4.png',fullPage:true});await p.click('[data-i="0"] [data-ok="aceitar"]');await p.waitForTimeout(400);await p.screenshot({path:'k5.png',fullPage:true});
+ console.log(JSON.stringify(sheets['Clientes'].map(r=>r[0]+'|'+r[2]+'|'+r[7]+'|'+r[11])));
+ console.log(JSON.stringify(sheets['Check-ins'].map(r=>r[2]+'|'+r[9])), JSON.stringify(sheets['Despesas'].map(r=>r[6])));
+ await b.close();})();
