@@ -345,12 +345,20 @@ function ligarHorario(id) {
     if (outro && !document.getElementById(id).value) document.getElementById(id).value = agoraLocal();
   });
 }
+/** "dd/MM/yyyy HH:mm" -> "yyyy-MM-ddTHH:mm" */
+const isoDe = t => { const m = String(t || '').match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/); return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}` : ''; };
+/** Lê o horário e confere que não é antes de `minimo` (texto dd/MM/yyyy HH:mm). */
+function lerHorarioApos(id, minimo, oque) {
+  const v = lerHorario(id), min = isoDe(minimo);
+  if (v && min && v < min) throw new Error(`O horário informado é antes ${oque} (${minimo}). Confira a data e a hora.`);
+  return v;
+}
 function lerHorario(id) {
   const outro = document.querySelector(`#${id}-seg .sel`).dataset.v === 'outro';
   if (!outro) return '';
   const v = document.getElementById(id).value;
   if (!v) throw new Error('Informe o horário ou escolha "Agora".');
-  if (v > agoraLocal()) throw new Error('O horário não pode ser no futuro.');
+  if (v > agoraLocal()) throw new Error('O horário informado está no futuro. Use "Agora" ou um horário que já passou.');
   return v;
 }
 
@@ -785,7 +793,7 @@ function telaRetorno(s) {
   document.getElementById('ok').onclick = () => executar(async () => {
     const valor = /colaborador/i.test(abast) ? Number(document.getElementById('valor').value.replace(/\./g, '').replace(',', '.')) || 0 : 0;
     if (/colaborador/i.test(abast) && !valor) throw new Error('Informe quanto você pagou no abastecimento.');
-    const horario = lerHorario('hRet');
+    const horario = lerHorarioApos('hRet', s.saida, 'da saída');
     const problemas = Object.keys(estado).filter(p => estado[p] !== 'OK').map(p => ({ pat: p, situacao: estado[p], obs: document.querySelector(`[data-obs="${CSS.escape(p)}"]`).value }));
     const geo = await localizacao();
     const r = await api('registrarRetorno', { horario, n: s.n, abastecimento: abast, valor, foto: fotoCupom, problemas, obs: document.getElementById('obs').value, geo });
@@ -847,7 +855,7 @@ async function telaAdmin(aba) {
           <tr><td>Abastecimentos pagos pela Kiton</td><td class="n">${p.abastKiton}</td></tr>
           <tr><td>Lançados depois</td><td class="n">${p.tardios ? `<span class="selo-txt laranja">${p.tardios}</span>` : '0'}</td></tr>
           <tr><td>Dias em obra (check-in)</td><td class="n">${p.diasObra}</td></tr>
-          <tr><td>Horas em obra</td><td class="n">${String(p.horasObra).replace('.', ',')}</td></tr>
+          <tr><td>Horas em obra</td><td class="n">${dur(p.horasObra)}</td></tr>
           <tr><td>Check-ins fora do raio</td><td class="n">${p.foraRaio ? `<span class="selo-txt laranja">${p.foraRaio}</span>` : '0'}</td></tr>
           <tr><td>Despesas aguardando conferência</td><td class="n">${reais(p.despPendente)}</td></tr>
           <tr><td><b>Reembolso aprovado a pagar</b></td><td class="n"><b>${reais(p.reembolsar)}</b></td></tr>
@@ -878,6 +886,8 @@ async function telaAdmin(aba) {
 }
 
 // ---------- utilidades novas ----------
+/** Duração legível: "7 min", "1 h 03 min". */
+const dur = h => { const m = Math.round((Number(h) || 0) * 60); if (m < 60) return m + ' min'; const r = m % 60; return Math.floor(m / 60) + ' h' + (r ? ' ' + String(r).padStart(2, '0') + ' min' : ''); };
 const reais = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 const numBR = v => Number(String(v || '').replace(/\./g, '').replace(',', '.')) || 0;
 const hojeISO = () => agoraLocal().slice(0, 10);
@@ -965,7 +975,7 @@ function telaCheckin() {
   const selo = s => s === 'No local' ? '<span class="selo-txt verde">No local</span>' : s === 'Fora do raio' ? '<span class="selo-txt laranja">Fora do raio do cliente</span>' :
     s === 'Sem GPS' ? '<span class="selo-txt amarelo">Sem localização</span>' : s ? `<span class="selo-txt amarelo">${esc(s)}</span>` : '';
   const historico = (d.ultimosCheckins || []).length ? `<h2>Últimos atendimentos</h2>${d.ultimosCheckins.map(c => `<div class="cartao"><div class="t">${esc(c.cliente)}</div>
-    <p class="suave" style="margin:2px 0 0">${esc(c.chegada)} às ${esc(hora(c.saida))} · ${String(c.horas).replace('.', ',')} h</p>${selo(c.situacao)}</div>`).join('')}` : '';
+    <p class="suave" style="margin:2px 0 0">${esc(c.chegada)} às ${esc(hora(c.saida))} · ${dur(c.horas)}</p>${selo(c.situacao)}</div>`).join('')}` : '';
   if (ck) {
     $app.innerHTML = `<h1>Check-in em obra</h1>
       <section class="etiqueta campo"><span class="furo"></span><span class="estado">No cliente desde ${esc(hora(ck.chegada))}</span>
@@ -1072,10 +1082,10 @@ function telaCheckout(ck) {
   document.getElementById('ant').onclick = () => telaCheckin();
   document.getElementById('ok').onclick = () => executar(async () => {
     if (!destino) throw new Error('Escolha para onde vai.');
-    const horario = lerHorario('hCo');
+    const horario = lerHorarioApos('hCo', ck.chegada, 'da chegada no cliente');
     const geo = await localizacao();
     const r = await api('encerrarAtendimento', { destino, horario, geo, obs: document.getElementById('obs').value });
-    telaFeito(`Saída de ${ck.cliente} registrada`, `Saída às ${hora(r.quando)} · ${String(r.horas).replace('.', ',')} h no cliente`, r.semLocalizacao, r.tardio);
+    telaFeito(`Saída de ${ck.cliente} registrada`, `Saída às ${hora(r.quando)} · ${dur(r.horas)} no cliente`, r.semLocalizacao, r.tardio);
   });
 }
 
@@ -1097,7 +1107,7 @@ function seloOS(o) {
 }
 const cartaoOS = (o, extra = '') => `<button type="button" class="linha" data-os="${esc(o.numero)}" style="align-items:flex-start">
   <span style="flex:1"><span class="pat" style="margin:0 6px 0 0">OS ${esc(o.numero)}</span>${esc(o.cliente)}
-  <small>${esc(quandoOS(o))}${o.local ? ' · ' + esc(o.local) : ''}${o.tipo ? ' · ' + esc(o.tipo) : ''}${o.apontamentos ? ` · ${o.apontamentos} apontamento(s), ${String(o.horas).replace('.', ',')} h` : ''}</small>
+  <small>${esc(quandoOS(o))}${o.local ? ' · ' + esc(o.local) : ''}${o.tipo ? ' · ' + esc(o.tipo) : ''}${o.apontamentos ? ` · ${o.apontamentos} apontamento(s), ${dur(o.horas)}` : ''}</small>
   <span style="display:block;margin-top:6px">${seloOS(o)}${extra}</span></span><span class="fim">${ic('seta')}</span></button>`;
 
 async function telaOS(aviso) {
@@ -1140,13 +1150,13 @@ async function telaOSDetalhe(numero, admin) {
       <div><dt>Técnicos</dt><dd>${esc(o.tecnicos.join(', '))}</dd></div>
       ${o.solicitante ? `<div><dt>Solicitante</dt><dd>${esc(o.solicitante)}</dd></div>` : ''}
       ${o.solicitacao ? `<div><dt>Solicitação</dt><dd style="font-weight:400;text-align:left">${esc(o.solicitacao)}</dd></div>` : ''}
-      ${o.apontamentos ? `<div><dt>Trabalhado</dt><dd>${String(o.horas).replace('.', ',')} h em ${o.apontamentos} apontamento(s)</dd></div>` : ''}
+      ${o.apontamentos ? `<div><dt>Trabalhado</dt><dd>${dur(o.horas)} em ${o.apontamentos} apontamento(s)</dd></div>` : ''}
       ${o.inicioVsPrevisto ? `<div><dt>Início</dt><dd>${esc(o.inicioVsPrevisto)}</dd></div>` : ''}
       ${o.prazo ? `<div><dt>Prazo</dt><dd>${esc(o.prazo)}</dd></div>` : ''}
       ${o.motivoCancel ? `<div><dt>Cancelamento</dt><dd>${esc(o.motivoCancel)}</dd></div>` : ''}
     </dl>
     ${o.pdf ? `<a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener" style="text-decoration:none">${ic('os')} Abrir PDF final</a>` : ''}
-    ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + String(a.horas).replace('.', ',') + ' h' : ' · em execução'}</div>
+    ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + dur(a.horas) : ' · em execução'}</div>
       <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
       ${a.tipo ? `<span class="selo-txt ${a.tipo === 'Final' ? 'verde' : 'amarelo'}">${a.tipo === 'Final' ? 'Finalização' : 'Parcial'}</span>` : ''}
       ${a.ausente ? `<span class="selo-txt laranja">Cliente ausente</span>` : a.assinante ? `<span class="selo-txt">Assinado por ${esc(a.assinante)}</span>` : ''}
@@ -1373,7 +1383,7 @@ function fluxoApontar(s) {
       if (!f.ausente && !f.assinante) throw new Error('Informe o nome de quem assinou.');
       const emails = f.tipo === 'Final' ? [...(f.emails || []), f.extra].filter(Boolean) : [];
       if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
-      const horario = lerHorario('hFim');
+      const horario = lerHorarioApos('hFim', s.inicio, 'do início do apontamento');
       const geo = await localizacao();
       const r = await api('apontarOS', { n: s.n, tipo: f.tipo, executado: f.executado, materiais: f.materiais, pendencias: f.pendencias, fotos,
         assinatura: f.ausente ? '' : assinatura, assinante: f.assinante, cargo: f.cargo, ausente: f.ausente ? f.motivo : '', emails, horario, geo });
@@ -1390,7 +1400,7 @@ function telaEAgora(r) {
   topo('Ordem de serviço'); barra('');
   const resultado = r.tipo === 'Final'
     ? (r.enviada ? msg('ok', `OS ${r.numero} finalizada e enviada para ${r.emails.length ? r.emails.join(', ') + ' e ' : ''}contato@.`) : msg('erro', `OS ${r.numero} finalizada, mas o e-mail não saiu. A administração pode reenviar.`))
-    : msg('ok', `Apontamento parcial da OS ${r.numero} salvo (${String(r.horas).replace('.', ',')} h).`);
+    : msg('ok', `Apontamento parcial da OS ${r.numero} salvo (${dur(r.horas)}).`);
   $app.innerHTML = `<div id="erro">${resultado}</div><h1>E agora?</h1><p class="suave">${esc(r.cliente)}</p>
     <button type="button" class="opcao larga" id="eOutra" style="margin-bottom:10px">${ic('os')}<span>Outra OS neste cliente<small class="suave" style="display:block;font-weight:400">Continua no mesmo check-in</small></span></button>
     <button type="button" class="opcao larga" id="eCliente" style="margin-bottom:10px">${ic('cliente')}<span>Vou para outro cliente<small class="suave" style="display:block;font-weight:400">Registra a saída deste cliente</small></span></button>
@@ -1462,10 +1472,10 @@ async function adminOS(box) {
         <tr><td>Iniciadas depois do programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'Depois do programado')}</td></tr>
         <tr><td>Concluídas dentro do previsto</td><td class="n">${cnt(fin, 'prazo', 'Dentro do previsto')}</td></tr>
         <tr><td>Concluídas após o previsto</td><td class="n">${cnt(fin, 'prazo', 'Após o previsto')}</td></tr>
-        <tr><td>Horas trabalhadas</td><td class="n">${String(Math.round(fin.reduce((s, o) => s + o.horas, 0) * 10) / 10).replace('.', ',')}</td></tr>
+        <tr><td>Horas trabalhadas</td><td class="n">${dur(fin.reduce((s, o) => s + o.horas, 0))}</td></tr>
       </tbody></table></div>
       ${r.porTecnico.length ? `<div class="cartao"><div class="t">Por técnico no mês</div><table><thead><tr><th>Técnico</th><th class="n">OS</th><th class="n">Horas</th><th class="n">Final.</th><th class="n">No prazo</th><th class="n">Sem assin.</th></tr></thead><tbody>
-        ${r.porTecnico.map(t => `<tr><td>${esc(t.nome)}</td><td class="n">${t.os}</td><td class="n">${String(t.horas).replace('.', ',')}</td><td class="n">${t.finalizadas}</td><td class="n">${t.noPrazo}${t.aposPrazo ? ` / <span style="color:var(--vermelho-esc)">${t.aposPrazo} após</span>` : ''}</td><td class="n">${t.ausente}</td></tr>`).join('')}
+        ${r.porTecnico.map(t => `<tr><td>${esc(t.nome)}</td><td class="n">${t.os}</td><td class="n">${dur(t.horas)}</td><td class="n">${t.finalizadas}</td><td class="n">${t.noPrazo}${t.aposPrazo ? ` / <span style="color:var(--vermelho-esc)">${t.aposPrazo} após</span>` : ''}</td><td class="n">${t.ausente}</td></tr>`).join('')}
       </tbody></table></div>` : ''}
       <h2>${filtro ? esc(grupos.find(g => g[0] === filtro)[1]) : 'Todas as OS'} (${visiveis.length})</h2>
       ${visiveis.length ? visiveis.map(o => cartaoOS(o, `<span class="selo-txt" style="margin-left:4px">${esc(o.tecnicos.join(', '))}</span>`)).join('') : msg('info', 'Nenhuma OS neste filtro.')}`;
@@ -1742,11 +1752,11 @@ async function adminPresenca(box) {
     });
     const selo = s => s === 'No local' ? 'verde' : s === 'Fora do raio' || s === 'Cliente novo' ? 'laranja' : 'amarelo';
     document.getElementById('pres').innerHTML = (Object.keys(pessoas).length ? `<div class="cartao"><table><thead><tr><th>Colaborador</th><th class="n">Dias</th><th class="n">Horas</th><th class="n">Fora</th></tr></thead><tbody>
-        ${Object.keys(pessoas).sort().map(k => `<tr><td>${esc(k)}</td><td class="n">${pessoas[k].dias.size}</td><td class="n">${pessoas[k].horas.toFixed(1).replace('.', ',')}</td><td class="n">${pessoas[k].fora ? `<span class="selo-txt laranja">${pessoas[k].fora}</span>` : '0'}</td></tr>`).join('')}
+        ${Object.keys(pessoas).sort().map(k => `<tr><td>${esc(k)}</td><td class="n">${pessoas[k].dias.size}</td><td class="n">${dur(pessoas[k].horas)}</td><td class="n">${pessoas[k].fora ? `<span class="selo-txt laranja">${pessoas[k].fora}</span>` : '0'}</td></tr>`).join('')}
       </tbody></table></div>` : msg('info', 'Nenhum check-in neste mês.')) +
       (r.semLocal.length ? `<p class="suave">Clientes sem localização: ${esc(r.semLocal.join(', '))}. Use o botão “Usar como local do cliente” num check-in feito lá.</p>` : '') +
       (r.visitas.length ? `<h2>Check-ins</h2>` + r.visitas.map(v => `<div class="cartao ${v.tardio ? 'tardio' : ''}"><div class="t">${esc(v.colaborador)} · ${esc(v.cliente)}</div>
-        <p class="suave" style="margin:2px 0 6px">${esc(v.chegada)}${v.saida ? ' às ' + esc(hora(v.saida)) + ' · ' + String(v.horas).replace('.', ',') + ' h' : ' · <b>sem saída registrada</b>'}${v.obs ? '<br>' + esc(v.obs) : ''}</p>
+        <p class="suave" style="margin:2px 0 6px">${esc(v.chegada)}${v.saida ? ' às ' + esc(hora(v.saida)) + ' · ' + dur(v.horas) : ' · <b>sem saída registrada</b>'}${v.obs ? '<br>' + esc(v.obs) : ''}</p>
         <span class="selo-txt ${selo(v.situacao)}">${esc(v.situacao)}${v.dist !== '' && v.dist != null && v.situacao !== 'No local' ? ' · ' + distTxt(v.dist) : ''}</span>${v.tardio ? `<span class="selo-txt laranja">${esc(v.tardio)} lançada depois</span>` : ''}
         ${/^http/.test(v.mapa) ? `<a class="link" href="${esc(v.mapa)}" target="_blank" rel="noopener">Mapa</a>` : ''}
         ${v.situacao === 'Cliente sem localização' && v.lat !== '' ? ` · <button type="button" class="link" data-loc="${esc(v.n)}">Usar como local do cliente</button>` : ''}</div>`).join('') : '');

@@ -948,7 +948,7 @@ function checkout_(u, req) {
   const g = req.geo || null;
   const cliente = clientes_().find(c => c.nome === txt_(l.get('Cliente'))) || null;
   const loc = situacaoLocal_(cliente, g);
-  const horas = chegou ? Math.round((quando.getTime() - chegou.getTime()) / 36e4) / 10 : '';
+  const horas = chegou ? horasDe_(chegou, quando) : '';
   set_(t, l._linha, 'Saída do cliente', quando);
   set_(t, l._linha, 'Saída lançada em', agora);
   set_(t, l._linha, 'Lat. saída', g ? g.lat : '');
@@ -1275,7 +1275,7 @@ function apontarOS_(u, req) {
   const fim = horarioInformado_(req.horario, agora);
   const ini = data_(la.get('Início'));
   if (ini && fim.getTime() < ini.getTime()) throw new Error('O fim não pode ser antes do início (' + fmt_(ini) + ').');
-  const horas = ini ? Math.round((fim.getTime() - ini.getTime()) / 36e4) / 10 : '';
+  const horas = ini ? horasDe_(ini, fim) : '';
   const ano = numero.split('-')[0];
   const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', ano, 'OS ' + numero]);
   const fotos = (req.fotos || []).filter(Boolean).slice(0, 6).map((f, i) => salvarImagem_(pasta, f, 'image/jpeg', 'Apontamento ' + req.n + ' - foto ' + (i + 1) + '.jpg'));
@@ -1292,7 +1292,7 @@ function apontarOS_(u, req) {
 
   // totais na OS
   const todos = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
-  const total = Math.round(todos.reduce((s, x) => s + (Number(x.get('Horas')) || 0), 0) * 10) / 10;
+  const total = Math.round(todos.reduce((s, x) => s + (Number(x.get('Horas')) || 0), 0) * 10000) / 10000;
   set_(b.os, lo._linha, 'Horas trabalhadas', total);
   set_(b.os, lo._linha, 'Apontamentos', todos.length);
   set_(b.os, lo._linha, 'Último apontamento', fim);
@@ -1307,17 +1307,17 @@ function apontarOS_(u, req) {
     const prevFim = data_(lo.get('Término previsto'));
     if (prevFim) set_(b.os, lo._linha, 'Prazo', fim.getTime() <= prevFim.getTime() ? 'Dentro do previsto' : 'Após o previsto');
     agendaFinal_(lo);
-    osInfo.pendencias = txt_(req.pendencias); osInfo.status = 'Finalizada';
+    osInfo.pendencias = txt_(req.pendencias); osInfo.status = 'Finalizada'; osInfo.finalizadaEm = fmt_(fim);
     pdf = pdfOS2_(osInfo, todos, 'final');
     link = pasta.createFile(pdf).getUrl();
     set_(b.os, lo._linha, 'PDF final', link);
-    try { enviarOS2_(osInfo, pdf, emails, 'final'); envio = 'Enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
+    try { enviarOS2_(osInfo, pdf, emails, 'final', todos); envio = 'Enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
     catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
     set_(b.os, lo._linha, 'Envio', envio);
   } else {
     pdf = pdfOS2_(osInfo, todos.filter(x => txt_(x.get('Nº')) === txt_(req.n)), 'parcial');
     link = pasta.createFile(pdf).getUrl();
-    try { enviarOS2_(osInfo, pdf, [], 'parcial'); envio = 'Enviado para a Kiton'; }
+    try { enviarOS2_(osInfo, pdf, [], 'parcial', todos.filter(x => txt_(x.get('Nº')) === txt_(req.n))); envio = 'Enviado para a Kiton'; }
     catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
   }
   set_(b.ap, la._linha, 'PDF do apontamento', link);
@@ -1391,66 +1391,151 @@ function imgDrive_(id) {
   catch (e) { return ''; }
 }
 
+/** Horas com resolução de minuto (ex.: 1,05 = 1 h 03 min). */
+function horasDe_(a, b) { return Math.round(Math.round((b.getTime() - a.getTime()) / 60000) / 60 * 10000) / 10000; }
+/** "7 min", "1 h 03 min", "12 h". */
+function dur_(horas) {
+  const m = Math.round((Number(horas) || 0) * 60);
+  if (m < 60) return m + ' min';
+  const h = Math.floor(m / 60), r = m % 60;
+  return h + ' h' + (r ? ' ' + ('0' + r).slice(-2) + ' min' : '');
+}
+
+const LINK_MAPS = 'https://maps.app.goo.gl/xktin9wYpJhGkDfY8';
+const SITE = 'www.kitonengenharia.com.br';
+const WHATS_KITON = '554441410714', WHATS_RT = '5544997311914';
+
+/** Resumo de execução da OS a partir dos apontamentos encerrados. */
+function resumoExecucao_(aps) {
+  const ord = aps.filter(a => txt_(a.get('Fim'))).sort((a, c) => (data_(a.get('Início')) || 0) - (data_(c.get('Início')) || 0));
+  const equipe = {};
+  ord.forEach(a => lista2_(a.get('Equipe')).forEach(n => equipe[n] = 1));
+  const ini = ord.length ? data_(ord[0].get('Início')) : null, fim = ord.length ? data_(ord[ord.length - 1].get('Fim')) : null;
+  return {
+    ini, fim, total: ord.length, parciais: ord.filter(a => txt_(a.get('Tipo')) !== 'Final').length,
+    horas: ord.reduce((s, a) => s + (Number(a.get('Horas')) || 0), 0), equipe: Object.keys(equipe), ord
+  };
+}
+function dataHora_(d) { return d ? Utilities.formatDate(d, TZ, 'dd/MM/yyyy') + ' às ' + Utilities.formatDate(d, TZ, 'HH:mm') : '-'; }
+function txtApont_(r) {
+  return r.total + (r.total === 1 ? ' (finalização)' : ' (' + r.parciais + ' parcia' + (r.parciais === 1 ? 'l' : 'is') + ' e 1 de finalização)');
+}
+
 function pdfOS2_(o, aps, modo) {
   const linha = (rot, val) => val ? '<tr><td class="r">' + rot + '</td><td>' + quebra_(val) + '</td></tr>' : '';
   const bloco = (tit, val) => val ? '<div class="b"><div class="bt">' + tit + '</div><div class="bc">' + quebra_(val) + '</div></div>' : '';
-  const ordenados = aps.slice().sort((a, c) => (data_(a.get('Início')) || 0) - (data_(c.get('Início')) || 0));
-  const dias = ordenados.map((a, i) => {
+  const r = resumoExecucao_(aps);
+  const ordenados = modo === 'final' ? r.ord : aps;
+  const varios = modo === 'final' && ordenados.length > 1;
+
+  const paginaAp = (a, i) => {
     const mats = lista2_(txt_(a.get('Materiais utilizados')).replace(/;/g, ','));
-    const fotos = lista2_(a.get('Fotos')).map(imgDrive_).filter(Boolean);
+    const fotos = lista2_(a.get('Fotos')).map(imgDrive_).filter(Boolean).slice(0, 6);
+    const celulas = [0, 1, 2, 3, 4, 5].map(k => '<td>' + (fotos[k] ? '<img src="' + fotos[k] + '">' : '') + '</td>');
     const ass = txt_(a.get('Assinatura')) ? imgDrive_(txt_(a.get('Assinatura'))) : '';
     const ini = data_(a.get('Início')), fim = data_(a.get('Fim'));
-    return '<div class="dia"><div class="dt">' + (modo === 'final' ? 'Apontamento ' + (i + 1) + ' de ' + ordenados.length + ' · ' : '') +
-      (ini ? Utilities.formatDate(ini, TZ, 'dd/MM/yyyy') : '') + ' · ' + (ini ? Utilities.formatDate(ini, TZ, 'HH:mm') : '') + ' às ' +
-      (fim ? Utilities.formatDate(fim, TZ, 'HH:mm') : '') + ' · ' + String(a.get('Horas')).replace('.', ',') + ' h · ' + esc_(txt_(a.get('Tipo')) === 'Final' ? 'Finalização' : 'Parcial') + '</div>' +
+    return '<div class="ap' + (varios ? ' quebra' : '') + '">' +
+      '<div class="apt">' + (varios ? 'Apontamento ' + (i + 1) + ' de ' + ordenados.length + ' · ' : modo === 'parcial' ? 'Apontamento parcial · ' : '') +
+      (ini ? Utilities.formatDate(ini, TZ, 'dd/MM/yyyy') : '') + ' · ' + (ini ? Utilities.formatDate(ini, TZ, 'HH:mm') : '') + ' às ' + (fim ? Utilities.formatDate(fim, TZ, 'HH:mm') : '') +
+      ' · ' + dur_(a.get('Horas')) + (txt_(a.get('Tipo')) === 'Final' ? ' · Finalização' : ' · Parcial') + '</div>' +
       '<table class="d">' + linha('Equipe', lista2_(a.get('Equipe')).join(', ')) + '</table>' +
       bloco('Serviço executado', txt_(a.get('Serviço executado'))) +
-      (mats.length ? '<div class="b"><div class="bt">Materiais utilizados</div><div class="bc">' + mats.map(esc_).join('<br>') + '</div></div>' : '') +
-      (fotos.length ? '<div class="b"><div class="bt">Registro fotográfico</div><table class="f"><tr>' + fotos.map((f, k) => (k && k % 2 === 0 ? '</tr><tr>' : '') + '<td><img src="' + f + '"></td>').join('') + '</tr></table></div>' : '') +
+      '<div class="b"><div class="bt">Materiais utilizados</div><div class="bc">' + (mats.length ? mats.map(esc_).join('<br>') : 'Nenhum material informado.') + '</div></div>' +
+      '<div class="b"><div class="bt">Registro fotográfico</div><table class="f"><tr>' + celulas.slice(0, 3).join('') + '</tr><tr>' + celulas.slice(3).join('') + '</tr></table></div>' +
       '<div class="ass">' + (ass ? '<img src="' + ass + '"><div class="n">' + esc_(a.get('Assinado por')) + (txt_(a.get('Cargo / setor de quem assinou')) ? ' · ' + esc_(a.get('Cargo / setor de quem assinou')) : '') + '</div>' +
         '<div class="s">Assinado na tela do aparelho do técnico em ' + fmt_(a.get('Fim lançado em')) + (txt_(a.get('Lat. fim')) ? ' · localização ' + txt_(a.get('Lat. fim')) + ', ' + txt_(a.get('Long. fim')) : '') + '</div>'
-        : '<div class="aus">Cliente ausente no momento do apontamento. Justificativa: ' + esc_(a.get('Cliente ausente (motivo)')) + '</div>') + '</div></div>';
-  }).join('');
-  const totalH = ordenados.reduce((s, a) => s + (Number(a.get('Horas')) || 0), 0);
+        : '<div class="aus">Cliente ausente no momento do apontamento.</div><div class="s">Justificativa: ' + esc_(a.get('Cliente ausente (motivo)')) + '</div>') + '</div></div>';
+  };
+
+  const resumo = modo === 'final' ? '<div class="b"><div class="bt">Resumo da execução</div><table class="d">' +
+    linha('Início', dataHora_(r.ini)) + linha('Finalização', dataHora_(r.fim)) + linha('Apontamentos', txtApont_(r)) +
+    linha('Tempo total de execução', dur_(r.horas)) + linha('Técnicos envolvidos', r.equipe.join(', ')) + '</table></div>' +
+    (varios ? '<table class="m"><tr><th>Nº</th><th>Data</th><th>Horário</th><th>Duração</th><th>Equipe</th><th>Assinatura</th></tr>' +
+      ordenados.map((a, i) => { const x = data_(a.get('Início')), y = data_(a.get('Fim'));
+        return '<tr><td>' + (i + 1) + (txt_(a.get('Tipo')) === 'Final' ? ' (final)' : '') + '</td><td>' + (x ? Utilities.formatDate(x, TZ, 'dd/MM/yyyy') : '') + '</td><td>' +
+          (x ? Utilities.formatDate(x, TZ, 'HH:mm') : '') + ' às ' + (y ? Utilities.formatDate(y, TZ, 'HH:mm') : '') + '</td><td>' + dur_(a.get('Horas')) + '</td><td>' +
+          esc_(lista2_(a.get('Equipe')).join(', ')) + '</td><td>' + (txt_(a.get('Cliente ausente (motivo)')) ? 'Cliente ausente' : esc_(a.get('Assinado por'))) + '</td></tr>'; }).join('') + '</table>' : '') +
+    bloco('Pendências e recomendações', o.pendencias) : '';
+
   const titulo = modo === 'final' ? 'ORDEM DE SERVIÇO' : 'APONTAMENTO PARCIAL DA OS';
   const html = '<html><head><meta charset="utf-8"><style>' +
-    '@page{size:A4;margin:14mm 14mm 16mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#1c1f23}' +
-    '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:10px}.cab td{vertical-align:middle;padding:0 0 8px}' +
-    '.emp span{display:block;font-size:8.5pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:9pt;color:#5d6670}' +
-    'table.d{width:100%;border-collapse:collapse;margin:4px 0 8px}table.d td{padding:4px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
-    'td.r{width:130px;color:#5d6670;font-size:9pt}.b{margin:8px 0;page-break-inside:avoid}.bt{background:#000;color:#fff;font-weight:bold;font-size:9.5pt;padding:4px 8px}' +
-    '.bc{border:1px solid #c7ccd3;border-top:0;padding:7px 8px;line-height:1.4}.dia{margin:14px 0;border-top:2px solid #1c1f23;padding-top:6px}' +
-    '.dt{font-weight:bold;font-size:11pt;margin-bottom:4px}' +
-    'table.f{width:100%;border-collapse:collapse}table.f td{width:50%;padding:4px;border:1px solid #c7ccd3;text-align:center}table.f img{max-width:100%;max-height:220px}' +
-    '.ass{margin-top:8px;border:1px solid #c7ccd3;padding:8px;page-break-inside:avoid}.ass img{height:70px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:4px;font-weight:bold}' +
-    '.ass .s{font-size:8.5pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold}.tot{margin-top:10px;font-weight:bold}' +
-    '.rod{margin-top:14px;font-size:8pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:6px}' +
+    '@page{size:A4;margin:12mm 13mm 14mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1c1f23}' +
+    '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:8px}.cab td{vertical-align:middle;padding:0 0 6px}' +
+    '.emp{font-size:8pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:8.5pt;color:#5d6670}' +
+    'table.d{width:100%;border-collapse:collapse;margin:2px 0 6px}table.d td{padding:3px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
+    'td.r{width:150px;color:#5d6670;font-size:8.5pt}' +
+    '.b{margin:8px 0 6px;page-break-inside:avoid}.bt{font-weight:bold;font-size:10pt;color:#000000;border-bottom:2px solid #CD0000;padding:0 0 2px 0;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}' +
+    '.bc{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4}' +
+    '.quebra{page-break-before:always}.apt{font-weight:bold;font-size:11pt;border-top:2px solid #1c1f23;padding-top:5px;margin:6px 0 4px}' +
+    'table.f{width:100%;border-collapse:collapse;table-layout:fixed}table.f td{width:33.3%;height:150px;padding:3px;border:1px solid #9aa3ad;text-align:center;vertical-align:middle}' +
+    'table.f img{max-width:100%;max-height:144px}' +
+    'table.m{width:100%;border-collapse:collapse;margin:6px 0}table.m th,table.m td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;font-size:8.5pt}table.m th{font-weight:bold;border-bottom:2px solid #1c1f23}' +
+    '.ass{margin-top:8px;border:1px solid #9aa3ad;padding:6px 8px;page-break-inside:avoid}.ass img{height:60px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:3px;font-weight:bold}' +
+    '.ass .s{font-size:8pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold;padding:14px 0 4px}' +
+    '.rod{margin-top:10px;font-size:7.5pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:5px}' +
     '</style></head><body>' +
-    '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:180px;height:auto">' +
-    '<div class="emp"><span>' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</span></div></td>' +
+    '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:170px;height:auto">' +
+    '<div class="emp">' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div></td>' +
     '<td class="num"><span>' + titulo + '</span><b>Nº ' + esc_(o.numero) + '</b><span>' + esc_(modo === 'final' ? 'Finalizada em ' + o.finalizadaEm : 'Situação: em andamento') + '</span></td></tr></table>' +
     '<table class="d">' + linha('Cliente', o.cliente) + linha('Local / setor', o.local) + linha('Solicitante', o.solicitante) + linha('Tipo de serviço', o.tipo) +
     linha('Programação', o.inicioPrev ? o.inicioPrev + (o.fimPrev ? ' a ' + o.fimPrev : '') : 'Aberta em campo') + '</table>' +
-    bloco('Solicitação / problema relatado', o.solicitacao) + dias +
-    (modo === 'final' ? '<div class="tot">Total: ' + ordenados.length + ' apontamento(s) · ' + String(Math.round(totalH * 10) / 10).replace('.', ',') + ' h trabalhadas</div>' +
-      bloco('Pendências e recomendações', o.pendencias) : '') +
+    bloco('Solicitação / problema relatado', o.solicitacao) + resumo + ordenados.map(paginaAp).join('') +
     '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div></body></html>';
   const cli = o.cliente.replace(/[\\/:*?"<>|]/g, '');
   return Utilities.newBlob(html, 'text/html', 'OS.html').getAs('application/pdf')
     .setName(modo === 'final' ? 'OS ' + o.numero + ' - ' + cli + '.pdf' : 'OS ' + o.numero + ' - parcial ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm') + ' - ' + cli + '.pdf');
 }
 
-function enviarOS2_(o, pdf, emails, modo) {
-  const assunto = (modo === 'final' ? 'Ordem de serviço nº ' : 'Apontamento parcial da OS nº ') + o.numero + ' | Kiton Engenharia | ' + o.cliente;
-  const corpo = modo === 'final'
-    ? '<p>Olá,</p><p>Segue em anexo a ordem de serviço nº <b>' + esc_(o.numero) + '</b>, referente ao serviço em ' + esc_(o.cliente) +
-      (o.local ? ' (' + esc_(o.local) + ')' : '') + ', finalizado em ' + esc_(o.finalizadaEm) + '.</p><p>Qualquer dúvida, é só responder este e-mail.</p>' +
-      '<p>Atenciosamente,<br><b>Kiton Engenharia Integrada</b><br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</p>'
-    : '<p>Apontamento parcial registrado no Kiton Hub.</p><p><b>OS ' + esc_(o.numero) + '</b> · ' + esc_(o.cliente) + '<br>Total até agora: ' +
-      String(o.horas).replace('.', ',') + ' h em ' + o.apontamentos + ' apontamento(s).</p><p>Documento interno: não foi enviado ao cliente.</p>';
-  const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Hub', replyTo: EMAIL_KITON };
-  if (modo === 'final' && emails.length) { opc.cc = EMAIL_KITON; MailApp.sendEmail(emails.join(','), assunto, assunto, opc); }
-  else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
+/** E-mails dos colaboradores que participaram de algum apontamento (vão em cópia oculta). */
+function emailsEquipe_(aps) {
+  const nomes = {};
+  aps.forEach(a => lista2_(a.get('Equipe')).forEach(n => nomes[n] = 1));
+  return ler_(ABA.colab).linhas.filter(l => nomes[txt_(l.get('Nome'))] && emailValido_(l.get('E-mail'))).map(l => txt_(l.get('E-mail')));
+}
+
+function assinaturaEmail_() {
+  const a = (url, t) => '<a href="' + url + '" style="color:#1c1f23;text-decoration:none">' + t + '</a>';
+  return '<p style="margin:16px 0 0">Atenciosamente,</p>' +
+    '<p style="margin:14px 0 0;line-height:1.5"><b>KITON ENGENHARIA INTEGRADA</b><br>CNPJ: 29.234.872/0001-04 | CREA-PR: 76327<br>' +
+    a(LINK_MAPS, 'Av. Dr. Mário Clapier Urbinatti, 1434, Jardim Canadá, Maringá/PR, CEP 87.080-120') + '<br>' +
+    'Tel./WhatsApp: ' + a('https://wa.me/' + WHATS_KITON, '(44) 4141-0714') + ' | ' + a('https://' + SITE, SITE) + '</p>' +
+    '<p style="margin:14px 0 0;line-height:1.5"><b>Responsável técnico</b><br><b>Joaquim Bernardes Alves Neto</b><br>' +
+    'Engenheiro Eletricista | Especialista em Automação Industrial e Eficiência Energética<br>CREA-PR: 153435/D<br>' +
+    'Celular/WhatsApp: ' + a('https://wa.me/' + WHATS_RT, '(44) 99731-1914') + '<br>' + a('mailto:joaquim.neto@kitonengenharia.com.br', 'joaquim.neto@kitonengenharia.com.br') + '</p>';
+}
+
+function enviarOS2_(o, pdf, emails, modo, aps) {
+  aps = aps || [];
+  const r = resumoExecucao_(aps);
+  const lin = (k, v) => v ? '<tr><td style="padding:3px 12px 3px 0;color:#5d6670;vertical-align:top">' + k + '</td><td style="padding:3px 0">' + quebra_(v) + '</td></tr>' : '';
+  const tabela = '<table style="border-collapse:collapse;font-size:14px;margin:6px 0 4px">' +
+    lin('Cliente', o.cliente) + lin('Local / setor', o.local) + lin('Tipo de serviço', o.tipo) +
+    lin('Início', dataHora_(r.ini)) + (modo === 'final' ? lin('Finalização', dataHora_(r.fim)) : '') +
+    lin('Apontamentos', modo === 'final' ? txtApont_(r) : r.total + ' até agora') + lin('Tempo total de execução', dur_(r.horas)) +
+    lin('Técnicos envolvidos', r.equipe.join(', ')) + (modo === 'final' ? lin('Pendências e recomendações', o.pendencias) : '') + '</table>';
+  const estilo = 'font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1c1f23;line-height:1.45';
+  let assunto, corpo;
+  if (modo === 'final') {
+    assunto = 'Ordem de serviço nº ' + o.numero + ' finalizada | Kiton Engenharia Integrada | ' + o.cliente;
+    corpo = '<div style="' + estilo + '"><p>Olá!</p><p>Eu sou o KAI, o assistente inteligente da Kiton Engenharia Integrada.</p>' +
+      '<p>Esta é uma mensagem automática para informar que foi finalizada uma ordem de serviço referente à sua empresa. Em anexo, segue a cópia da ordem de serviço, ' +
+      'com o registro de cada etapa, as fotos e as assinaturas. Abaixo, o resumo da execução.</p>' +
+      '<p style="margin:16px 0 0"><b>Resumo da ordem de serviço nº ' + esc_(o.numero) + '</b></p>' + tabela +
+      '<p>Agradecemos a confiança no trabalho da nossa equipe. Se tiver qualquer dúvida sobre o serviço realizado, basta responder este e-mail que retornaremos o mais breve possível.</p>' +
+      '<p>Para conhecer as nossas soluções e saber como podemos ajudar a sua empresa a performar ainda melhor, acesse <a href="https://' + SITE + '">' + SITE + '</a> ' +
+      'ou fale com a gente pelo WhatsApp <a href="https://wa.me/' + WHATS_KITON + '">(44) 4141-0714</a>.</p>' + assinaturaEmail_() + '</div>';
+  } else {
+    assunto = 'Apontamento parcial da OS nº ' + o.numero + ' | Kiton Hub | ' + o.cliente;
+    corpo = '<div style="' + estilo + '"><p>Apontamento parcial registrado no Kiton Hub. Documento interno: não foi enviado ao cliente.</p>' +
+      '<p style="margin:12px 0 0"><b>OS nº ' + esc_(o.numero) + '</b></p>' + tabela + '</div>';
+  }
+  const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Engenharia Integrada', replyTo: EMAIL_KITON };
+  if (modo === 'final') {
+    const bcc = emailsEquipe_(aps).filter(e => emails.indexOf(e) < 0);
+    if (bcc.length) opc.bcc = bcc.join(',');
+    if (emails.length) { opc.cc = EMAIL_KITON; MailApp.sendEmail(emails.join(','), assunto, assunto, opc); }
+    else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
+  } else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
 }
 
 function reenviarOS_(u, req) {
@@ -1459,8 +1544,9 @@ function reenviarOS_(u, req) {
   if (!l) throw new Error('OS não encontrada.');
   const id = (txt_(l.get('PDF final')).match(/[-\w]{25,}/) || [])[0];
   if (!id) throw new Error('PDF final da OS não encontrado.');
-  const o = resumoOS_(l, []);
-  enviarOS2_(o, DriveApp.getFileById(id).getBlob(), lista2_(l.get('E-mails do cliente')), 'final');
+  const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  const o = resumoOS_(l, aps);
+  enviarOS2_(o, DriveApp.getFileById(id).getBlob(), lista2_(l.get('E-mails do cliente')), 'final', aps);
   set_(t, l._linha, 'Envio', 'Reenviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' por ' + u.nome);
   return { ok: true };
 }
