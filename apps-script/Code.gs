@@ -45,6 +45,10 @@ const CAB = {
   'Apontamentos de OS': ['Nº', 'Nº OS', 'Início', 'Fim', 'Horas', 'Tipo', 'Equipe', 'Serviço executado', 'Materiais utilizados', 'Fotos',
     'Assinatura', 'Assinado por', 'Cargo / setor de quem assinou', 'Cliente ausente (motivo)', 'PDF do apontamento', 'Check-in',
     'Lat. início', 'Long. início', 'Lat. fim', 'Long. fim', 'Registrado por', 'Iniciado lançado em', 'Fim lançado em', 'Lançamento tardio'],
+  'APR': ['Nº APR', 'Data', 'Nº OS', 'Apontamento', 'Cliente', 'Tipo de serviço', 'Registrado por', 'Responsável pela atividade', 'Equipe', 'Modelo',
+    'Triagem', 'PT', 'Nº da PT', 'Foto da PT', 'Emissor da PT', 'Condição da instalação', 'Justificativa (energizado)', 'Respostas',
+    'Riscos adicionais e medidas', 'Impedimentos', 'Situação', 'Decisão por', 'Justificativa da decisão', 'Data da decisão', 'Lat.', 'Long.',
+    'Ciência do cliente', 'Dados da OS'],
   'Despesas': ['Nº', 'Data', 'Colaborador', 'Categoria', 'Valor (R$)', 'Pagamento', 'Cliente / obra', 'Descrição', 'Comprovante',
     'Saída vinculada', 'Lançado em', 'Situação', 'Conferido por', 'Data da conferência', 'Motivo da recusa', 'Reembolsado em']
 };
@@ -105,6 +109,8 @@ function rotear_(req) {
     case 'cancelarOS': exigirAdmin_(u); return comTrava_(() => cancelarOS_(u, req));
     case 'painelOS': exigirAdmin_(u); return painelOS_(req);
     case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
+    case 'aprPainel': exigirAdmin_(u); return aprPainel_();
+    case 'decidirAPR': exigirAdmin_(u); return comTrava_(() => decidirAPR_(u, req));
     // despesas
     case 'salvarDespesa': return comTrava_(() => salvarDespesa_(u, req));
     case 'minhasDespesas': return minhasDespesas_(u);
@@ -397,6 +403,10 @@ function inicio_(u) {
     ultimosCheckins: ultimosCheckins_(u, 5),
     pendencias: u.perfil === 'Administrador' ? pendenciasAdmin_() : null,
     tiposOS: lista_('Tipo de OS'),
+    apr: { secoes: APR_SECOES, itens: APR_ITENS, riscos: APR_RISCOS, condicoes: APR_CONDICOES, triagem: APR_TRIAGEM, reduzida: tiposAprReduzida_(), treinos: TREINOS.map(x => x[0]) },
+    treinamentos: (() => { const tr = treinamentos_(), o = {}; equipeCampo.forEach(n => { o[n] = {}; TREINOS.forEach(([k]) => { const d = (tr[n] || {})[k]; o[n][k] = d ? dia_(d) : ''; }); }); return o; })(),
+    meusTreinos: (() => { const d = treinamentos_()[u.nome] || {}; return TREINOS.map(([k]) => ({ k, venc: d[k] ? dia_(d[k]) : '', dias: diasAte_(d[k]) }))
+      .filter(x => x.dias !== null && x.dias <= AVISO_TREINO_DIAS); })(),
     categoriasDespesa: lista_('Categoria de despesa'),
     pagamentosDespesa: lista_('Pagamento de despesa')
   };
@@ -407,7 +417,9 @@ function pendenciasAdmin_() {
     itens: ler_(ABA.itensSaida).linhas.filter(l => ['Aguardando conferência', 'Avariado', 'Extraviado'].indexOf(txt_(l.get('Situação'))) >= 0 && !txt_(l.get('Conferido por'))).length,
     despesas: ler_(ABA.despesas).linhas.filter(l => txt_(l.get('Situação')) === 'Aguardando conferência').length,
     clientes: pendentesCliente_().length,
-    os: (() => { const b = baseOS_(); return b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))])).filter(o => o.atrasada || o.parada).length; })()
+    os: (() => { const b = baseOS_(); return b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))])).filter(o => o.atrasada || o.parada).length; })(),
+    apr: aprBloqueadas_().length,
+    treinos: situacaoTreinos_().filter(p => p.itens.some(i => i.dias !== null && i.dias <= AVISO_TREINO_DIAS)).length
   };
 }
 
@@ -1083,7 +1095,7 @@ function minhasOS_(u) {
     .sort((a, c) => (a.inicioPrevIso || '9') < (c.inicioPrevIso || '9') ? -1 : (a.inicioPrevIso || '9') > (c.inicioPrevIso || '9') ? 1 : a.numero.localeCompare(c.numero));
   const finalizadas = b.os.linhas.filter(l => txt_(l.get('Status')) === 'Finalizada').map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
     .filter(o => o.envolvidos.indexOf(u.nome) >= 0).slice(-10).reverse();
-  return { ok: true, abertas, finalizadas, sessao: sessaoAberta_(u, b) };
+  return { ok: true, abertas, finalizadas, sessao: sessaoAberta_(u, b), aprs: minhasAPR_(u) };
 }
 
 function detalheOS_(u, req) {
@@ -1187,25 +1199,50 @@ function cancelarOS_(u, req) {
 function iniciarOS_(u, req) {
   const b = baseOS_();
   if (sessaoAberta_(u, b)) throw new Error('Você já tem uma OS em execução. Aponte o fim dela antes de iniciar outra.');
-  let numero = txt_(req.numero), l = null, cliente;
+  // APR liberada por exceção: retoma os dados guardados no bloqueio
+  let aprLib = null;
+  if (txt_(req.aprN)) {
+    const ta = ler_('APR');
+    aprLib = ta.linhas.find(x => txt_(x.get('Nº APR')) === txt_(req.aprN));
+    if (!aprLib) throw new Error('APR não encontrada.');
+    if (txt_(aprLib.get('Registrado por')) !== u.nome) throw new Error('Esta APR foi registrada por outra pessoa.');
+    if (txt_(aprLib.get('Situação')) !== 'Liberada por exceção' || txt_(aprLib.get('Apontamento'))) throw new Error('Esta APR não está liberada para uso.');
+    let dados = {};
+    try { dados = JSON.parse(txt_(aprLib.get('Dados da OS')) || '{}'); } catch (e) { /* segue */ }
+    req = Object.assign({}, dados, { horario: req.horario, geo: req.geo || dados.geo, aprN: req.aprN });
+  }
+  let numero = txt_(req.numero), l = null, cliente, tipo;
   const equipe = [u.nome].concat((req.equipe || []).map(txt_).filter(n => n && n !== u.nome));
   if (numero) {
     l = b.os.linhas.find(x => txt_(x.get('Nº OS')) === numero);
     if (!l) throw new Error('OS não encontrada.');
     if (['Finalizada', 'Cancelada'].indexOf(txt_(l.get('Status'))) >= 0) throw new Error('Esta OS já está ' + txt_(l.get('Status')).toLowerCase() + '.');
     if (b.ap.linhas.some(x => txt_(x.get('Nº OS')) === numero && !txt_(x.get('Fim')))) throw new Error('Esta OS já está em execução por outra pessoa.');
-    cliente = txt_(l.get('Cliente'));
+    cliente = txt_(l.get('Cliente')); tipo = txt_(l.get('Tipo de serviço'));
   } else {
-    cliente = txt_(req.cliente);
+    cliente = txt_(req.cliente); tipo = txt_(req.tipo);
     if (!cliente) throw new Error('Escolha o cliente.');
-    if (!txt_(req.tipo)) throw new Error('Escolha o tipo de serviço.');
+    if (!tipo) throw new Error('Escolha o tipo de serviço.');
+  }
+  let ck = checkinAberto_(u);
+  if (ck && ck.cliente !== cliente) throw new Error('Você está com check-in aberto em ' + ck.cliente + '. Registre a saída de lá antes.');
+
+  // APR: avalia antes de qualquer gravação; impedimento bloqueia o início
+  let av = null;
+  const ctx = { numero, cliente, tipo, equipe, geo: req.geo };
+  if (!aprLib) {
+    av = avaliarAPR_(req.apr, equipe, tipo);
+    if (av.impedimentos.length) {
+      const dados = {}; ['numero', 'cliente', 'novo', 'cidade', 'tipo', 'local', 'solicitante', 'solicitacao', 'equipe', 'geo'].forEach(k => { if (req[k] !== undefined) dados[k] = req[k]; });
+      const nApr = gravarAPR_(u, req.apr, av, Object.assign({ dados }, ctx), 'Bloqueada');
+      const resumo = avisarBloqueio_(nApr, ctx, u, av.impedimentos);
+      return { ok: true, bloqueada: true, apr: nApr, impedimentos: av.impedimentos, resumo };
+    }
   }
 
   // check-in: reaproveita o aberto no mesmo cliente; abre um novo se não houver
   const agora = new Date();
   const quando = horarioInformado_(req.horario, agora);
-  let ck = checkinAberto_(u);
-  if (ck && ck.cliente !== cliente) throw new Error('Você está com check-in aberto em ' + ck.cliente + '. Registre a saída de lá antes.');
   let ckInfo = null;
   if (!ck) {
     ckInfo = checkin_(u, { cliente, novo: !numero && req.novo, cidade: req.cidade, horario: req.horario, geo: req.geo, obs: numero ? 'OS ' + numero : 'OS aberta em campo' });
@@ -1218,7 +1255,7 @@ function iniciarOS_(u, req) {
     numero = proximaOS_();
     anexar_(t, {
       'Nº OS': numero, 'Status': 'Em andamento', 'Cliente': cliente, 'Local / setor': txt_(req.local), 'Solicitante': txt_(req.solicitante),
-      'Tipo de serviço': txt_(req.tipo), 'Solicitação / problema': txt_(req.solicitacao), 'Técnicos designados': equipe.join(', '),
+      'Tipo de serviço': tipo, 'Solicitação / problema': txt_(req.solicitacao), 'Técnicos designados': equipe.join(', '),
       'Programada por': u.nome + ' (aberta em campo)', 'Programada em': agora, 'Iniciada em': quando
     });
   } else {
@@ -1244,7 +1281,240 @@ function iniciarOS_(u, req) {
     const lc = cks.linhas.find(x => txt_(x.get('Nº')) === txt_(ck.n));
     if (lc && lista2_(lc.get('OS vinculada')).indexOf(numero) < 0) set_(cks, lc._linha, 'OS vinculada', lista2_(lc.get('OS vinculada')).concat([numero]).join(', '));
   }
-  return { ok: true, numero, apontamento: n, cliente, quando: fmt_(quando), checkinNovo: !!ckInfo, situacao: ckInfo ? ckInfo.situacao : '', dist: ckInfo ? ckInfo.dist : '' };
+  // APR: vincula ao apontamento
+  let nApr;
+  if (aprLib) {
+    const ta = ler_('APR');
+    const la2 = ta.linhas.find(x => txt_(x.get('Nº APR')) === txt_(req.aprN));
+    set_(ta, la2._linha, 'Nº OS', numero); set_(ta, la2._linha, 'Apontamento', n); set_(ta, la2._linha, 'Cliente', cliente);
+    nApr = txt_(req.aprN);
+  } else {
+    substituirBloqueios_(u, txt_(req.numero), cliente);
+    nApr = gravarAPR_(u, req.apr, av, Object.assign({}, ctx, { numero, cliente, apontamento: n }), 'Liberada');
+  }
+  return { ok: true, numero, apontamento: n, apr: nApr, cliente, quando: fmt_(quando), checkinNovo: !!ckInfo, situacao: ckInfo ? ckInfo.situacao : '', dist: ckInfo ? ckInfo.dist : '' };
+}
+
+// ---------- APR (análise preliminar de risco) antes de iniciar a OS ----------
+// Base: NR-10 (Portaria MTE 737/2026, itens 10.7.3 e 10.7.4). Itens com imp: true bloqueiam o início quando a resposta for "Não".
+// modelo: 'A' = completa e reduzida; 'C' = só completa. cond: só aparece para a condição da instalação indicada.
+const APR_SECOES = [
+  ['B', 'Avaliação prévia do local'], ['C', 'Isolamento e sinalização'], ['D', 'Condição da instalação'],
+  ['E', 'EPI e EPC'], ['G', 'Emergência'], ['H', 'Comunicação']
+];
+const APR_ITENS = [
+  { id: 'b1', s: 'B', t: 'Atividade e escopo compreendidos pela equipe?', imp: true, m: 'A' },
+  { id: 'b2', s: 'B', t: 'Local avaliado antes do início?', imp: true, m: 'A' },
+  { id: 'b3', s: 'B', t: 'Condições do ambiente adequadas (umidade, chuva, iluminação, espaço)?', m: 'A' },
+  { id: 'c1', s: 'C', t: 'Área delimitada e sinalizada (caso necessário)?', m: 'C' },
+  { id: 'd1', s: 'D', t: 'Seccionamento, bloqueio e etiquetagem realizados?', imp: true, m: 'C', cond: 'Desenergizada' },
+  { id: 'd2', s: 'D', t: 'Teste de ausência de tensão realizado?', imp: true, m: 'C', cond: 'Desenergizada' },
+  { id: 'd3', s: 'D', t: 'Aterramento temporário instalado?', m: 'C', cond: 'Desenergizada' },
+  { id: 'd4', s: 'D', t: 'Partes energizadas próximas protegidas?', m: 'C', cond: 'Desenergizada' },
+  { id: 'e2', s: 'D', t: 'Procedimento específico disponível e conhecido pela equipe?', imp: true, m: 'C', cond: 'Energizada' },
+  { id: 'e3', s: 'D', t: 'Ferramentas isoladas e inspecionadas?', imp: true, m: 'C', cond: 'Energizada' },
+  { id: 'p1', s: 'E', t: 'Vestimenta antichama compatível com o risco?', imp: true, m: 'C' },
+  { id: 'p2', s: 'E', t: 'Luvas isolantes inspecionadas (se houver contato com partes energizadas)?', m: 'C' },
+  { id: 'p3', s: 'E', t: 'Capacete, óculos ou protetor facial e calçado de segurança?', m: 'A' },
+  { id: 'p4', s: 'E', t: 'Detector de tensão testado antes do uso?', m: 'C' },
+  { id: 'p5', s: 'E', t: 'Tapete isolante ou outro EPC aplicável?', m: 'C' },
+  { id: 'g1', s: 'G', t: 'Rota de fuga identificada?', m: 'A' },
+  { id: 'g2', s: 'G', t: 'Extintor próximo?', m: 'A' },
+  { id: 'g3', s: 'G', t: 'Contato de emergência do cliente conhecido?', m: 'A' },
+  { id: 'g4', s: 'G', t: 'Pessoa com treinamento em primeiros socorros na equipe ou no local?', m: 'A' },
+  { id: 'h1', s: 'H', t: 'Responsável do cliente informado do início?', m: 'A' }
+];
+const APR_RISCOS = ['Trabalho em altura', 'Espaço confinado', 'Máquinas em movimento', 'Calor', 'Produtos químicos', 'Ruído'];
+const APR_CONDICOES = ['Desenergizada', 'Energizada', 'Sem intervenção elétrica'];
+const APR_TRIAGEM = [
+  ['zona', 'Haverá abertura de painel ou aproximação de partes energizadas (zona controlada)?'],
+  ['altura', 'Haverá trabalho em altura acima de 2 m?'],
+  ['confinado', 'Haverá trabalho em espaço confinado?'],
+  ['sep', 'O serviço é em SEP (subestação, rede de média ou alta tensão)?']
+];
+const TREINOS = [['NR-10', 'Venc. NR-10'], ['NR-10 SEP', 'Venc. NR-10 SEP'], ['NR-33', 'Venc. NR-33'], ['NR-35', 'Venc. NR-35'], ['ASO', 'Venc. ASO']];
+const AVISO_TREINO_DIAS = 30;
+
+function tiposAprReduzida_() { return lista_('Tipos de OS com APR reduzida'); }
+
+/** Vencimentos de treinamento por colaborador: {nome: {'NR-10': Date|null, ...}} */
+function treinamentos_() {
+  const r = {};
+  ler_(ABA.colab).linhas.forEach(l => {
+    const o = {};
+    TREINOS.forEach(([k, col]) => { o[k] = data_(l.get(col)); });
+    r[txt_(l.get('Nome'))] = o;
+  });
+  return r;
+}
+
+function diasAte_(d) {
+  if (!d) return null;
+  const h = new Date(); h.setHours(0, 0, 0, 0);
+  const x = new Date(d.getTime()); x.setHours(0, 0, 0, 0);
+  return Math.round((x.getTime() - h.getTime()) / 864e5);
+}
+
+/** Treinamentos exigidos pela APR. */
+function treinosExigidos_(apr) {
+  const t = apr.triagem || {};
+  const req = ['ASO'];
+  if (apr.modelo === 'Completa') req.push('NR-10');
+  if (t.sep) req.push('NR-10 SEP');
+  if (t.confinado) req.push('NR-33');
+  if (t.altura) req.push('NR-35');
+  return req;
+}
+
+/** Valida as respostas e devolve {modelo, impedimentos, textoRespostas, ...}. Não grava nada. */
+function avaliarAPR_(apr, equipe, tipoOS) {
+  if (!apr || typeof apr !== 'object') throw new Error('Preencha a APR antes de iniciar.');
+  const pt = ['Sim', 'Não', 'Não se aplica'].indexOf(txt_(apr.pt)) >= 0 ? txt_(apr.pt) : '';
+  if (!pt) throw new Error('Informe se o serviço possui PT emitida pelo cliente.');
+  if (pt === 'Sim' && !txt_(apr.ptNumero) && !txt_(apr.ptFoto) && !txt_(apr.ptEmissor)) throw new Error('Informe o número da PT, a foto da PT ou quem a emitiu.');
+  const tri = {};
+  APR_TRIAGEM.forEach(([k]) => {
+    const v = apr.triagem ? apr.triagem[k] : undefined;
+    if (v !== true && v !== false) throw new Error('Responda todas as perguntas da triagem.');
+    tri[k] = v;
+  });
+  const reduzidaPermitida = tiposAprReduzida_().indexOf(txt_(tipoOS)) >= 0 && !tri.zona && !tri.altura && !tri.confinado && !tri.sep;
+  const modelo = reduzidaPermitida && apr.modelo === 'Reduzida' ? 'Reduzida' : 'Completa';
+  const responsavel = txt_(apr.responsavel);
+  if (equipe.indexOf(responsavel) < 0) throw new Error('Escolha o responsável pela atividade entre os executores.');
+  let condicao = '';
+  if (modelo === 'Completa') {
+    condicao = APR_CONDICOES.indexOf(txt_(apr.condicao)) >= 0 ? txt_(apr.condicao) : '';
+    if (!condicao) throw new Error('Informe a condição da instalação.');
+    if (tri.zona && condicao === 'Sem intervenção elétrica') throw new Error('A triagem indicou zona controlada: escolha Desenergizada ou Energizada.');
+  }
+  const imped = [];
+  if (condicao === 'Energizada' && !txt_(apr.justificativa)) imped.push('Trabalho energizado sem justificativa registrada');
+  const resp = apr.respostas || {};
+  const linhas = [];
+  APR_ITENS.forEach(it => {
+    if (modelo === 'Reduzida' && it.m !== 'A') return;
+    if (it.cond && it.cond !== condicao) return;
+    const v = txt_(resp[it.id]);
+    if (['Sim', 'Não', 'N/A'].indexOf(v) < 0) throw new Error('Responda todos os itens da APR (falta: ' + it.t + ').');
+    linhas.push(it.t + ' ' + v);
+    if (it.imp && v === 'Não') imped.push(it.t.replace(/\?$/, '') + ': Não');
+  });
+  const riscos = [];
+  if (modelo === 'Completa') {
+    (apr.riscos || []).forEach(r => {
+      if (APR_RISCOS.indexOf(txt_(r.risco)) < 0) return;
+      if (!txt_(r.medida)) throw new Error('Informe a medida adotada para: ' + r.risco + '.');
+      riscos.push(txt_(r.risco) + ': ' + txt_(r.medida));
+    });
+  }
+  if (apr.declaracao !== true) throw new Error('Confirme a declaração de liberação.');
+  // treinamentos (automático, pelo cadastro)
+  const tr = treinamentos_();
+  treinosExigidos_({ modelo, triagem: tri }).forEach(k => equipe.forEach(n => {
+    const d = (tr[n] || {})[k];
+    if (!d) imped.push(n + ': ' + k + ' sem vencimento cadastrado');
+    else if (diasAte_(d) < 0) imped.push(n + ': ' + k + ' vencido em ' + dia_(d));
+  }));
+  return {
+    modelo, pt, triagem: tri, responsavel, condicao, impedimentos: imped, respostas: linhas.join('\n'), riscos: riscos.join('\n'),
+    triagemTxt: APR_TRIAGEM.map(([k, t]) => t + ' ' + (tri[k] ? 'Sim' : 'Não')).join('\n')
+  };
+}
+
+/** Grava a APR e devolve o nº. */
+function gravarAPR_(u, apr, av, ctx, situacao) {
+  const t = ler_('APR');
+  const n = proximoNumero_(t, 'Nº APR');
+  const agora = new Date();
+  let foto = '';
+  if (txt_(apr.ptFoto)) {
+    try { foto = pasta_(['Kiton Hub', 'APR', Utilities.formatDate(agora, TZ, 'yyyy')]).createFile(blobDe_(apr.ptFoto, 'image/jpeg', 'APR ' + n + ' - PT.jpg')).getUrl(); }
+    catch (e) { foto = 'erro ao salvar a foto'; }
+  }
+  const g = ctx.geo || null;
+  anexar_(t, {
+    'Nº APR': n, 'Data': agora, 'Nº OS': ctx.numero || '', 'Apontamento': ctx.apontamento || '', 'Cliente': ctx.cliente, 'Tipo de serviço': ctx.tipo,
+    'Registrado por': u.nome, 'Responsável pela atividade': av.responsavel, 'Equipe': ctx.equipe.join(', '), 'Modelo': av.modelo,
+    'Triagem': av.triagemTxt, 'PT': av.pt, 'Nº da PT': txt_(apr.ptNumero), 'Foto da PT': foto, 'Emissor da PT': txt_(apr.ptEmissor),
+    'Condição da instalação': av.condicao || 'Não se aplica (APR reduzida)', 'Justificativa (energizado)': txt_(apr.justificativa),
+    'Respostas': av.respostas, 'Riscos adicionais e medidas': av.riscos, 'Impedimentos': av.impedimentos.join('\n'), 'Situação': situacao,
+    'Lat.': g ? g.lat : '', 'Long.': g ? g.lng : '', 'Dados da OS': ctx.dados ? JSON.stringify(ctx.dados) : ''
+  });
+  return n;
+}
+
+function textoBloqueio_(n, ctx, u, imped) {
+  return 'APR nº ' + n + ' BLOQUEADA\nOS: ' + (ctx.numero || 'nova, aberta em campo') + '\nCliente: ' + ctx.cliente + '\nTipo de serviço: ' + ctx.tipo +
+    '\nRegistrada por: ' + u.nome + '\nEquipe: ' + ctx.equipe.join(', ') + '\n\nImpedimentos:\n' + imped.map(x => '- ' + x).join('\n');
+}
+
+function avisarBloqueio_(n, ctx, u, imped) {
+  const txt = textoBloqueio_(n, ctx, u, imped);
+  try {
+    MailApp.sendEmail(EMAIL_KITON, 'APR nº ' + n + ' bloqueada | ' + ctx.cliente + ' | Kiton Hub',
+      txt + '\n\nO início da OS foi bloqueado pelo app. Para liberar por exceção ou manter o bloqueio, acesse Administração > OS no Kiton Hub.',
+      { name: 'Kiton Hub', replyTo: EMAIL_KITON });
+  } catch (e) { /* segue: o aviso pelo WhatsApp continua disponível */ }
+  return txt;
+}
+
+/** APRs do colaborador que aguardam decisão ou foram liberadas por exceção e ainda não usadas. */
+function minhasAPR_(u) {
+  return ler_('APR').linhas.filter(l => txt_(l.get('Registrado por')) === u.nome && !txt_(l.get('Apontamento')) &&
+    ['Bloqueada', 'Liberada por exceção', 'Mantida bloqueada'].indexOf(txt_(l.get('Situação'))) >= 0 && diasAte_(data_(l.get('Data'))) > -3)
+    .map(l => ({ n: txt_(l.get('Nº APR')), numero: txt_(l.get('Nº OS')), cliente: txt_(l.get('Cliente')), situacao: txt_(l.get('Situação')),
+      data: fmt_(l.get('Data')), impedimentos: lista3_(l.get('Impedimentos')), decisao: txt_(l.get('Justificativa da decisão')), decisor: txt_(l.get('Decisão por')) }));
+}
+
+function lista3_(v) { return txt_(v).split('\n').map(txt_).filter(Boolean); }
+
+function aprBloqueadas_() {
+  return ler_('APR').linhas.filter(l => txt_(l.get('Situação')) === 'Bloqueada').map(l => ({
+    n: txt_(l.get('Nº APR')), numero: txt_(l.get('Nº OS')), cliente: txt_(l.get('Cliente')), tipo: txt_(l.get('Tipo de serviço')),
+    quem: txt_(l.get('Registrado por')), equipe: lista2_(l.get('Equipe')), data: fmt_(l.get('Data')), impedimentos: lista3_(l.get('Impedimentos'))
+  }));
+}
+
+/** Situação dos treinamentos da equipe de campo (vencidos, vencendo em 30 dias, sem data). */
+function situacaoTreinos_() {
+  const tr = treinamentos_();
+  const campo = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim' && txt_(l.get('Função')) !== 'Administrativo').map(l => txt_(l.get('Nome')));
+  return campo.map(n => ({
+    nome: n,
+    itens: TREINOS.map(([k]) => { const d = (tr[n] || {})[k]; return { k, venc: d ? dia_(d) : '', dias: diasAte_(d) }; })
+  }));
+}
+
+function aprPainel_() { return { ok: true, bloqueadas: aprBloqueadas_(), treinos: situacaoTreinos_() }; }
+
+function decidirAPR_(u, req) {
+  const t = ler_('APR');
+  const l = t.linhas.find(x => txt_(x.get('Nº APR')) === txt_(req.n));
+  if (!l) throw new Error('APR não encontrada.');
+  if (txt_(l.get('Situação')) !== 'Bloqueada') throw new Error('Esta APR já teve decisão.');
+  const just = txt_(req.justificativa);
+  if (!just) throw new Error('Escreva a justificativa da decisão.');
+  set_(t, l._linha, 'Situação', req.liberar ? 'Liberada por exceção' : 'Mantida bloqueada');
+  set_(t, l._linha, 'Decisão por', u.nome);
+  set_(t, l._linha, 'Justificativa da decisão', just);
+  set_(t, l._linha, 'Data da decisão', new Date());
+  return { ok: true };
+}
+
+/** Bloqueios antigos do mesmo colaborador para a mesma OS (ou o mesmo cliente, se OS nova) deixam de pesar como pendência. */
+function substituirBloqueios_(u, numero, cliente) {
+  const t = ler_('APR');
+  t.linhas.filter(l => txt_(l.get('Registrado por')) === u.nome && ['Bloqueada', 'Mantida bloqueada'].indexOf(txt_(l.get('Situação'))) >= 0 && !txt_(l.get('Apontamento')) &&
+    (numero ? txt_(l.get('Nº OS')) === numero : !txt_(l.get('Nº OS')) && txt_(l.get('Cliente')) === cliente))
+    .forEach(l => set_(t, l._linha, 'Situação', 'Substituída por nova APR'));
+}
+
+/** APR do apontamento (para o PDF e a ciência do cliente). */
+function aprPorApontamento_() {
+  const m = {};
+  ler_('APR').linhas.forEach(l => { const a = txt_(l.get('Apontamento')); if (a) m[a] = l; });
+  return m;
 }
 
 // ----- apontar (parcial ou final) -----
@@ -1289,6 +1559,12 @@ function apontarOS_(u, req) {
     'Lançamento tardio': tardio_(fim, agora) ? 'Fim' : ''
   };
   Object.keys(campos).forEach(k => set_(b.ap, la._linha, k, campos[k]));
+  // ciência do cliente na APR deste apontamento
+  const lapr = aprPorApontamento_()[txt_(req.n)];
+  if (lapr) {
+    const ta = ler_('APR');
+    set_(ta, lapr._linha, 'Ciência do cliente', ausente ? 'Sem ciência do cliente (ausente)' : txt_(req.assinante) + (txt_(req.cargo) ? ' (' + txt_(req.cargo) + ')' : '') + ' em ' + fmt_(fim));
+  }
 
   // totais na OS
   const todos = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
@@ -1427,6 +1703,19 @@ function pdfOS2_(o, aps, modo) {
   const r = resumoExecucao_(aps);
   const ordenados = modo === 'final' ? r.ord : aps;
   const varios = modo === 'final' && ordenados.length > 1;
+  const aprs = aprPorApontamento_();
+  const blocoAPR = a => {
+    const x = aprs[txt_(a.get('Nº'))];
+    if (!x) return '';
+    const pt = txt_(x.get('PT')) === 'Sim' ? 'Sim' + (txt_(x.get('Nº da PT')) ? ', nº ' + txt_(x.get('Nº da PT')) : '') + (txt_(x.get('Emissor da PT')) ? ', emitida por ' + txt_(x.get('Emissor da PT')) : '') + (txt_(x.get('Foto da PT')) ? ', foto arquivada' : '') : txt_(x.get('PT'));
+    // a exceção fica registrada na aba APR e no PDF interno; o PDF do cliente mostra apenas que a atividade foi liberada
+    const sit = txt_(x.get('Situação')) === 'Liberada por exceção' && modo !== 'final' ? 'Liberada por exceção (' + txt_(x.get('Decisão por')) + ')' : 'Liberada';
+    return '<div class="b"><div class="bt">Análise preliminar de risco (APR)</div><table class="d">' +
+      linha('APR', 'Nº ' + txt_(x.get('Nº APR')) + ' · ' + txt_(x.get('Modelo')).toLowerCase() + ' · ' + sit + ' · responsável: ' + txt_(x.get('Responsável pela atividade'))) +
+      linha('PT e instalação', 'PT: ' + pt + ' · Instalação: ' + txt_(x.get('Condição da instalação')).toLowerCase()) +
+      linha('Riscos adicionais e medidas', txt_(x.get('Riscos adicionais e medidas'))) +
+      linha('Ciência do cliente', txt_(x.get('Ciência do cliente'))) + '</table></div>';
+  };
 
   const paginaAp = (a, i) => {
     const mats = lista2_(txt_(a.get('Materiais utilizados')).replace(/;/g, ','));
@@ -1444,7 +1733,7 @@ function pdfOS2_(o, aps, modo) {
       '<div class="b"><div class="bt">Registro fotográfico</div><table class="f"><tr>' + celulas.slice(0, 3).join('') + '</tr><tr>' + celulas.slice(3).join('') + '</tr></table></div>' +
       '<div class="ass">' + (ass ? '<img src="' + ass + '"><div class="n">' + esc_(a.get('Assinado por')) + (txt_(a.get('Cargo / setor de quem assinou')) ? ' · ' + esc_(a.get('Cargo / setor de quem assinou')) : '') + '</div>' +
         '<div class="s">Assinado na tela do aparelho do técnico em ' + fmt_(a.get('Fim lançado em')) + (txt_(a.get('Lat. fim')) ? ' · localização ' + txt_(a.get('Lat. fim')) + ', ' + txt_(a.get('Long. fim')) : '') + '</div>'
-        : '<div class="aus">Cliente ausente no momento do apontamento.</div><div class="s">Justificativa: ' + esc_(a.get('Cliente ausente (motivo)')) + '</div>') + '</div></div>';
+        : '<div class="aus">Cliente ausente no momento do apontamento.</div><div class="s">Justificativa: ' + esc_(a.get('Cliente ausente (motivo)')) + '</div>') + '</div>' + blocoAPR(a) + '</div>';
   };
 
   const resumo = modo === 'final' ? '<div class="b"><div class="bt">Resumo da execução</div><table class="d">' +
@@ -1467,8 +1756,8 @@ function pdfOS2_(o, aps, modo) {
     '.b{margin:8px 0 6px;page-break-inside:avoid}.bt{font-weight:bold;font-size:10pt;color:#000000;border-bottom:2px solid #CD0000;padding:0 0 2px 0;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}' +
     '.bc{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4}' +
     '.quebra{page-break-before:always}.apt{font-weight:bold;font-size:11pt;border-top:2px solid #1c1f23;padding-top:5px;margin:6px 0 4px}' +
-    'table.f{width:100%;border-collapse:collapse;table-layout:fixed}table.f td{width:33.3%;height:150px;padding:3px;border:1px solid #9aa3ad;text-align:center;vertical-align:middle}' +
-    'table.f img{max-width:100%;max-height:144px}' +
+    'table.f{width:100%;border-collapse:collapse;table-layout:fixed}table.f td{width:33.3%;height:112px;padding:3px;border:1px solid #9aa3ad;text-align:center;vertical-align:middle}' +
+    'table.f img{max-width:100%;max-height:106px}' +
     'table.m{width:100%;border-collapse:collapse;margin:6px 0}table.m th,table.m td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;font-size:8.5pt}table.m th{font-weight:bold;border-bottom:2px solid #1c1f23}' +
     '.ass{margin-top:8px;border:1px solid #9aa3ad;padding:6px 8px;page-break-inside:avoid}.ass img{height:60px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:3px;font-weight:bold}' +
     '.ass .s{font-size:8pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold;padding:14px 0 4px}' +

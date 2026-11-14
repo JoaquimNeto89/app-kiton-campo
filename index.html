@@ -147,6 +147,12 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
 @media (prefers-reduced-motion:reduce){.feito-tela .selo{animation:none}}
 
+.apr-it{background:var(--branco);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.apr-it p{margin:0 0 8px;font-weight:500;line-height:1.3}
+.sna{display:flex;gap:6px}.sna button{flex:1;border:1px solid #C9CFD6;background:#fff;border-radius:9px;padding:9px 4px;font-weight:600;font-size:15px}
+.sna button.sel{background:var(--preto);color:#fff;border-color:var(--preto)}.sna.ck button.sel[data-v="Sim"]{background:var(--verde);border-color:var(--verde)}
+.sna.ck button.sel[data-v="Não"]{background:var(--vermelho);border-color:var(--vermelho)}
+.imp{display:inline-block;font-size:12px;font-weight:700;color:var(--vermelho-esc);background:#FCE4E4;border-radius:5px;padding:0 6px;vertical-align:middle}
 .segmento{display:flex;background:var(--aco-esc);border-radius:12px;padding:4px;gap:4px;margin-top:8px}
 .segmento button{flex:1;border:0;background:transparent;border-radius:9px;padding:10px 6px;font-weight:600;font-size:15px}
 .segmento button.sel{background:#fff}
@@ -423,7 +429,9 @@ function telaInicio() {
   const mod = (id, icone, titulo, desc, extra = '', breve = false, principal = false) =>
     `<button type="button" class="modulo ${breve ? 'breve' : ''} ${principal ? 'principal' : ''}" ${breve ? 'aria-disabled="true"' : `id="${id}"`}>
       ${extra}<span class="ic-caixa">${ic(icone)}</span><b>${titulo}</b><span class="d">${desc}</span></button>`;
+  const mt = d.meusTreinos || [];
   $app.innerHTML = `<h1>Olá, ${esc(est.usuario.nome)}</h1>
+    ${mt.length ? msg('erro', mt.map(t => t.dias < 0 ? `${t.k} vencido em ${t.venc}` : `${t.k} vence em ${t.dias} dia(s) (${t.venc})`).join('. ') + '. Procure a administração para renovar.') : ''}
     <div class="modulos">
       ${mod('mSaidas', 'saida', 'Saídas e retornos', 'Veículo, destino, ferramentas e EPC', status, false, true)}
       ${mod('mCheckin', 'pino', 'Check-in em obra', d.checkin ? 'Em ' + esc(d.checkin.cliente) + ' desde ' + esc(hora(d.checkin.chegada)) : 'Chegada e saída no cliente', stCk)}
@@ -434,8 +442,8 @@ function telaInicio() {
     </div>
     <button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens</b><span class="suave" style="display:block">${nMeus ? 'Ferramentas e equipamentos no seu nome' : 'Nenhum item no seu nome'}</span></span>${ic('seta')}</button>
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0);
-        const det = [pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : ''].filter(Boolean).join(', ');
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0);
+        const det = [pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.treinos ? pd.treinos + ' pessoa(s) com treinamento vencendo' : ''].filter(Boolean).join(', ');
         return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, OS, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
@@ -449,7 +457,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = telaMeusItens;
-  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.apr ? 'os' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os || pd.treinos ? 'os' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -806,7 +814,7 @@ async function telaAdmin(aba) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
   $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['os', 'OS', 'os'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
-    const n = pk && est.dados.pendencias ? est.dados.pendencias[pk] : 0;
+    const pd = est.dados.pendencias || {}; const n = !pk ? 0 : pk === 'os' ? (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0) : pd[pk];
     return `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}${n ? `<span class="bolinha">${n}</span>` : ''}</button>`; }).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
   $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
   document.getElementById('ant').onclick = () => carregarInicio();
@@ -1124,12 +1132,23 @@ async function telaOS(aviso) {
         <button class="acao" id="bApontar" type="button">${ic('ok')} Apontar fim</button></section>`
       : `<div class="grade" style="margin-top:4px"><button type="button" class="opcao" id="bAgora">${ic('os')}Abrir OS agora<span class="suave" style="font-weight:400;font-size:14px">Serviço que surgiu em campo</span></button>
          <button type="button" class="opcao" id="bProg">${ic('calib')}Programar OS<span class="suave" style="font-weight:400;font-size:14px">Para outro dia ou outro técnico</span></button></div>`;
-    document.getElementById('osBox').innerHTML = topoHtml +
+    const aprs = (r.aprs || []).map(a => `<div class="cartao"><div class="t">APR ${esc(a.n)} · ${esc(a.cliente)}${a.numero ? ' · OS ' + esc(a.numero) : ''}</div>
+      <p class="suave" style="margin:4px 0 6px">${esc(a.data)}</p>
+      ${a.situacao === 'Bloqueada' ? '<span class="selo-txt vermelho">Bloqueada, aguardando decisão da administração</span>' : a.situacao === 'Mantida bloqueada' ? '<span class="selo-txt vermelho">Bloqueio mantido</span>' : '<span class="selo-txt verde">Liberada por exceção</span>'}
+      ${a.decisao ? `<p class="suave" style="margin:6px 0 0">${esc(a.decisor)}: “${esc(a.decisao)}”</p>` : ''}
+      ${a.situacao === 'Liberada por exceção' && !s ? `<button type="button" class="acao" data-aprn="${esc(a.n)}">${ic('saida')} Iniciar com esta APR</button>` : ''}</div>`).join('');
+    document.getElementById('osBox').innerHTML = topoHtml + (aprs ? `<h2>APR</h2>${aprs}` : '') +
       `<h2>Suas OS</h2>` + (r.abertas.length ? r.abertas.map(o => cartaoOS(o)).join('') : msg('info', 'Nenhuma OS programada para você.')) +
       (r.finalizadas.length ? `<h2>Finalizadas recentemente</h2>` + r.finalizadas.map(o => cartaoOS(o)).join('') : '');
     if (s) document.getElementById('bApontar').onclick = () => fluxoApontar(s);
     else { document.getElementById('bAgora').onclick = () => telaNovaOSCampo({}); document.getElementById('bProg').onclick = () => telaProgramarOS(); }
     document.querySelectorAll('[data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os));
+    document.querySelectorAll('[data-aprn]').forEach(b => b.onclick = () => executar(async () => {
+      const geo = await localizacao();
+      const x = await api('iniciarOS', { aprN: b.dataset.aprn, geo });
+      await recarregarDados();
+      telaOS(`OS ${x.numero} iniciada às ${hora(x.quando)} com a APR nº ${x.apr} liberada por exceção.`);
+    }));
   });
 }
 
@@ -1170,6 +1189,197 @@ async function telaOSDetalhe(numero, admin) {
   else { ok.textContent = o.emExecucao ? 'Em execução' : sess ? 'Aponte a OS em execução antes' : o.status; }
 }
 
+// ---------- APR antes de iniciar a OS ----------
+/** Situação do treinamento a partir de "dd/MM/yyyy". */
+function diasPara(dmy) {
+  if (!dmy) return null;
+  const [d, m, a] = dmy.split('/').map(Number); const x = new Date(a, m - 1, d), h = new Date(); h.setHours(0, 0, 0, 0);
+  return Math.round((x - h) / 864e5);
+}
+function exigidosAPR(f) {
+  const t = f.triagem, r = ['ASO'];
+  if (f.modelo === 'Completa') r.push('NR-10');
+  if (t.sep) r.push('NR-10 SEP'); if (t.confinado) r.push('NR-33'); if (t.altura) r.push('NR-35');
+  return r;
+}
+
+/** ctx: {numero, cliente, tipo, equipe}; payload: o que vai para iniciarOS; voltar: função. */
+function fluxoAPR(ctx, payload, voltar) {
+  const cfg = est.dados.apr, tr = est.dados.treinamentos || {};
+  const f = { pt: '', ptNumero: '', ptEmissor: '', ptFoto: '', triagem: {}, modelo: '', forcarCompleta: false, responsavel: ctx.equipe.length === 1 ? ctx.equipe[0] : '',
+    condicao: '', justificativa: '', respostas: {}, riscos: {}, declaracao: false };
+  let p = 0;
+  const reduzidaTipo = cfg.reduzida.includes(ctx.tipo);
+  const triagemOk = () => cfg.triagem.every(([k]) => f.triagem[k] === true || f.triagem[k] === false);
+  const modelo = () => reduzidaTipo && triagemOk() && !Object.values(f.triagem).some(Boolean) && !f.forcarCompleta ? 'Reduzida' : 'Completa';
+  const cab = t => `<div class="passos">${[0, 1, 2].map(i => `<i class="${i < p ? 'feito' : i === p ? 'atual' : ''}"></i>`).join('')}</div>
+    <div class="passo-nome">APR · ${esc(ctx.cliente)}${ctx.numero ? ' · OS ' + esc(ctx.numero) : ''} · passo ${p + 1} de 3</div><h1>${t}</h1><div id="erro"></div>`;
+  const sn = (nome, val, ops = ['Sim', 'Não', 'N/A'], ck = true) => `<div class="sna${ck ? ' ck' : ''}" data-k="${nome}">${ops.map(o => `<button type="button" data-v="${o}" class="${val === o ? 'sel' : ''}">${o}</button>`).join('')}</div>`;
+  const ligarSN = (aoMudar) => document.querySelectorAll('.sna').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => {
+    g.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b)); aoMudar(g.dataset.k, b.dataset.v);
+  }));
+  const rodape = (txt, prox) => {
+    barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="prox" type="button">${txt}</button></div>`);
+    document.getElementById('ant').onclick = () => { if (p === 0) voltar(); else { p--; desenhar(); } };
+    document.getElementById('prox').onclick = () => { try { prox(); } catch (e) { erroTela(e.message); } };
+  };
+  const val = id => (document.getElementById(id) || {}).value || '';
+
+  function passoPT() {
+    $app.innerHTML = `${cab('Permissão de trabalho')}<p>O serviço a ser executado possui PT (Permissão de Trabalho) emitida pelo cliente?</p>
+      ${sn('pt', f.pt, ['Sim', 'Não', 'Não se aplica'], false)}
+      <div id="ptBox" class="${f.pt === 'Sim' ? '' : 'oculto'}" style="margin-top:12px">
+        <p class="suave">Informe pelo menos um: número, foto ou quem emitiu. Alguns clientes não entregam a via da PT.</p>
+        <label class="rotulo" for="ptN">Número da PT</label><input class="campo-txt" id="ptN" value="${esc(f.ptNumero)}">
+        <label class="rotulo" for="ptE">Emitida por (nome e cargo)</label><input class="campo-txt" id="ptE" value="${esc(f.ptEmissor)}" placeholder="Ex.: Carlos Souza, técnico de segurança">
+        <label class="rotulo">Foto da PT</label><div class="fotos" id="ptF">${f.ptFoto ? `<div class="foto"><img src="${f.ptFoto}" alt="Foto da PT"><button type="button" id="ptRm" aria-label="Remover foto">×</button></div>` : ''}</div>
+        <label class="acao leve" for="ptArq" style="cursor:pointer">${ic('ok')} Tirar ou escolher foto</label><input id="ptArq" type="file" accept="image/*" capture="environment" class="oculto"></div>`;
+    ligarSN((k, v) => { f.pt = v; document.getElementById('ptBox').classList.toggle('oculto', v !== 'Sim'); });
+    const ler = () => { f.ptNumero = val('ptN').trim(); f.ptEmissor = val('ptE').trim(); };
+    document.getElementById('ptArq').onchange = e => executar(async () => { ler(); if (e.target.files[0]) f.ptFoto = await comprimir(e.target.files[0], 1400, 0.72); passoPT(); });
+    const rm = document.getElementById('ptRm'); if (rm) rm.onclick = () => { ler(); f.ptFoto = ''; passoPT(); };
+    rodape('Continuar', () => {
+      ler();
+      if (!f.pt) throw new Error('Responda se há PT emitida pelo cliente.');
+      if (f.pt === 'Sim' && !f.ptNumero && !f.ptFoto && !f.ptEmissor) throw new Error('Informe o número da PT, a foto ou quem a emitiu.');
+      p = 1; desenhar();
+    });
+  }
+
+  function passoTriagem() {
+    const m = modelo();
+    $app.innerHTML = `${cab('Triagem do serviço')}
+      ${cfg.triagem.map(([k, t]) => `<div class="apr-it"><p>${esc(t)}</p>${sn(k, f.triagem[k] === true ? 'Sim' : f.triagem[k] === false ? 'Não' : '', ['Sim', 'Não'], false)}</div>`).join('')}
+      <div id="modBox">${triagemOk() ? (m === 'Reduzida'
+        ? msg('info', `Tipo "${ctx.tipo}" sem exposição a risco elétrico, altura, espaço confinado ou SEP: APR reduzida.`) + `<button type="button" class="link" id="forcar">Usar a APR completa</button>`
+        : msg('info', f.forcarCompleta ? 'APR completa escolhida pela equipe.' : reduzidaTipo ? 'A triagem indicou exposição a risco: APR completa obrigatória.' : `O tipo "${ctx.tipo}" exige APR completa.`)) : ''}</div>`;
+    ligarSN((k, v) => { f.triagem[k] = v === 'Sim'; passoTriagem(); });
+    const fc = document.getElementById('forcar'); if (fc) fc.onclick = () => { f.forcarCompleta = true; passoTriagem(); };
+    rodape('Continuar', () => {
+      if (!triagemOk()) throw new Error('Responda todas as perguntas da triagem.');
+      f.modelo = modelo();
+      if (f.modelo === 'Completa') { if (f.triagem.altura && !('Trabalho em altura' in f.riscos)) f.riscos['Trabalho em altura'] = ''; if (f.triagem.confinado && !('Espaço confinado' in f.riscos)) f.riscos['Espaço confinado'] = ''; }
+      p = 2; desenhar();
+    });
+  }
+
+  function passoChecklist() {
+    const comp = f.modelo === 'Completa';
+    const exig = exigidosAPR(f);
+    const linhasTreino = ctx.equipe.map(n => {
+      const t = tr[n] || {};
+      const it = exig.map(k => { const d = diasPara(t[k]);
+        const cls = d === null || d < 0 ? 'vermelho' : d <= 30 ? 'laranja' : 'verde';
+        return `<span class="selo-txt ${cls}">${k}: ${d === null ? 'sem data' : d < 0 ? 'vencido' : 'até ' + esc(t[k])}</span>`; }).join('');
+      return `<div style="margin-bottom:6px"><b>${esc(n)}</b><br>${it}</div>`;
+    }).join('');
+    const itensDe = s => cfg.itens.filter(it => it.s === s && (comp || it.m === 'A') && (!it.cond || it.cond === f.condicao));
+    const htmlIt = it => `<div class="apr-it"><p>${esc(it.t)}${it.imp ? ' <span class="imp">Impeditivo</span>' : ''}</p>${sn(it.id, f.respostas[it.id])}</div>`;
+    const secao = ([s, nome]) => {
+      if (!comp && (s === 'C' || s === 'D')) return '';
+      let extra = '';
+      if (s === 'D') extra = `<div class="pessoas" id="cond">${cfg.condicoes.map(c => `<button type="button" class="pessoa ${f.condicao === c ? 'sel' : ''}" data-v="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+        ${f.condicao === 'Energizada' ? `<label class="rotulo" for="aJust">Justificativa para o trabalho energizado <span class="imp">Impeditivo</span></label><textarea class="campo-txt" id="aJust">${esc(f.justificativa)}</textarea>` : ''}
+        <div style="height:10px"></div>`;
+      const its = itensDe(s);
+      if (s === 'H') return `<h2>${esc(nome)}</h2>${its.map(htmlIt).join('')}<div class="apr-it"><p>PT conferida</p><b>${esc(f.pt)}${f.ptNumero ? ', nº ' + esc(f.ptNumero) : ''}</b></div>`;
+      return `<h2>${esc(nome)}</h2>${extra}${its.map(htmlIt).join('')}`;
+    };
+    $app.innerHTML = `${cab(comp ? 'APR completa' : 'APR reduzida')}
+      <p class="suave">Itens marcados como impeditivos bloqueiam o início se a resposta for "Não". A administração é avisada na hora.</p>
+      <h2>Equipe</h2><p class="suave">Verificado pelo cadastro.</p>${linhasTreino}
+      <label class="rotulo">Responsável pela atividade</label>${chips('aResp', ctx.equipe, f.responsavel)}
+      ${cfg.secoes.filter(x => x[0] === 'B').map(secao).join('')}
+      ${cfg.secoes.filter(x => ['C', 'D', 'E'].includes(x[0])).map(secao).join('')}
+      ${comp ? `<h2>Riscos adicionais</h2><p class="suave">Marque os riscos presentes e informe a medida adotada.</p>
+        <div class="pessoas" id="aRis">${cfg.riscos.map(r => `<button type="button" class="pessoa ${r in f.riscos ? 'sel' : ''}" data-v="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+        ${Object.keys(f.riscos).map(r => `<label class="rotulo">Medida para ${esc(r.toLowerCase())}</label><input class="campo-txt" data-med="${esc(r)}" value="${esc(f.riscos[r])}">`).join('')}` : ''}
+      ${cfg.secoes.filter(x => ['G', 'H'].includes(x[0])).map(secao).join('')}
+      <h2>Liberação</h2>
+      <label class="linha" style="font-weight:500;align-items:flex-start"><input type="checkbox" id="aDecl" ${f.declaracao ? 'checked' : ''} style="width:24px;height:24px;flex:none;margin-top:2px">
+        <span>Os riscos foram avaliados e as medidas de controle foram implementadas.${comp ? '' : ' Não haverá abertura de painéis nem aproximação de partes energizadas.'}</span></label>
+      <p class="suave">O registro grava nome, data, hora e localização.</p>`;
+    const ler = () => {
+      const j = document.getElementById('aJust'); if (j) f.justificativa = j.value.trim();
+      document.querySelectorAll('[data-med]').forEach(i => f.riscos[i.dataset.med] = i.value.trim());
+      f.declaracao = document.getElementById('aDecl').checked;
+    };
+    ligarSN((k, v) => { f.respostas[k] = v; });
+    ligarChips('aResp', v => f.responsavel = v);
+    const cd = document.getElementById('cond');
+    if (cd) cd.querySelectorAll('button').forEach(b => b.onclick = () => { ler(); f.condicao = b.dataset.v; const y = window.scrollY; passoChecklist(); window.scrollTo(0, y); });
+    const rs = document.getElementById('aRis');
+    if (rs) rs.querySelectorAll('button').forEach(b => b.onclick = () => { ler(); const r = b.dataset.v; if (r in f.riscos) delete f.riscos[r]; else f.riscos[r] = ''; const y = window.scrollY; passoChecklist(); window.scrollTo(0, y); });
+    rodape(`${ic('saida')} Liberar e iniciar`, () => {
+      ler();
+      if (!f.responsavel) throw new Error('Escolha o responsável pela atividade.');
+      if (comp && !f.condicao) throw new Error('Informe a condição da instalação.');
+      const falta = cfg.itens.filter(it => (comp || it.m === 'A') && (!it.cond || it.cond === f.condicao) && !f.respostas[it.id]);
+      if (falta.length) throw new Error('Responda todos os itens. Falta: ' + falta[0].t);
+      const semMed = Object.keys(f.riscos).find(r => !f.riscos[r]); if (semMed) throw new Error('Informe a medida para: ' + semMed + '.');
+      if (!f.declaracao) throw new Error('Confirme a declaração de liberação.');
+      enviar();
+    });
+  }
+
+  function enviar() {
+    executar(async () => {
+      const apr = { pt: f.pt, ptNumero: f.ptNumero, ptEmissor: f.ptEmissor, ptFoto: f.ptFoto, triagem: f.triagem, modelo: f.modelo, responsavel: f.responsavel,
+        condicao: f.condicao, justificativa: f.justificativa, respostas: f.respostas,
+        riscos: Object.keys(f.riscos).map(r => ({ risco: r, medida: f.riscos[r] })), declaracao: f.declaracao };
+      const geo = payload.geo || await localizacao();
+      const r = await api('iniciarOS', Object.assign({}, payload, { geo, apr }));
+      if (r.bloqueada) return telaAPRBloqueada(r, () => { p = 2; desenhar(); });
+      await recarregarDados();
+      telaOS(`OS ${r.numero} iniciada às ${hora(r.quando)}. APR nº ${r.apr} registrada.${r.checkinNovo ? ' Check-in em ' + r.cliente + ' registrado.' : ''}`);
+    });
+  }
+
+  function desenhar() { window.scrollTo(0, 0); [passoPT, passoTriagem, passoChecklist][p](); }
+  topo('APR'); desenhar();
+}
+
+function telaAPRBloqueada(r, corrigir) {
+  topo('APR bloqueada');
+  const link = `https://wa.me/${WHATS_AJUDA}?text=${encodeURIComponent(r.resumo + '\n\nAguardo orientação.')}`;
+  $app.innerHTML = `<h1>Início bloqueado</h1><div id="erro"></div>
+    ${msg('erro', `A APR nº ${r.apr} tem impedimento. A OS não pode ser iniciada.`)}
+    <h2>Impedimentos</h2>${r.impedimentos.map(i => `<div class="apr-it"><p style="margin:0">${esc(i)}</p></div>`).join('')}
+    <p class="suave" style="margin-top:12px">A administração recebeu um e-mail com o resumo. Avise também o Eng. Joaquim pelo WhatsApp para a decisão.
+      Se a liberação for por exceção, a APR aparece na tela de OS com o botão Iniciar.</p>
+    <a class="acao" href="${link}" target="_blank" rel="noopener" style="text-decoration:none;background:#25D366;color:#fff">Avisar o Eng. Joaquim pelo WhatsApp</a>
+    <button type="button" class="acao leve" id="corr">Corrigir as respostas</button>`;
+  barra(`<div class="dentro"><button class="acao leve" id="sairB" type="button">${ic('voltar')} Voltar para as OS</button></div>`);
+  document.getElementById('corr').onclick = corrigir;
+  document.getElementById('sairB').onclick = () => telaOS();
+}
+
+/** Decisão da administração sobre APR bloqueada e situação dos treinamentos. */
+async function adminAPR(box) {
+  await executar(async () => {
+    const r = await api('aprPainel');
+    // NR-10 e ASO valem para todos; SEP, NR-33 e NR-35 só aparecem quando há data cadastrada
+    const tre = r.treinos.map(p => ({ nome: p.nome, itens: p.itens.filter(i => i.dias === null ? ['NR-10', 'ASO'].includes(i.k) : i.dias <= 30) })).filter(p => p.itens.length);
+    box.innerHTML = `<h2>APR bloqueadas (${r.bloqueadas.length})</h2>
+      ${r.bloqueadas.length ? r.bloqueadas.map(a => `<div class="cartao"><div class="t">APR ${esc(a.n)} · ${esc(a.cliente)}</div>
+        <p class="suave" style="margin:4px 0 6px">${esc(a.data)} · ${esc(a.quem)}${a.numero ? ' · OS ' + esc(a.numero) : ' · OS nova'} · ${esc(a.tipo)}<br>Equipe: ${esc(a.equipe.join(', '))}</p>
+        ${a.impedimentos.map(i => `<span class="selo-txt vermelho" style="margin-bottom:4px">${esc(i)}</span>`).join('')}
+        <textarea class="campo-txt" data-just="${esc(a.n)}" placeholder="Justificativa da decisão (obrigatória)" style="margin-top:8px"></textarea>
+        <div class="grade" style="margin-top:8px"><button type="button" class="acao leve" data-dec="${esc(a.n)}" data-l="1" style="margin:0">Liberar por exceção</button>
+        <button type="button" class="acao leve" data-dec="${esc(a.n)}" data-l="0" style="margin:0">Manter bloqueio</button></div></div>`).join('') : msg('info', 'Nenhuma APR aguardando decisão.')}
+      <h2>Treinamentos e ASO</h2><p class="suave">Vencidos, sem data ou vencendo em até 30 dias. Atualize na aba Colaboradores.</p>
+      ${tre.length ? tre.map(p => `<div class="cartao"><div class="t">${esc(p.nome)}</div>${p.itens.map(i => `<span class="selo-txt ${i.dias === null || i.dias < 0 ? 'vermelho' : 'laranja'}">${esc(i.k)}: ${i.dias === null ? 'sem data' : i.dias < 0 ? 'vencido em ' + esc(i.venc) : 'vence em ' + i.dias + ' dia(s)'}</span>`).join('')}</div>`).join('') : msg('ok', 'Todos os treinamentos em dia.')}`;
+    box.querySelectorAll('[data-dec]').forEach(b => b.onclick = () => executar(async () => {
+      const just = box.querySelector(`[data-just="${b.dataset.dec}"]`).value.trim();
+      if (!just) throw new Error('Escreva a justificativa da decisão.');
+      const lib = b.dataset.l === '1';
+      if (lib && !confirm('Liberar por exceção? A responsabilidade pela liberação fica registrada no seu nome.')) return;
+      await api('decidirAPR', { n: b.dataset.dec, liberar: lib, justificativa: just });
+      await recarregarDados(); telaAdmin('os');
+    }));
+  });
+}
+
 function blocoEquipe(id, sel) {
   const outros = (est.dados.equipeCampo || est.dados.colaboradores).filter(n => n !== est.usuario.nome);
   return outros.length ? `<label class="rotulo">Quem está com você hoje?</label>${chips(id, outros, '')}<p class="suave" style="margin-top:6px">Opcional. As horas contam para todos os marcados.</p>` : '';
@@ -1188,10 +1398,8 @@ function telaIniciarOS(o) {
   document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero);
   document.getElementById('ok').onclick = () => executar(async () => {
     const horario = lerHorario('hIni');
-    const geo = await localizacao();
-    const r = await api('iniciarOS', { numero: o.numero, equipe: lerEquipe('eqIni'), horario, geo });
-    await recarregarDados();
-    telaOS(`OS ${r.numero} iniciada às ${hora(r.quando)}.${r.checkinNovo ? ' Check-in em ' + r.cliente + ' registrado.' : ''}`);
+    const equipe = lerEquipe('eqIni');
+    fluxoAPR({ numero: o.numero, cliente: o.cliente, tipo: o.tipo, equipe: [est.usuario.nome, ...equipe] }, { numero: o.numero, equipe, horario }, () => telaIniciarOS(o));
   });
 }
 
@@ -1245,11 +1453,9 @@ function telaNovaOSCampo(pre) {
     }
     if (!f.tipo) throw new Error('Escolha o tipo de serviço.');
     const horario = lerHorario('hNova');
-    const geo = await localizacao();
-    const r = await api('iniciarOS', { cliente, novo, cidade, tipo: f.tipo, local: document.getElementById('nLocal').value, solicitante: document.getElementById('nSol').value,
-      solicitacao: document.getElementById('nSolic').value, equipe: lerEquipe('eqNova'), horario, geo });
-    await recarregarDados();
-    telaOS(`OS ${r.numero} aberta e iniciada às ${hora(r.quando)}.${r.checkinNovo ? ' Check-in em ' + r.cliente + ' registrado.' : ''}`);
+    const equipe = lerEquipe('eqNova');
+    fluxoAPR({ cliente, tipo: f.tipo, equipe: [est.usuario.nome, ...equipe] }, { cliente, novo, cidade, tipo: f.tipo, local: document.getElementById('nLocal').value, solicitante: document.getElementById('nSol').value,
+      solicitacao: document.getElementById('nSolic').value, equipe, horario }, () => telaNovaOSCampo(pre));
   });
 }
 
@@ -1446,7 +1652,7 @@ async function telaOutraOSCliente(cliente) {
 // ---------- administração: painel de OS ----------
 async function adminOS(box) {
   const h = new Date(), mes = `${h.getFullYear()}-${doisDig(h.getMonth() + 1)}`;
-  box.innerHTML = `<h1>Ordens de serviço</h1><button class="acao" id="progAdm" type="button" style="margin-top:0">${ic('calib')} Programar OS</button>
+  box.innerHTML = `<h1>Ordens de serviço</h1><button class="acao" id="progAdm" type="button" style="margin-top:0">${ic('calib')} Programar OS</button><div id="aprBox"></div>
     <input class="campo-txt" id="mesOS" type="month" value="${mes}" style="margin-top:12px"><div id="painel" style="margin-top:12px"></div>`;
   document.getElementById('progAdm').onclick = () => telaProgramarOS();
   let filtro = '';
@@ -1482,7 +1688,7 @@ async function adminOS(box) {
     document.querySelectorAll('#painel [data-f]').forEach(b => b.onclick = () => { filtro = filtro === b.dataset.f ? '' : b.dataset.f; carregar(); });
     document.querySelectorAll('#painel [data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os, true));
   });
-  document.getElementById('mesOS').onchange = carregar; carregar();
+  document.getElementById('mesOS').onchange = carregar; await carregar(); adminAPR(document.getElementById('aprBox'));
 }
 
 function adminEditarOS(o) {
