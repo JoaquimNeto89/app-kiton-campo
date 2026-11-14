@@ -196,6 +196,8 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .folha-painel{position:absolute;left:0;right:0;bottom:0;top:6vh;max-width:600px;margin:0 auto;background:var(--aco);border-radius:16px 16px 0 0;overflow-y:auto;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
 .folha-painel .menu-cab{border-radius:16px 16px 0 0;position:sticky;top:0;z-index:1}.folha-corpo{padding:4px 16px}
 .apr-lin{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:15px}.apr-lin:last-child{border-bottom:0}.apr-lin .selo-txt{flex:none;margin:0}
+.pdfs{margin-top:4px}.pdfs .acao{margin:0;min-height:58px;font-size:15px;padding:8px 10px;gap:8px;text-decoration:none;text-align:left;justify-content:flex-start}
+.pdfs .acao small{display:block;font-weight:500;font-size:12.5px;color:var(--cinza)}
 .menu-cab .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff}
 .menu-it{display:flex;align-items:center;gap:12px;width:calc(100% - 20px);margin:0 10px 6px;padding:12px;border:0;border-radius:12px;background:#fff;font-weight:600;font-size:16px;text-align:left;color:inherit;text-decoration:none}
 .menu-it span:not(.bolinha):not(.q){flex:1}.menu-it .q{width:26px;height:26px;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700}
@@ -1280,7 +1282,8 @@ async function telaOSDetalhe(numero, admin) {
       ${o.revisao ? `<div><dt>Revisão</dt><dd>${String(o.revisao).padStart(2, '0')}${o.reaberta ? ` · reaberta ${o.reaberta}x` : ''}</dd></div>` : ''}
     </dl>
     ${o.historico ? `<p class="suave" style="white-space:pre-line">${esc(o.historico)}</p>` : ''}
-    ${o.pdf ? `<a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener" style="text-decoration:none">${ic('os')} Abrir PDF final</a>` : ''}
+    ${o.pdf && o.status === 'Finalizada' ? `<div class="grade pdfs"><a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener">${ic('os')}<span>PDF final<small>${o.aprNoPdf === 'Sim' ? 'APR resumida' : 'Sem APR (como enviado)'}</small></span></a>
+      <button type="button" class="acao leve" id="pdfComp">${ic('os')}<span>PDF final<small>APR completa</small></span></button></div>` : ''}
     ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + dur(a.horas) : ' · em execução'}</div>
       <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
       ${a.tipo ? `<span class="selo-txt ${a.tipo === 'Final' ? 'verde' : 'amarelo'}">${a.tipo === 'Final' ? 'Finalização' : 'Parcial'}</span>` : ''}
@@ -1288,6 +1291,15 @@ async function telaOSDetalhe(numero, admin) {
       ${a.pdf ? `<a class="link" href="${esc(a.pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}${a.apr ? ` <button type="button" class="link" data-apr="${esc(a.apr)}">Ver APR nº ${esc(a.apr)}</button>` : ''}</div>`).join('') : ''}
     ${admin ? '<div id="adm"></div>' : ''}`;
   document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
+  const pc = document.getElementById('pdfComp');
+  if (pc) pc.onclick = () => {
+    const w = window.open('', '_blank'); // abre já no toque para o celular não bloquear
+    if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Gerando o PDF com a APR completa…</p>');
+    executar(async () => {
+      try { const x = await api('pdfComAPR', { numero: o.numero }); if (w) w.location.href = x.link; else window.location.href = x.link; }
+      catch (e) { if (w) w.close(); throw e; }
+    });
+  };
   const ok = document.getElementById('ok');
   const pode = !admin && ['Programada', 'Em andamento'].includes(o.status) && !o.emExecucao && !sess;
   if (pode) { ok.disabled = false; ok.innerHTML = `${ic('saida')} Iniciar`; ok.onclick = () => telaIniciarOS(o); }

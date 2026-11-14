@@ -41,7 +41,7 @@ const CAB = {
   'Ordens de serviço': ['Nº OS', 'Status', 'Cliente', 'Local / setor', 'Solicitante', 'Tipo de serviço', 'Solicitação / problema',
     'Início previsto', 'Término previsto', 'Técnicos designados', 'Programada por', 'Programada em', 'Evento na agenda', 'Iniciada em',
     'Início x programado', 'Último apontamento', 'Finalizada em', 'Prazo', 'Horas trabalhadas', 'Apontamentos', 'Pendências / recomendações',
-    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente', 'Revisão', 'Histórico de revisões', 'Reaberta'],
+    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente', 'Revisão', 'Histórico de revisões', 'Reaberta', 'PDF com APR completa'],
   'Apontamentos de OS': ['Nº', 'Nº OS', 'Início', 'Fim', 'Horas', 'Tipo', 'Equipe', 'Serviço executado', 'Materiais utilizados', 'Fotos',
     'Assinatura', 'Assinado por', 'Cargo / setor de quem assinou', 'Cliente ausente (motivo)', 'PDF do apontamento', 'Check-in',
     'Lat. início', 'Long. início', 'Lat. fim', 'Long. fim', 'Registrado por', 'Iniciado lançado em', 'Fim lançado em', 'Lançamento tardio'],
@@ -111,6 +111,7 @@ function rotear_(req) {
     case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
     case 'fotosAp': exigirAdmin_(u); return fotosAp_(req);
     case 'verAPR': return verAPR_(u, req);
+    case 'pdfComAPR': return comTrava_(() => pdfComAPR_(u, req));
     case 'corrigirOS': exigirAdmin_(u); return comTrava_(() => corrigirOS_(u, req));
     case 'reabrirOS': exigirAdmin_(u); return comTrava_(() => reabrirOS_(u, req));
     case 'aprPainel': exigirAdmin_(u); return aprPainel_();
@@ -1726,6 +1727,57 @@ function reabrirOS_(u, req) {
   return { ok: true, revisao: rev };
 }
 
+/** Página da APR completa (anexo do PDF da OS): sempre em uma folha própria. */
+function paginaAPR_(x, a, o) {
+  const g = k => txt_(x.get(k));
+  const linhas = v => lista3_(v);
+  const resp = l => { const m = l.match(/^(.*?)\s(Sim|Não|N\/A)$/); return m ? [m[1], m[2]] : [l, '']; };
+  const tabSN = lista => '<table class="ak">' + lista.map(l => { const r = resp(l); return '<tr><td>' + esc_(r[0]) + '</td><td class="rr' + (r[1] === 'Não' ? ' nao' : '') + '">' + esc_(r[1]) + '</td></tr>'; }).join('') + '</table>';
+  const pt = g('PT') === 'Sim' ? 'Sim' + (g('Nº da PT') ? ', nº ' + g('Nº da PT') : '') + (g('Emissor da PT') ? ', emitida por ' + g('Emissor da PT') : '') + (g('Foto da PT') ? ' (foto arquivada)' : '') : g('PT');
+  const ass = a && txt_(a.get('Assinatura')) ? imgDrive_(txt_(a.get('Assinatura'))) : '';
+  const sit = g('Situação') === 'Liberada por exceção' ? 'Liberada por exceção, por ' + g('Decisão por') + ': ' + g('Justificativa da decisão') : g('Situação');
+  // pares rótulo/valor em duas colunas para a APR caber numa folha
+  const kv2 = pares => { pares = pares.filter(x => x[1]); let h = ''; for (let i = 0; i < pares.length; i += 2) { const b = pares[i + 1];
+    h += '<tr><td class="ka">' + pares[i][0] + '</td><td' + (b ? '' : ' colspan="3"') + '>' + esc_(pares[i][1]) + '</td>' + (b ? '<td class="ka">' + b[0] + '</td><td>' + esc_(b[1]) + '</td>' : '') + '</tr>'; } return h; };
+  const tab2 = lista => { let h = '<table class="ak tri">'; for (let i = 0; i < lista.length; i += 2) { const a1 = resp(lista[i]), b1 = lista[i + 1] ? resp(lista[i + 1]) : null;
+    h += '<tr><td>' + esc_(a1[0]) + '</td><td class="rr">' + esc_(a1[1]) + '</td>' + (b1 ? '<td>' + esc_(b1[0]) + '</td><td class="rr">' + esc_(b1[1]) + '</td>' : '<td></td><td></td>') + '</tr>'; } return h + '</table>'; };
+  return '<div class="apr">' +
+    '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:130px;height:auto"></td>' +
+    '<td class="num"><span>ANÁLISE PRELIMINAR DE RISCO</span><b>APR Nº ' + esc_(g('Nº APR')) + '</b><span>OS nº ' + esc_(o.numero) + ' · ' + fmt_(x.get('Data')) + '</span></td></tr></table>' +
+    '<table class="ak kv">' + kv2([['Cliente', g('Cliente')], ['Local / setor', o.local], ['Tipo de serviço', g('Tipo de serviço')], ['Modelo', 'APR ' + g('Modelo').toLowerCase()],
+      ['Responsável', g('Responsável pela atividade')], ['Equipe', g('Equipe')], ['Instalação', g('Condição da instalação')], ['Situação', sit]]) +
+    kv2([['Permissão de trabalho (PT)', pt]]) + kv2([['Justificativa (energizado)', g('Justificativa (energizado)')]]) + '</table>' +
+    '<div class="at">Triagem</div>' + tab2(linhas(x.get('Triagem'))) +
+    '<div class="at">Verificações antes do início</div>' + tabSN(linhas(x.get('Respostas'))) +
+    (g('Riscos adicionais e medidas') ? '<div class="at">Riscos adicionais e medidas de controle</div><div class="ab">' + quebra_(g('Riscos adicionais e medidas')) + '</div>' : '') +
+    (g('Impedimentos') ? '<div class="at">Impedimentos registrados</div><div class="ab">' + quebra_(g('Impedimentos')) + '</div>' : '') +
+    '<div class="at">Liberação</div><div class="ab">Declaração do responsável: os riscos foram avaliados e as medidas de controle foram implementadas.<br>' +
+    '<b>' + esc_(g('Responsável pela atividade')) + '</b> · registrado por ' + esc_(g('Registrado por')) + ' em ' + fmt_(x.get('Data')) +
+    (g('Lat.') ? ' · localização ' + esc_(g('Lat.')) + ', ' + esc_(g('Long.')) : '') + '</div>' +
+    '<div class="at">Ciência do cliente</div><div class="ab cie">' + (ass ? '<img src="' + ass + '">' : '') + esc_(g('Ciência do cliente') || 'Não registrada') + '</div>' +
+    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Base: NR-10 · Documento gerado pelo Kiton Hub</div></div>';
+}
+
+/** PDF final com a APR completa anexada (gera sob demanda e reaproveita enquanto a revisão não mudar). */
+function pdfComAPR_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  const numero = txt_(req.numero);
+  const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
+  const o = resumoOS_(l, aps);
+  if (u.perfil !== 'Administrador' && o.envolvidos.indexOf(u.nome) < 0) throw new Error('Só a administração e a equipe da OS podem abrir este PDF.');
+  if (o.status !== 'Finalizada') throw new Error('O PDF final só existe depois da finalização.');
+  const chave = o.revisao + '|';
+  const atual = t.cab['PDF com APR completa'] !== undefined ? txt_(l.get('PDF com APR completa')) : '';
+  if (atual.indexOf(chave) === 0) return { ok: true, link: atual.slice(chave.length) };
+  const pdf = pdfOS2_(o, aps, 'final', txt_(l.get('APR no PDF do cliente')) === 'Sim', true);
+  pdf.setName('OS ' + numero + (o.revisao ? ' - Rev ' + revTxt_(o.revisao) : '') + ' - com APR completa - ' + o.cliente.replace(/[\\/:*?"<>|]/g, '') + '.pdf');
+  const link = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]).createFile(pdf).getUrl();
+  if (t.cab['PDF com APR completa'] !== undefined) set_(t, l._linha, 'PDF com APR completa', chave + link);
+  return { ok: true, link };
+}
+
 // ----- painel gerencial -----
 function painelOS_(req) {
   // período: de/ate (yyyy-MM-dd); sem datas = geral. Compatível com o filtro antigo por mês (req.mes = yyyy-MM).
@@ -1819,7 +1871,7 @@ function txtApont_(r) {
   return r.total + (r.total === 1 ? ' (finalização)' : ' (' + r.parciais + ' parcia' + (r.parciais === 1 ? 'l' : 'is') + ' e 1 de finalização)');
 }
 
-function pdfOS2_(o, aps, modo, comAPR) {
+function pdfOS2_(o, aps, modo, comAPR, aprCompleta) {
   const linha = (rot, val) => val ? '<tr><td class="r">' + rot + '</td><td>' + quebra_(val) + '</td></tr>' : '';
   const bloco = (tit, val) => val ? '<div class="b"><div class="bt">' + tit + '</div><div class="bc">' + quebra_(val) + '</div></div>' : '';
   const r = resumoExecucao_(aps);
@@ -1884,6 +1936,11 @@ function pdfOS2_(o, aps, modo, comAPR) {
     '.ass{margin-top:8px;border:1px solid #9aa3ad;padding:6px 8px;page-break-inside:avoid}.ass img{height:60px}.ass .n{border-top:1px solid #1c1f23;margin-top:2px;padding-top:3px;font-weight:bold}' +
     '.ass .s{font-size:8pt;color:#5d6670}.aus{color:#8A3B00;font-weight:bold;padding:14px 0 4px}' +
     '.rod{margin-top:10px;font-size:7.5pt;color:#5d6670;text-align:center;border-top:1px solid #e6e9ed;padding-top:5px}' +
+    '.apr{page-break-before:always;page-break-inside:avoid;font-size:7.8pt}.apr .cab{margin-bottom:5px}.apr .num b{font-size:12pt}' +
+    'table.ak{width:100%;border-collapse:collapse;margin:0 0 3px;font-size:8pt}table.ak td{border:1px solid #c9ced4;padding:1.5px 4px;vertical-align:top;line-height:1.2}' +
+    'table.ak td.rr{width:30px;text-align:center;font-weight:bold}table.ak td.nao{color:#B00000}table.kv td.ka{width:82px;color:#5d6670;font-size:7pt}table.tri td{background:#f6f7f8}' +
+    '.at{font-weight:bold;font-size:8pt;text-transform:uppercase;border-bottom:1.5px solid #CD0000;margin:5px 0 2px;padding-bottom:1px}' +
+    '.ab{border:1px solid #c9ced4;padding:3px 5px;line-height:1.25}.cie img{height:36px;display:block;margin-bottom:1px}.apr .rod{margin-top:5px}' +
     '</style></head><body>' +
     '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:170px;height:auto">' +
     '<div class="emp">' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div></td>' +
@@ -1892,7 +1949,8 @@ function pdfOS2_(o, aps, modo, comAPR) {
     linha('Programação', o.inicioPrev ? o.inicioPrev + (o.fimPrev ? ' a ' + o.fimPrev : '') : 'Aberta em campo') + '</table>' +
     bloco('Solicitação / problema relatado', o.solicitacao) + resumo + ordenados.map(paginaAp).join('') +
     (modo === 'final' && o.historico ? '<div class="b"><div class="bt">Histórico de revisões</div><div class="bc" style="font-size:8.5pt">' + quebra_(o.historico) + '<br>Esta revisão substitui as versões anteriores deste documento.</div></div>' : '') +
-    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div></body></html>';
+    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div>' +
+    (aprCompleta ? ordenados.map(a => aprs[txt_(a.get('Nº'))] ? paginaAPR_(aprs[txt_(a.get('Nº'))], a, o) : '').join('') : '') + '</body></html>';
   const cli = o.cliente.replace(/[\\/:*?"<>|]/g, '');
   return Utilities.newBlob(html, 'text/html', 'OS.html').getAs('application/pdf')
     .setName(modo === 'final' ? 'OS ' + o.numero + (o.revisao ? ' - Rev ' + revTxt_(o.revisao) : '') + ' - ' + cli + '.pdf' : 'OS ' + o.numero + ' - parcial ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm') + ' - ' + cli + '.pdf');
