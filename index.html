@@ -189,6 +189,14 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .selo-txt.laranja{background:#FFE2C2;color:#8A3B00}
 .cartao.tardio{box-shadow:inset 4px 0 0 #E8730C}
 .selo-txt.verde{background:var(--verde-claro);color:var(--verde)}
+.menu{position:fixed;inset:0;z-index:50}.menu.oculto{display:none}
+.menu-fundo{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.menu-painel{position:absolute;top:0;right:0;bottom:0;width:min(330px,88vw);background:var(--aco);overflow-y:auto;padding:0 0 calc(24px + env(safe-area-inset-bottom));box-shadow:-6px 0 24px rgba(0,0,0,.25)}
+.menu-cab{display:flex;align-items:center;justify-content:space-between;background:var(--preto);color:#fff;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));border-bottom:4px solid var(--vermelho);margin-bottom:8px}
+.menu-cab .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff}
+.menu-it{display:flex;align-items:center;gap:12px;width:calc(100% - 20px);margin:0 10px 6px;padding:12px;border:0;border-radius:12px;background:#fff;font-weight:600;font-size:16px;text-align:left;color:inherit;text-decoration:none}
+.menu-it span:not(.bolinha):not(.q){flex:1}.menu-it .q{width:26px;height:26px;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700}
+.menu-sec{margin:14px 20px 8px;font-size:13px;font-weight:700;color:var(--cinza);letter-spacing:.3px}
 .abas{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
 .abas button{flex:1 1 auto;border:0;border-radius:12px;padding:12px 12px;background:#fff;font-weight:600;font-size:15px;white-space:nowrap}
 .bolinha{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;margin-left:6px;border-radius:10px;background:var(--vermelho);color:#fff;font-size:12px;line-height:1}
@@ -226,11 +234,12 @@ select.campo-txt{appearance:auto}
 <header class="topo">
   <button type="button" class="ir-inicio" id="irInicio" aria-label="Ir para a tela inicial"><img src="logo-redondo.png?v=2" alt=""><div class="marca" id="marca">Kiton Hub</div></button>
   <a class="ajuda" id="btnAjuda" href="#" target="_blank" rel="noopener" aria-label="Ajuda pelo WhatsApp"><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 19z"/><path d="M9.5 9.5c0 3 2 5 5 5l1-1.4-1.6-.8-.8.8c-1-.4-1.8-1.2-2.2-2.2l.8-.8-.8-1.6z" fill="currentColor" stroke="none"/></svg></a>
-  <button class="icone-btn oculto" id="btnSair" type="button" aria-label="Sair do app"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg></button>
+  <button class="icone-btn oculto" id="btnMenu" type="button" aria-label="Abrir o menu" aria-haspopup="dialog"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 </header>
 <div class="faixa"></div>
 <main id="app"></main>
 <div id="barra"></div>
+<div id="menu" class="menu oculto" role="dialog" aria-modal="true" aria-label="Menu"><div class="menu-fundo" id="menuFundo"></div><nav class="menu-painel" id="menuPainel"></nav></div>
 <div id="carregando" class="carregando oculto"><div>Aguarde…</div></div>
 <script src="config.js"></script>
 <script>
@@ -290,7 +299,7 @@ const msg = (tipo, t) => `<div class="msg ${tipo}" role="status">${esc(t)}</div>
 const hora = s => String(s || '').slice(-5);
 const primeiroNome = n => String(n || '').replace(/^Eng\.\s*/, '').split(' ')[0];
 const barra = html => { $barra.innerHTML = html ? `<div class="barra">${html}</div>` : ''; };
-const topo = (sub) => { telaAtual = sub || 'Entrar'; document.getElementById('marca').innerHTML = `Kiton Hub${sub ? `<span>${esc(sub)}</span>` : ''}`; };
+const topo = (sub) => { telaAtual = sub || 'Entrar'; sujo = false; document.getElementById('marca').innerHTML = `Kiton Hub${sub ? `<span>${esc(sub)}</span>` : ''}`; };
 
 async function api(acao, dados = {}) {
   if (!window.API_URL || API_URL.indexOf('http') !== 0) throw new Error('O endereço do Apps Script ainda não foi configurado (config.js).');
@@ -328,11 +337,57 @@ function sair() {
 // logo e nome no topo levam à tela inicial; em tela com formulário preenchido, confirma antes
 document.getElementById('irInicio').onclick = () => {
   if (!est.token || !est.dados || telaAtual === est.usuario.nome) return;
-  const preenchido = [...$app.querySelectorAll('input:not([type=checkbox]):not([type=month]):not([type=file]), textarea')].some(e => e.value && e.value !== e.defaultValue) || $app.querySelector('canvas');
-  if (preenchido && !confirm('Voltar para a tela inicial? O que não foi salvo nesta tela será perdido.')) return;
   carregarInicio();
 };
-document.getElementById('btnSair').onclick = () => { if (confirm('Sair do app neste celular?')) sair(); };
+// ---------- proteção contra perda do que foi preenchido ----------
+let sujo = false;
+const marcarSujo = alvo => { if (!alvo.closest('.nao-suja')) sujo = true; };
+$app.addEventListener('input', e => marcarSujo(e.target), true);
+$app.addEventListener('change', e => { if (e.target.type === 'file') marcarSujo(e.target); }, true);
+$app.addEventListener('click', e => { const t = e.target.closest('.sna button, .pessoa, .segmento button, .opcao, [data-x], [data-rm], [data-rmf]'); if (t) marcarSujo(t); }, true);
+$app.addEventListener('pointerdown', e => { if (e.target.tagName === 'CANVAS') sujo = true; }, true);
+function podeSair() {
+  if (!sujo) return true;
+  if (!confirm('Sair desta tela? O que foi preenchido e ainda não foi salvo será perdido.')) return false;
+  sujo = false; return true;
+}
+// botões que tiram da tela atual: confirmam antes se houver algo preenchido
+document.addEventListener('click', e => {
+  const t = e.target.closest('#ini, #irInicio, #ant:not([data-passo]), #sairB, [data-menu]');
+  if (t && !podeSair()) { e.preventDefault(); e.stopImmediatePropagation(); if (t.dataset.menu) fecharMenu(); }
+}, true);
+window.addEventListener('beforeunload', e => { if (sujo) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------- menu ----------
+function fecharMenu() { document.getElementById('menu').classList.add('oculto'); document.body.style.overflow = ''; }
+function abrirMenu() {
+  const d = est.dados || {}, admin = est.usuario && est.usuario.perfil === 'Administrador', pd = d.pendencias || {};
+  const bol = n => n ? `<span class="bolinha">${n}</span>` : '';
+  const item = (k, icone, t, n) => `<button type="button" class="menu-it" data-menu="${k}">${ic(icone)}<span>${t}</span>${bol(n)}</button>`;
+  document.getElementById('menuPainel').innerHTML = `<div class="menu-cab"><b>${esc(est.usuario.nome)}</b><button type="button" class="icone-btn" id="menuX" aria-label="Fechar o menu"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    ${item('inicio', 'cliente', 'Início')}${item('saidas', 'saida', 'Saídas e retornos')}${item('checkin', 'pino', 'Check-in em obra')}
+    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens')}
+    ${admin ? `<div class="menu-sec">Administração</div>
+      ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
+      ${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
+      ${item('a-seg', 'admin', 'Segurança (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-pres', 'pino', 'Presença em obra')}
+      ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
+    <div class="menu-sec"></div>
+    <a class="menu-it" href="${esc(linkAjuda())}" target="_blank" rel="noopener" id="menuAjuda"><span class="q" style="background:#25D366">?</span><span>Ajuda e dúvidas</span></a>
+    ${item('sair', 'voltar', 'Sair do app')}`;
+  document.getElementById('menu').classList.remove('oculto'); document.body.style.overflow = 'hidden';
+  document.getElementById('menuX').onclick = fecharMenu;
+  const acoes = { inicio: carregarInicio, saidas: telaSaidas, checkin: telaCheckin, os: telaOS, desp: telaDespesas, meus: telaMeusItens,
+    calib: telaCalibracao, cad: telaCadastros, sair: () => { if (confirm('Sair do app neste celular?')) sair(); } };
+  document.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => {
+    fecharMenu(); const k = b.dataset.menu;
+    if (k.startsWith('a-')) telaAdmin(k.slice(2)); else acoes[k]();
+  });
+  document.getElementById('menuAjuda').onclick = fecharMenu;
+}
+document.getElementById('btnMenu').onclick = abrirMenu;
+document.getElementById('menuFundo').onclick = fecharMenu;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharMenu(); });
 
 // ---------- calibração na lista de itens ----------
 function linhaCal(i) {
@@ -380,7 +435,7 @@ function lerHorario(id) {
 
 // ---------- entrar ----------
 async function telaLogin() {
-  document.getElementById('btnSair').classList.add('oculto'); topo(); barra('');
+  document.getElementById('btnMenu').classList.add('oculto'); topo(); barra('');
   $app.innerHTML = `<div class="login-marca"><img src="logo-redondo.png?v=2" alt=""><h1>Entrar no Kiton Hub</h1><p class="suave">Registro de saídas, ferramentas e retorno</p></div>
     <div id="erro"></div>
     <label class="rotulo" for="nome">Quem é você?</label>
@@ -430,7 +485,7 @@ async function carregarInicio() {
   await executar(async () => { const r = await api('inicio'); est.dados = r; est.usuario = r.usuario; telaInicio(); });
 }
 function telaInicio() {
-  document.getElementById('btnSair').classList.remove('oculto');
+  document.getElementById('btnMenu').classList.remove('oculto');
   topo(est.usuario.nome); barra('');
   const d = est.dados, admin = est.usuario.perfil === 'Administrador', ab = d.abertas;
   const status = ab.length ? `<span class="status campo">Em campo desde ${esc(hora(ab[0].saida))}</span>` : '<span class="status">Na base</span>';
@@ -641,6 +696,7 @@ function fluxoSaida() {
     <div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button>
     <button class="acao" id="prox" type="button" ${pode ? '' : 'disabled'}>${txtAvancar}</button></div>`);
   const ligar = () => {
+    if (p > 0) document.getElementById('ant').dataset.passo = '1';
     document.getElementById('ant').onclick = () => { if (p === 0) telaSaidas(); else { p--; desenhar(); } };
     const pr = document.getElementById('prox'); if (pr) pr.onclick = () => { if (p < 4) { p++; desenhar(); } else confirmar(); };
   };
@@ -823,10 +879,7 @@ function telaRetorno(s) {
 async function telaAdmin(aba) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
-  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['os', 'OS', 'os'], ['seg', 'Segurança', 'seg'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
-    const pd = est.dados.pendencias || {}; const n = !pk ? 0 : pk === 'seg' ? (pd.apr || 0) + (pd.treinos || 0) : pd[pk];
-    return `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}${n ? `<span class="bolinha">${n}</span>` : ''}</button>`; }).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
-  $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
+  $app.innerHTML = `<div id="erro"></div><div id="conteudo"></div>`;
   document.getElementById('ant').onclick = () => carregarInicio();
   const box = document.getElementById('conteudo');
   if (aba === 'aberto') {
@@ -864,7 +917,7 @@ async function telaAdmin(aba) {
     await adminPresenca(box);
   } else if (aba === 'fech') {
     const h = new Date(), mes = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
-    box.innerHTML = `<h1>Fechamento do mês</h1><input class="campo-txt" id="mes" type="month" value="${mes}"><div id="tab" style="margin-top:12px"></div>`;
+    box.innerHTML = `<h1>Fechamento do mês</h1><input class="campo-txt nao-suja" id="mes" type="month" value="${mes}"><div id="tab" style="margin-top:12px"></div>`;
     const carregar = () => executar(async () => {
       const r = await api('fechamento', { mes: document.getElementById('mes').value });
       document.getElementById('tab').innerHTML = r.pessoas.length ? r.pessoas.map(p => `<div class="cartao"><div class="t">${esc(p.nome)}</div>
@@ -1238,6 +1291,7 @@ function fluxoAPR(ctx, payload, voltar) {
   }));
   const rodape = (txt, prox) => {
     barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="prox" type="button">${txt}</button></div>`);
+    if (p > 0) document.getElementById('ant').dataset.passo = '1';
     document.getElementById('ant').onclick = () => { if (p === 0) voltar(); else { p--; desenhar(); } };
     document.getElementById('prox').onclick = () => { try { prox(); } catch (e) { erroTela(e.message); } };
   };
@@ -1534,6 +1588,7 @@ function fluxoApontar(s) {
   }
   const rodape = txt => {
     barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="prox" type="button">${txt}</button></div>`);
+    if (p > 0) document.getElementById('ant').dataset.passo = '1';
     document.getElementById('ant').onclick = () => { ler(); if (p === 0) telaOS(); else { p--; desenhar(); } };
     document.getElementById('prox').onclick = () => { ler(); try { validar(); } catch (e) { return erroTela(e.message); } if (p < 3) { p++; desenhar(); } else finalizar(); };
   };
@@ -1687,8 +1742,8 @@ async function adminOS(box) {
   const anos = []; for (let a = h.getFullYear(); a >= 2026; a--) anos.push(String(a));
   const sel = (id, rot, lista, v) => `<label class="rotulo" for="${id}">${rot}</label><select class="campo-txt" id="${id}"><option value="">Todos</option>${lista.map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
   box.innerHTML = `<h1>Ordens de serviço</h1><button class="acao" id="progAdm" type="button" style="margin-top:0">${ic('calib')} Programar OS</button>
-    <div class="cartao" style="margin-top:12px"><div class="t">Filtros</div>
-      <div class="segmento" id="fPer">${[['mes', 'Mês'], ['ano', 'Ano'], ['periodo', 'Período'], ['geral', 'Geral']].map(([k, t]) => `<button type="button" data-v="${k}" class="${f.periodo === k ? 'sel' : ''}">${t}</button>`).join('')}</div>
+    <div class="cartao nao-suja" style="margin-top:12px"><div class="t">Filtros</div>
+      <div class="segmento" id="fPer" data-nf>${[['mes', 'Mês'], ['ano', 'Ano'], ['periodo', 'Período'], ['geral', 'Geral']].map(([k, t]) => `<button type="button" data-v="${k}" class="${f.periodo === k ? 'sel' : ''}">${t}</button>`).join('')}</div>
       <div id="fPerBox" style="margin-top:10px">
         ${f.periodo === 'mes' ? `<input class="campo-txt" id="fMes" type="month" value="${f.mes}">` : ''}
         ${f.periodo === 'ano' ? `<select class="campo-txt" id="fAno">${anos.map(a => `<option ${a === f.ano ? 'selected' : ''}>${a}</option>`).join('')}</select>` : ''}
@@ -1701,7 +1756,7 @@ async function adminOS(box) {
       ${f.cliente || f.colaborador || f.tipo ? '<button type="button" class="link" id="fLimpar">Limpar filtros</button>' : ''}`
       : '<button type="button" class="link" id="fMais">+ Filtrar por cliente, colaborador ou tipo</button>'}
     </div>
-    <div class="segmento" id="fVis" style="margin-top:12px"><button type="button" data-v="lista" class="${f.visao === 'lista' ? 'sel' : ''}">Lista de OS</button><button type="button" data-v="resumo" class="${f.visao === 'resumo' ? 'sel' : ''}">Resumo</button></div>
+    <div class="segmento nao-suja" id="fVis" data-nf style="margin-top:12px"><button type="button" data-v="lista" class="${f.visao === 'lista' ? 'sel' : ''}">Lista de OS</button><button type="button" data-v="resumo" class="${f.visao === 'resumo' ? 'sel' : ''}">Resumo</button></div>
     <div id="painel" style="margin-top:12px"></div>`;
   document.getElementById('progAdm').onclick = () => telaProgramarOS();
   const refazer = () => adminOS(box);
@@ -2086,7 +2141,7 @@ async function adminClientes(box) {
 
 async function adminPresenca(box) {
   const h = new Date(), mes = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
-  box.innerHTML = `<h1>Presença em obra</h1><input class="campo-txt" id="mesP" type="month" value="${mes}"><div id="pres" style="margin-top:12px"></div>`;
+  box.innerHTML = `<h1>Presença em obra</h1><input class="campo-txt nao-suja" id="mesP" type="month" value="${mes}"><div id="pres" style="margin-top:12px"></div>`;
   const carregar = () => executar(async () => {
     const r = await api('presenca', { mes: document.getElementById('mesP').value });
     const pessoas = {};
