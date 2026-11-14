@@ -11,6 +11,7 @@ const TZ = 'America/Sao_Paulo';
 const TOLERANCIA_MIN = 15; // lançamento feito mais de 15 min depois do horário informado = lançamento tardio
 const RAIO_PADRAO_M = 300;  // check-in a mais de 300 m do cliente fica sinalizado (não bloqueia)
 const EMAIL_KITON = 'contato@kitonengenharia.com.br';
+const VERSAO_APP = '1.0 beta'; // mesma versão exibida no rodapé do app
 const EMPRESA = {
   nome: 'Kiton Engenharia Integrada Ltda',
   cnpj: '29.234.872/0001-04',
@@ -1082,6 +1083,7 @@ function resumoOS_(l, aps) {
     programadaPor: txt_(l.get('Programada por')), iniciadaEm: fmt_(l.get('Iniciada em')), finalizadaEm: fmt_(l.get('Finalizada em')),
     horas: Number(l.get('Horas trabalhadas')) || 0, apontamentos: aps.length, emExecucao,
     atrasada: status === 'Programada' && !!ini && ini.getTime() < agora.getTime(),
+    aprovacaoAtrasada: status === ST_APROVACAO && !!data_(l.get('Finalizada em')) && agora.getTime() - data_(l.get('Finalizada em')).getTime() > 24 * 36e5,
     parada: status === 'Em andamento' && !emExecucao && !!ultimo && agora.getTime() - ultimo.getTime() > DIAS_PARADA * 864e5,
     inicioVsPrevisto: txt_(l.get('Início x programado')), prazo: txt_(l.get('Prazo')),
     pdf: txt_(l.get('PDF final')), envio: txt_(l.get('Envio')), emails: txt_(l.get('E-mails do cliente')),
@@ -1689,12 +1691,16 @@ function corrigirOS_(u, req) {
   aplicarEdicoes_(numero, req.apontamentos, pasta);
 
   if (req.pendencias !== undefined) set_(t, l._linha, 'Pendências / recomendações', txt_(req.pendencias));
-  if (typeof req.incluirAPR === 'boolean' && t.cab['APR no PDF do cliente'] !== undefined) set_(t, l._linha, 'APR no PDF do cliente', req.incluirAPR ? 'Sim' : 'Não');
+  if (typeof req.incluirAPR === 'boolean' && t.cab['APR no PDF do cliente'] !== undefined) {
+    const at = txt_(l.get('APR no PDF do cliente'));
+    set_(t, l._linha, 'APR no PDF do cliente', req.incluirAPR ? (at === 'Completa' ? 'Completa' : 'Sim') : 'Não');
+  }
   const rev = registrarRevisao_(t, l, u, 'correção', motivo);
   const t2 = ler_(ABA.os), l2 = t2.linhas.find(x => txt_(x.get('Nº OS')) === numero);
   const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
   const o = resumoOS_(l2, aps);
-  const pdf = pdfOS2_(o, aps, 'final', txt_(l2.get('APR no PDF do cliente')) === 'Sim');
+  const ap2 = txt_(l2.get('APR no PDF do cliente'));
+  const pdf = pdfOS2_(o, aps, 'final', ap2 === 'Sim' || ap2 === 'Completa', ap2 === 'Completa');
   const link = pasta.createFile(pdf).getUrl();
   set_(t2, l2._linha, 'PDF final', link);
   let envio = '';
@@ -1752,7 +1758,7 @@ function paginaAPR_(x, a, o) {
     '<b>' + esc_(g('Responsável pela atividade')) + '</b> · registrado por ' + esc_(g('Registrado por')) + ' em ' + fmt_(x.get('Data')) +
     (g('Lat.') ? ' · localização ' + esc_(g('Lat.')) + ', ' + esc_(g('Long.')) : '') + '</div>' +
     '<div class="at">Ciência do cliente</div><div class="ab cie">' + (ass ? '<img src="' + ass + '">' : '') + esc_(g('Ciência do cliente') || 'Não registrada') + '</div>' +
-    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Base: NR-10 · Documento gerado pelo Kiton Hub</div></div>';
+    '</div>';
 }
 
 /** PDF somente da APR (uma folha), para imprimir. */
@@ -1764,7 +1770,7 @@ function pdfAPR_(u, req) {
   const lo = numero ? ler_(ABA.os).linhas.find(x => txt_(x.get('Nº OS')) === numero) : null;
   const a = txt_(l.get('Apontamento')) ? ler_(ABA.apont).linhas.find(x => txt_(x.get('Nº')) === txt_(l.get('Apontamento'))) : null;
   const o = { numero: numero || '-', local: lo ? txt_(lo.get('Local / setor')) : '' };
-  const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() + '.apr{page-break-before:auto}</style></head><body>' + paginaAPR_(l, a, o) + '</body></html>';
+  const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() + '.apr{page-break-before:auto}</style></head><body>' + envolverPDF_(paginaAPR_(l, a, o)) + '</body></html>';
   const pdf = Utilities.newBlob(html, 'text/html', 'APR.html').getAs('application/pdf').setName('APR ' + txt_(l.get('Nº APR')) + ' - OS ' + o.numero + ' - ' + txt_(l.get('Cliente')).replace(/[\\/:*?"<>|]/g, '') + '.pdf');
   const link = pasta_(['Kiton Hub', 'APR', Utilities.formatDate(new Date(), TZ, 'yyyy')]).createFile(pdf).getUrl();
   return { ok: true, link };
@@ -1784,7 +1790,7 @@ function pdfComAPR_(u, req) {
   const atual = t.cab['PDF com APR completa'] !== undefined ? txt_(l.get('PDF com APR completa')) : '';
   if (atual.indexOf(chave) === 0) return { ok: true, link: atual.slice(chave.length) };
   if (o.status === ST_APROVACAO) o.previa = true;
-  const pdf = pdfOS2_(o, aps, 'final', txt_(l.get('APR no PDF do cliente')) === 'Sim', true);
+  const pdf = pdfOS2_(o, aps, 'final', ['Sim', 'Completa'].indexOf(txt_(l.get('APR no PDF do cliente'))) >= 0, true);
   pdf.setName('OS ' + numero + (o.revisao ? ' - Rev ' + revTxt_(o.revisao) : '') + ' - com APR completa - ' + o.cliente.replace(/[\\/:*?"<>|]/g, '') + '.pdf');
   const link = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]).createFile(pdf).getUrl();
   if (t.cab['PDF com APR completa'] !== undefined) set_(t, l._linha, 'PDF com APR completa', chave + link);
@@ -1825,21 +1831,24 @@ function aprovarOS_(u, req) {
   const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]);
   aplicarEdicoes_(numero, req.apontamentos, pasta);
   if (req.pendencias !== undefined) set_(t, l._linha, 'Pendências / recomendações', txt_(req.pendencias));
-  if (t.cab['APR no PDF do cliente'] !== undefined) set_(t, l._linha, 'APR no PDF do cliente', req.incluirAPR ? 'Sim' : 'Não');
+  // APR no PDF: 'completa' (folha da APR anexada), 'resumida' (quadro em cada apontamento) ou 'nenhuma'
+  const modoApr = ['completa', 'resumida', 'nenhuma'].indexOf(req.apr) >= 0 ? req.apr : (req.incluirAPR ? 'resumida' : 'nenhuma');
+  if (t.cab['APR no PDF do cliente'] !== undefined) set_(t, l._linha, 'APR no PDF do cliente', modoApr === 'completa' ? 'Completa' : modoApr === 'resumida' ? 'Sim' : 'Não');
   set_(t, l._linha, 'E-mails do cliente', emails.join(', '));
   set_(t, l._linha, 'Status', 'Finalizada');
   if (t.cab['Aprovada por'] !== undefined) { set_(t, l._linha, 'Aprovada por', u.nome); set_(t, l._linha, 'Aprovada em', new Date()); }
   const t2 = ler_(ABA.os), l2 = t2.linhas.find(x => txt_(x.get('Nº OS')) === numero);
   const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
   const o = resumoOS_(l2, aps);
-  const pdf = pdfOS2_(o, aps, 'final', !!req.incluirAPR);
+  const pdf = pdfOS2_(o, aps, 'final', modoApr !== 'nenhuma', modoApr === 'completa');
   const link = pasta.createFile(pdf).getUrl();
   set_(t2, l2._linha, 'PDF final', link);
-  let envio = 'Aprovada por ' + u.nome + ' sem envio ao cliente';
-  if (req.enviar) {
-    try { enviarOS2_(o, pdf, emails, 'final', aps); envio = 'Aprovada por ' + u.nome + ' e enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
-    catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
-  }
+  let envio;
+  const quando = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+  try {
+    if (req.enviar) { enviarOS2_(o, pdf, emails, 'final', aps); envio = 'Aprovada por ' + u.nome + ' e enviada ao cliente em ' + quando + ' (APR ' + modoApr + ')'; }
+    else { enviarOS2_(o, pdf, [], 'interna', aps); envio = 'Aprovada por ' + u.nome + ' em ' + quando + ', sem envio ao cliente'; }
+  } catch (e) { envio = 'Erro no envio: ' + (e && e.message ? e.message : e); }
   set_(t2, l2._linha, 'Envio', envio);
   return { ok: true, link, envio, enviada: !!req.enviar && !/^Erro/.test(envio) };
 }
@@ -1956,9 +1965,20 @@ function txtApont_(r) {
   return r.total + (r.total === 1 ? ' (finalização)' : ' (' + r.parciais + ' parcia' + (r.parciais === 1 ? 'l' : 'is') + ' e 1 de finalização)');
 }
 
+/** Rodapé fixo em todas as páginas dos PDFs (a tabela reserva o espaço dele em cada folha). */
+function rodapePDF_() {
+  return '<div class="rodfix">Todos os direitos reservados | ' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) +
+    ' | Documento gerado automaticamente via app Kiton Hub (versão ' + esc_(VERSAO_APP) + ')</div>';
+}
+function envolverPDF_(corpo) {
+  return '<table class="pg"><tbody><tr><td>' + corpo + '</td></tr></tbody><tfoot><tr><td><div class="espaco-rod"></div></td></tr></tfoot></table>' + rodapePDF_();
+}
+
 /** Estilos comuns aos PDFs da OS e da APR. */
 function estiloPDF_() {
-  return '@page{size:A4;margin:12mm 13mm 14mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1c1f23}' +
+  return '.rodfix{position:fixed;left:0;right:0;bottom:0;font-size:7pt;color:#5d6670;text-align:center;border-top:1.5px solid #CD0000;padding-top:3px;background:#fff}' +
+    'table.pg{width:100%;border-collapse:collapse}table.pg>tbody>tr>td,table.pg>tfoot>tr>td{padding:0;font-size:10pt;vertical-align:top}.espaco-rod{height:8mm}' +
+    '@page{size:A4;margin:12mm 13mm 10mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1c1f23}' +
     '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:8px}.cab td{vertical-align:middle;padding:0 0 6px}' +
     '.emp{font-size:8pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:8.5pt;color:#5d6670}' +
     'table.d{width:100%;border-collapse:collapse;margin:2px 0 6px}table.d td{padding:3px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
@@ -2030,7 +2050,7 @@ function pdfOS2_(o, aps, modo, comAPR, aprCompleta) {
 
   const titulo = modo === 'final' ? (o.previa ? 'ORDEM DE SERVIÇO · PRÉVIA PARA APROVAÇÃO' : 'ORDEM DE SERVIÇO') : 'APONTAMENTO PARCIAL DA OS';
   const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() +
-    '</style></head><body>' +
+    '</style></head><body>' + envolverPDF_(
     '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:170px;height:auto">' +
     '<div class="emp">' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div></td>' +
     '<td class="num"><span>' + titulo + '</span><b>Nº ' + esc_(o.numero) + (modo === 'final' && o.revisao ? ' · Rev. ' + revTxt_(o.revisao) : '') + '</b><span>' + esc_(modo === 'final' ? 'Finalizada em ' + o.finalizadaEm : 'Situação: em andamento') + '</span></td></tr></table>' +
@@ -2038,8 +2058,7 @@ function pdfOS2_(o, aps, modo, comAPR, aprCompleta) {
     linha('Programação', o.inicioPrev ? o.inicioPrev + (o.fimPrev ? ' a ' + o.fimPrev : '') : 'Aberta em campo') + '</table>' +
     bloco('Solicitação / problema relatado', o.solicitacao) + resumo + ordenados.map(paginaAp).join('') +
     (modo === 'final' && o.historico ? '<div class="b"><div class="bt">Histórico de revisões</div><div class="bc" style="font-size:8.5pt">' + quebra_(o.historico) + '<br>Esta revisão substitui as versões anteriores deste documento.</div></div>' : '') +
-    '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div>' +
-    (aprCompleta ? ordenados.map(a => aprs[txt_(a.get('Nº'))] ? paginaAPR_(aprs[txt_(a.get('Nº'))], a, o) : '').join('') : '') + '</body></html>';
+    (aprCompleta ? ordenados.map(a => aprs[txt_(a.get('Nº'))] ? paginaAPR_(aprs[txt_(a.get('Nº'))], a, o) : '').join('') : '')) + '</body></html>';
   const cli = o.cliente.replace(/[\\/:*?"<>|]/g, '');
   return Utilities.newBlob(html, 'text/html', 'OS.html').getAs('application/pdf')
     .setName(modo === 'final' ? 'OS ' + o.numero + (o.revisao ? ' - Rev ' + revTxt_(o.revisao) : '') + ' - ' + cli + '.pdf' : 'OS ' + o.numero + ' - parcial ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm') + ' - ' + cli + '.pdf');
@@ -2087,6 +2106,10 @@ function enviarOS2_(o, pdf, emails, modo, aps) {
       '<p>Agradecemos a confiança no trabalho da nossa equipe. Se tiver qualquer dúvida sobre o serviço realizado, basta responder este e-mail que retornaremos o mais breve possível.</p>' +
       '<p>Para conhecer as nossas soluções e saber como podemos ajudar a sua empresa a performar ainda melhor, acesse <a href="https://' + SITE + '">' + SITE + '</a> ' +
       'ou fale com a gente pelo WhatsApp <a href="https://wa.me/' + WHATS_KITON + '">(44) 4141-0714</a>.</p>' + assinaturaEmail_() + '</div>';
+  } else if (modo === 'interna') {
+    assunto = 'OS nº ' + o.numero + ' aprovada (sem envio ao cliente) | Kiton Hub | ' + o.cliente;
+    corpo = '<div style="' + estilo + '"><p>A OS foi aprovada pela administração sem envio ao cliente. Em anexo, a versão final para registro da equipe.</p>' +
+      '<p style="margin:12px 0 0"><b>OS nº ' + esc_(o.numero) + '</b></p>' + tabela + '</div>';
   } else if (modo === 'aprovacao') {
     assunto = 'OS nº ' + o.numero + ' aguardando aprovação | Kiton Hub | ' + o.cliente;
     corpo = '<div style="' + estilo + '"><p>O técnico finalizou a OS e ela aguarda a revisão e aprovação da administração no Kiton Hub (Menu > OS para aprovar). ' +
@@ -2103,7 +2126,10 @@ function enviarOS2_(o, pdf, emails, modo, aps) {
     if (bcc.length) opc.bcc = bcc.join(',');
     if (emails.length) { opc.cc = EMAIL_KITON; MailApp.sendEmail(emails.join(','), assunto, assunto, opc); }
     else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
-  } else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
+  } else {
+    if (modo === 'interna') { const bcc = emailsEquipe_(aps); if (bcc.length) opc.bcc = bcc.join(','); }
+    MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
+  }
 }
 
 function reenviarOS_(u, req) {
@@ -2114,6 +2140,7 @@ function reenviarOS_(u, req) {
   if (!id) throw new Error('PDF final da OS não encontrado.');
   const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === txt_(req.numero));
   const o = resumoOS_(l, aps);
+  if (!lista2_(l.get('E-mails do cliente')).length) throw new Error('A OS não tem e-mail do cliente. Use Corrigir para informar e reenviar.');
   enviarOS2_(o, DriveApp.getFileById(id).getBlob(), lista2_(l.get('E-mails do cliente')), 'final', aps);
   set_(t, l._linha, 'Envio', 'Reenviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' por ' + u.nome);
   return { ok: true };

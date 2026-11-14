@@ -1228,7 +1228,7 @@ function quandoOS(o) {
 function seloOS(o) {
   if (o.emExecucao) return '<span class="selo-txt verde">Em execução</span>';
   if (o.status === 'Finalizada') return '<span class="selo-txt verde">Finalizada</span>';
-  if (o.status === 'Aguardando aprovação') return '<span class="selo-txt amarelo">Aguardando aprovação</span>';
+  if (o.status === 'Aguardando aprovação') return o.aprovacaoAtrasada ? '<span class="selo-txt vermelho">Aguardando aprovação há mais de 24 h</span>' : '<span class="selo-txt amarelo">Aguardando aprovação</span>';
   if (o.status === 'Cancelada') return '<span class="selo-txt vermelho">Cancelada</span>';
   if (o.atrasada) return '<span class="selo-txt vermelho">Atrasada para iniciar</span>';
   if (o.parada) return '<span class="selo-txt laranja">Parada há mais de 2 dias</span>';
@@ -1301,7 +1301,7 @@ async function telaOSDetalhe(numero, admin) {
     ${o.status === 'Em andamento' && /Devolvida ao técnico/.test(o.observacoes || '') ? msg('erro', 'Devolvida pela administração. ' + o.observacoes.split('\n').filter(x => /Devolvida/.test(x)).pop()) : ''}
     ${o.status === 'Aguardando aprovação' ? msg('info', `Finalizada pelo técnico em ${o.finalizadaEm}. Aguardando a revisão e aprovação da administração; o cliente ainda não recebeu.`) : ''}
     ${o.aprovadaPor ? `<p class="suave">${/^Aprovada/.test(o.envio) ? esc(o.envio) : `Aprovada por ${esc(o.aprovadaPor)} em ${esc(o.aprovadaEm)}${o.envio ? ' · ' + esc(o.envio) : ''}`}</p>` : ''}
-    ${o.pdf && o.status === 'Finalizada' ? `<div class="grade pdfs"><a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener">${ic('os')}<span>PDF final<small>${o.aprNoPdf === 'Sim' ? 'APR resumida' : 'Sem APR (como enviado)'}</small></span></a>
+    ${o.pdf && o.status === 'Finalizada' ? `<div class="grade pdfs"><a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener">${ic('os')}<span>PDF final<small>${o.aprNoPdf === 'Completa' ? 'APR completa (como enviado)' : o.aprNoPdf === 'Sim' ? 'APR resumida' : 'Sem APR (como enviado)'}</small></span></a>
       <button type="button" class="acao leve" id="pdfComp">${ic('os')}<span>PDF final<small>APR completa</small></span></button></div>` : ''}
     ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + dur(a.horas) : ' · em execução'}</div>
       <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
@@ -1903,7 +1903,6 @@ function telaAprovarOS(o, aps) {
   const cli = est.dados.clientesInfo.find(c => c.nome === o.cliente) || { emails: [] };
   const indicados = (o.emails || '').split(',').map(x => x.trim()).filter(Boolean);
   const opcoes = [...new Set([...indicados, ...cli.emails])];
-  let incluirAPR = o.aprNoPdf === 'Sim';
   $app.innerHTML = `<h1>Revisar e aprovar</h1><p class="suave">OS ${esc(o.numero)} · ${esc(o.cliente)}</p><div id="erro"></div>
     ${msg('info', 'Revise o que o técnico registrou. Pode ajustar texto, materiais, fotos e pendências antes de aprovar. Assinatura, horários e localização não podem ser alterados.')}
     <div class="grade pdfs" style="margin-bottom:12px"><button type="button" class="acao leve" id="apPrev">${ic('os')}<span>Prévia do PDF<small>como o cliente vai receber</small></span></button>
@@ -1914,13 +1913,13 @@ function telaAprovarOS(o, aps) {
       <label class="rotulo">Materiais utilizados</label><textarea class="campo-txt" data-mat placeholder="Nenhum material">${esc(a.materiais)}</textarea>
       <div data-fbox><button type="button" class="link" data-vf="${esc(a.n)}">Ver e alterar as fotos (${a.fotos})</button>${a.apr ? ` · <button type="button" class="link" data-apr="${esc(a.apr)}">Ver APR nº ${esc(a.apr)}</button>` : ''}</div></div>`).join('')}
     <label class="rotulo" for="apPend">Pendências e recomendações</label><textarea class="campo-txt" id="apPend">${esc(o.pendencias)}</textarea>
-    <label class="rotulo">Incluir a APR no PDF do cliente?</label>
-    <div class="segmento" id="apApr"><button type="button" data-v="Sim" class="${incluirAPR ? 'sel' : ''}">Sim, incluir</button><button type="button" data-v="Não" class="${incluirAPR ? '' : 'sel'}">Não incluir</button></div>
-    <p class="suave" style="margin-top:6px">O técnico escolheu ${o.aprNoPdf === 'Sim' ? 'incluir' : 'não incluir'}.</p>
     <label class="rotulo">Enviar para</label><div id="apMails">${opcoes.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${indicados.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Nenhum e-mail indicado.</p>'}</div>
     <input class="campo-txt" id="apExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)">
-    <p class="suave" style="margin-top:8px">A Kiton (contato@) recebe cópia, e a equipe que participou recebe em cópia oculta.</p>
-    <button type="button" class="acao leve" id="apSemEnvio">Aprovar sem enviar ao cliente</button>
+    <p class="suave" style="margin-top:8px">A Kiton (contato@) recebe cópia, e os técnicos que participaram recebem em cópia oculta. O técnico sugeriu ${o.aprNoPdf === 'Sim' ? 'incluir' : 'não incluir'} a APR.</p>
+    <h2>Decisão</h2>
+    <button type="button" class="acao" data-aprovar="completa">${ic('ok')} Aprovar e enviar (com APR completa)</button>
+    <button type="button" class="acao" data-aprovar="resumida">${ic('ok')} Aprovar e enviar (com APR resumida)</button>
+    <button type="button" class="acao leve" data-aprovar="sem">Aprovar sem enviar ao cliente</button>
     <button type="button" class="acao leve" id="apDevolver">Devolver ao técnico</button>`;
   const pintar = n => {
     const box = document.querySelector(`[data-ap="${n}"] [data-fbox]`);
@@ -1930,7 +1929,6 @@ function telaAprovarOS(o, aps) {
   };
   document.querySelectorAll('[data-vf]').forEach(b => b.onclick = () => executar(async () => { const n = b.dataset.vf; fotos[n] = (await api('fotosAp', { n })).fotos.filter(f => f.src); pintar(n); }));
   document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
-  document.querySelectorAll('#apApr button').forEach(b => b.onclick = () => { incluirAPR = b.dataset.v === 'Sim'; document.querySelectorAll('#apApr button').forEach(x => x.classList.toggle('sel', x === b)); });
   const prev = fechados.filter(a => a.tipo === 'Final').pop();
   document.getElementById('apPrev').onclick = () => { if (prev && prev.pdf) window.open(prev.pdf, '_blank'); else erroTela('A prévia não foi encontrada.'); };
   document.getElementById('apComp').onclick = () => abrirPdfComApr(o.numero);
@@ -1943,21 +1941,20 @@ function telaAprovarOS(o, aps) {
     if (apontamentos.some(a => !a.executado)) throw new Error('O serviço executado não pode ficar vazio.');
     const emails = [...document.querySelectorAll('#apMails input:checked')].map(x => x.value).concat(document.getElementById('apExtra').value.trim()).filter(Boolean);
     if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
-    return { numero: o.numero, apontamentos, pendencias: document.getElementById('apPend').value.trim(), incluirAPR, emails };
+    return { numero: o.numero, apontamentos, pendencias: document.getElementById('apPend').value.trim(), emails };
   };
-  const aprovar = enviar => executar(async () => {
-    const d = dados();
+  const aprovar = modo => executar(async () => {
+    const d = dados(), enviar = modo !== 'sem';
     if (enviar && !d.emails.length) throw new Error('Marque ou digite pelo menos um e-mail do cliente.');
-    if (!enviar && !confirm('Aprovar sem enviar ao cliente? Você pode reenviar depois pelo detalhe da OS.')) return;
-    const r = await api('aprovarOS', Object.assign(d, { enviar }));
+    if (!enviar && !confirm('Aprovar sem enviar ao cliente? A Kiton e os técnicos recebem a versão final. Você pode enviar ao cliente depois pelo detalhe da OS.')) return;
+    const r = await api('aprovarOS', Object.assign(d, { enviar, apr: enviar ? modo : (o.aprNoPdf === 'Sim' ? 'resumida' : 'nenhuma') }));
     sujo = false; await recarregarDados(); await telaOSDetalhe(o.numero, true);
     document.getElementById('erro').innerHTML = msg(/^Erro/.test(r.envio) ? 'erro' : 'ok', r.envio + '.');
   });
-  document.getElementById('apSemEnvio').onclick = () => aprovar(false);
+  document.querySelectorAll('[data-aprovar]').forEach(b => b.onclick = () => aprovar(b.dataset.aprovar));
   document.getElementById('apDevolver').onclick = () => { if (podeSair()) telaDevolverOS(o); };
-  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Aprovar e enviar</button></div>`);
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Voltar para a OS</button></div>`);
   document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
-  document.getElementById('ok').onclick = () => aprovar(true);
 }
 
 function telaDevolverOS(o) {
@@ -2125,7 +2122,7 @@ function adminEditarOS(o, aps) {
     <label class="rotulo" for="admFim">Término previsto</label><input class="campo-txt" id="admFim" type="datetime-local" value="${esc(o.fimPrevIso)}">` : ''}
     <button class="acao" id="admSalvar" type="button">Salvar alterações</button>
     ${o.reaberta ? '' : '<button class="acao leve" id="admCancelar" type="button">Cancelar OS</button>'}` : '') +
-    (o.status === 'Finalizada' && /^Erro/.test(o.envio) ? `<button class="acao" id="admReenv" type="button">Reenviar ao cliente</button>` : '') +
+    (o.status === 'Finalizada' && /^Erro|sem envio/.test(o.envio) ? `<button class="acao" id="admReenv" type="button">Enviar ao cliente</button>` : '') +
     (o.status === 'Finalizada' ? `<h2>Ajustar OS finalizada</h2><div class="grade"><button class="acao leve" id="admCorr" type="button" style="margin:0">Corrigir</button><button class="acao leve" id="admReab" type="button" style="margin:0">Reabrir</button></div>
       <p class="suave" style="margin-top:8px">Corrigir: texto, materiais, fotos ou pendências, com novo PDF em revisão. Reabrir: o serviço precisa de mais execução.</p>` : '');
   const bc = document.getElementById('admCorr'); if (bc) bc.onclick = () => telaCorrigirOS(o, aps || []);
