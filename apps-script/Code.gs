@@ -310,7 +310,10 @@ function lista_(coluna) {
 }
 
 function inicio_(u) {
-  const colabs = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => txt_(l.get('Nome')));
+  const colabT = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim');
+  const colabs = colabT.map(l => txt_(l.get('Nome')));
+  // quem trabalha em campo (aparece em "quem vai junto" e nos técnicos da OS); função Administrativo fica de fora
+  const equipeCampo = colabT.filter(l => txt_(l.get('Função')) !== 'Administrativo').map(l => txt_(l.get('Nome')));
   const clientesInfo = clientes_();
   const clientes = clientesInfo.map(c => c.nome);
   const saidas = ler_(ABA.saidas);
@@ -367,6 +370,7 @@ function inicio_(u) {
     ok: true,
     usuario: u,
     colaboradores: colabs,
+    equipeCampo,
     clientes,
     motivos: lista_('Motivo'),
     veiculos: lista_('Veículo'),

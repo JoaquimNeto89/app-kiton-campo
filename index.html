@@ -646,7 +646,7 @@ function fluxoSaida() {
       busca.oninput = pintar; pintar();
       rodape('Continuar', !!f.destino);
     } else if (p === 2) {
-      const outros = d.colaboradores.filter(n => n !== est.usuario.nome);
+      const outros = (d.equipeCampo || d.colaboradores).filter(n => n !== est.usuario.nome);
       $app.innerHTML = `${cab()}<h1>Como você vai?</h1><div class="grade">
         ${d.veiculos.map(v => `<button type="button" class="opcao ${/sem/i.test(v) ? 'larga' : ''} ${f.veiculo === v ? 'sel' : ''}" data-v="${esc(v)}">${ic(icVeiculo(v))}${esc(v)}</button>`).join('')}</div>
         ${outros.length ? `<label class="rotulo">Quem vai junto?</label><div class="pessoas">${outros.map(n => `<button type="button" class="pessoa ${f.equipe.has(n) ? 'sel' : ''}" data-p="${esc(n)}">${esc(n)}</button>`).join('')}</div><p class="suave" style="margin-top:8px">Opcional. Quem for junto não precisa registrar de novo.</p>` : ''}`;
@@ -1136,7 +1136,7 @@ function fluxoOS(pre) {
         <label class="rotulo" for="oData">Data</label><input class="campo-txt" id="oData" type="date" max="${hojeISO()}" value="${esc(f.data)}">
         <div class="grade" style="margin-top:0"><div><label class="rotulo" for="oIni">Início</label><input class="campo-txt" id="oIni" type="time" value="${esc(f.inicio)}"></div>
         <div><label class="rotulo" for="oFim">Término</label><input class="campo-txt" id="oFim" type="time" value="${esc(f.fim)}"></div></div>
-        <label class="rotulo">Técnicos da Kiton</label>${chips('oTec', d.colaboradores, '')}`;
+        <label class="rotulo">Técnicos da Kiton</label>${chips('oTec', [...new Set([...(d.equipeCampo || d.colaboradores), ...f.tecnicos])], '')}`;
       document.getElementById('oCli').onchange = e => { f.cliente = e.target.value; f.emails = null; };
       ligarChips('oTipo', v => f.tipo = v);
       document.querySelectorAll('#oTec .pessoa').forEach(b => b.classList.toggle('sel', f.tecnicos.includes(b.dataset.v)));
