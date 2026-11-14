@@ -41,7 +41,7 @@ const CAB = {
   'Ordens de serviço': ['Nº OS', 'Status', 'Cliente', 'Local / setor', 'Solicitante', 'Tipo de serviço', 'Solicitação / problema',
     'Início previsto', 'Término previsto', 'Técnicos designados', 'Programada por', 'Programada em', 'Evento na agenda', 'Iniciada em',
     'Início x programado', 'Último apontamento', 'Finalizada em', 'Prazo', 'Horas trabalhadas', 'Apontamentos', 'Pendências / recomendações',
-    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente'],
+    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente', 'Revisão', 'Histórico de revisões', 'Reaberta'],
   'Apontamentos de OS': ['Nº', 'Nº OS', 'Início', 'Fim', 'Horas', 'Tipo', 'Equipe', 'Serviço executado', 'Materiais utilizados', 'Fotos',
     'Assinatura', 'Assinado por', 'Cargo / setor de quem assinou', 'Cliente ausente (motivo)', 'PDF do apontamento', 'Check-in',
     'Lat. início', 'Long. início', 'Lat. fim', 'Long. fim', 'Registrado por', 'Iniciado lançado em', 'Fim lançado em', 'Lançamento tardio'],
@@ -109,6 +109,9 @@ function rotear_(req) {
     case 'cancelarOS': exigirAdmin_(u); return comTrava_(() => cancelarOS_(u, req));
     case 'painelOS': exigirAdmin_(u); return painelOS_(req);
     case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
+    case 'fotosAp': exigirAdmin_(u); return fotosAp_(req);
+    case 'corrigirOS': exigirAdmin_(u); return comTrava_(() => corrigirOS_(u, req));
+    case 'reabrirOS': exigirAdmin_(u); return comTrava_(() => reabrirOS_(u, req));
     case 'aprPainel': exigirAdmin_(u); return aprPainel_();
     case 'decidirAPR': exigirAdmin_(u); return comTrava_(() => decidirAPR_(u, req));
     // despesas
@@ -1073,7 +1076,8 @@ function resumoOS_(l, aps) {
     parada: status === 'Em andamento' && !emExecucao && !!ultimo && agora.getTime() - ultimo.getTime() > DIAS_PARADA * 864e5,
     inicioVsPrevisto: txt_(l.get('Início x programado')), prazo: txt_(l.get('Prazo')),
     pdf: txt_(l.get('PDF final')), envio: txt_(l.get('Envio')), emails: txt_(l.get('E-mails do cliente')),
-    pendencias: txt_(l.get('Pendências / recomendações')), motivoCancel: txt_(l.get('Motivo do cancelamento'))
+    pendencias: txt_(l.get('Pendências / recomendações')), motivoCancel: txt_(l.get('Motivo do cancelamento')),
+    revisao: Number(l.get('Revisão')) || 0, historico: txt_(l.get('Histórico de revisões')), reaberta: Number(l.get('Reaberta')) || 0
   };
 }
 
@@ -1189,6 +1193,7 @@ function cancelarOS_(u, req) {
   if (!txt_(req.motivo)) throw new Error('Informe o motivo do cancelamento.');
   const ap = ler_(ABA.apont);
   if (ap.linhas.some(x => txt_(x.get('Nº OS')) === txt_(req.numero) && !txt_(x.get('Fim')))) throw new Error('Há um apontamento em execução. Peça para o técnico apontar antes.');
+  if (Number(l.get('Reaberta')) > 0) throw new Error('OS reaberta não pode ser cancelada: o cliente já recebeu a versão finalizada. Finalize com um novo apontamento.');
   set_(t, l._linha, 'Status', 'Cancelada');
   set_(t, l._linha, 'Motivo do cancelamento', txt_(req.motivo) + ' (' + u.nome + ', ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy') + ')');
   agendaApagar_(txt_(l.get('Evento na agenda')));
@@ -1625,6 +1630,82 @@ function encerrarAtendimento_(u, req) {
   return Object.assign(r, { cliente: ck.cliente, destino });
 }
 
+// ----- correção e reabertura de OS finalizada (administração) -----
+function revTxt_(n) { return ('0' + n).slice(-2); }
+
+function registrarRevisao_(t, l, u, tipo, motivo) {
+  const rev = (Number(l.get('Revisão')) || 0) + 1;
+  const hist = txt_(l.get('Histórico de revisões'));
+  const linha = 'Revisão ' + revTxt_(rev) + ' (' + tipo + ') em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' por ' + u.nome + '. Motivo: ' + motivo;
+  set_(t, l._linha, 'Revisão', rev);
+  set_(t, l._linha, 'Histórico de revisões', hist ? hist + '\n' + linha : linha);
+  return rev;
+}
+
+/** Fotos de um apontamento em miniatura, para a tela de correção. */
+function fotosAp_(req) {
+  const l = ler_(ABA.apont).linhas.find(x => txt_(x.get('Nº')) === txt_(req.n));
+  if (!l) throw new Error('Apontamento não encontrado.');
+  return { ok: true, fotos: lista2_(l.get('Fotos')).map(id => ({ id, src: imgDrive_(id) })) };
+}
+
+function corrigirOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  if (txt_(l.get('Status')) !== 'Finalizada') throw new Error('Só OS finalizada pode ser corrigida. Para OS em andamento, use os apontamentos normais.');
+  const motivo = txt_(req.motivo);
+  if (!motivo) throw new Error('Informe o motivo da correção.');
+  const numero = txt_(req.numero);
+  const ap = ler_(ABA.apont);
+  const pasta = pasta_(['Kiton Hub', 'Ordens de serviço', numero.split('-')[0], 'OS ' + numero]);
+  (req.apontamentos || []).forEach(c => {
+    const la = ap.linhas.find(x => txt_(x.get('Nº')) === txt_(c.n) && txt_(x.get('Nº OS')) === numero);
+    if (!la) throw new Error('Apontamento ' + c.n + ' não pertence a esta OS.');
+    if (!txt_(c.executado)) throw new Error('O serviço executado não pode ficar vazio.');
+    set_(ap, la._linha, 'Serviço executado', txt_(c.executado));
+    set_(ap, la._linha, 'Materiais utilizados', txt_(c.materiais));
+    if (Array.isArray(c.fotos)) {
+      const atuais = lista2_(la.get('Fotos'));
+      const ids = c.fotos.slice(0, 6).map((f, i) => /^data:/.test(f) ? salvarImagem_(pasta, f, 'image/jpeg', 'Apontamento ' + c.n + ' - foto corrigida ' + (i + 1) + '.jpg') : (atuais.indexOf(f) >= 0 ? f : '')).filter(Boolean);
+      set_(ap, la._linha, 'Fotos', ids.join(','));
+    }
+  });
+  if (req.pendencias !== undefined) set_(t, l._linha, 'Pendências / recomendações', txt_(req.pendencias));
+  const rev = registrarRevisao_(t, l, u, 'correção', motivo);
+  const t2 = ler_(ABA.os), l2 = t2.linhas.find(x => txt_(x.get('Nº OS')) === numero);
+  const aps = ler_(ABA.apont).linhas.filter(x => txt_(x.get('Nº OS')) === numero);
+  const o = resumoOS_(l2, aps);
+  const pdf = pdfOS2_(o, aps, 'final', txt_(l2.get('APR no PDF do cliente')) === 'Sim');
+  const link = pasta.createFile(pdf).getUrl();
+  set_(t2, l2._linha, 'PDF final', link);
+  let envio = '';
+  if (req.reenviar) {
+    try { enviarOS2_(Object.assign(o, { motivoRevisao: motivo }), pdf, lista2_(l2.get('E-mails do cliente')), 'final', aps); envio = 'Revisão ' + revTxt_(rev) + ' enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
+    catch (e) { envio = 'Erro no envio da revisão: ' + (e && e.message ? e.message : e); }
+    set_(t2, l2._linha, 'Envio', envio);
+  }
+  return { ok: true, revisao: rev, link, envio };
+}
+
+function reabrirOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  if (txt_(l.get('Status')) !== 'Finalizada') throw new Error('Só OS finalizada pode ser reaberta.');
+  const motivo = txt_(req.motivo);
+  if (!motivo) throw new Error('Informe o motivo da reabertura.');
+  const rev = registrarRevisao_(t, l, u, 'reabertura', motivo);
+  set_(t, l._linha, 'Status', 'Em andamento');
+  set_(t, l._linha, 'Reaberta', (Number(l.get('Reaberta')) || 0) + 1);
+  if (req.tecnicos && req.tecnicos.length) set_(t, l._linha, 'Técnicos designados', req.tecnicos.map(txt_).filter(Boolean).join(', '));
+  const id = txt_(l.get('Evento na agenda'));
+  if (id && id.indexOf('erro') !== 0) {
+    try { const ev = CalendarApp.getCalendarById(AGENDA_GERAL).getEventById(id); if (ev) ev.setTitle(ev.getTitle().replace(/^✓ /, '') + ' (reaberta)'); } catch (e) { /* segue */ }
+  }
+  return { ok: true, revisao: rev };
+}
+
 // ----- painel gerencial -----
 function painelOS_(req) {
   const mes = txt_(req.mes);
@@ -1766,14 +1847,15 @@ function pdfOS2_(o, aps, modo, comAPR) {
     '</style></head><body>' +
     '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:170px;height:auto">' +
     '<div class="emp">' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div></td>' +
-    '<td class="num"><span>' + titulo + '</span><b>Nº ' + esc_(o.numero) + '</b><span>' + esc_(modo === 'final' ? 'Finalizada em ' + o.finalizadaEm : 'Situação: em andamento') + '</span></td></tr></table>' +
+    '<td class="num"><span>' + titulo + '</span><b>Nº ' + esc_(o.numero) + (modo === 'final' && o.revisao ? ' · Rev. ' + revTxt_(o.revisao) : '') + '</b><span>' + esc_(modo === 'final' ? 'Finalizada em ' + o.finalizadaEm : 'Situação: em andamento') + '</span></td></tr></table>' +
     '<table class="d">' + linha('Cliente', o.cliente) + linha('Local / setor', o.local) + linha('Solicitante', o.solicitante) + linha('Tipo de serviço', o.tipo) +
     linha('Programação', o.inicioPrev ? o.inicioPrev + (o.fimPrev ? ' a ' + o.fimPrev : '') : 'Aberta em campo') + '</table>' +
     bloco('Solicitação / problema relatado', o.solicitacao) + resumo + ordenados.map(paginaAp).join('') +
+    (modo === 'final' && o.historico ? '<div class="b"><div class="bt">Histórico de revisões</div><div class="bc" style="font-size:8.5pt">' + quebra_(o.historico) + '<br>Esta revisão substitui as versões anteriores deste documento.</div></div>' : '') +
     '<div class="rod">' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + ' · Documento gerado pelo Kiton Hub</div></body></html>';
   const cli = o.cliente.replace(/[\\/:*?"<>|]/g, '');
   return Utilities.newBlob(html, 'text/html', 'OS.html').getAs('application/pdf')
-    .setName(modo === 'final' ? 'OS ' + o.numero + ' - ' + cli + '.pdf' : 'OS ' + o.numero + ' - parcial ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm') + ' - ' + cli + '.pdf');
+    .setName(modo === 'final' ? 'OS ' + o.numero + (o.revisao ? ' - Rev ' + revTxt_(o.revisao) : '') + ' - ' + cli + '.pdf' : 'OS ' + o.numero + ' - parcial ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HHmm') + ' - ' + cli + '.pdf');
 }
 
 /** E-mails dos colaboradores que participaram de algum apontamento (vão em cópia oculta). */
@@ -1806,10 +1888,15 @@ function enviarOS2_(o, pdf, emails, modo, aps) {
   const estilo = 'font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1c1f23;line-height:1.45';
   let assunto, corpo;
   if (modo === 'final') {
-    assunto = 'Ordem de serviço nº ' + o.numero + ' finalizada | Kiton Engenharia Integrada | ' + o.cliente;
+    const rv = o.revisao ? ' (revisão ' + revTxt_(o.revisao) + ')' : '';
+    assunto = 'Ordem de serviço nº ' + o.numero + (o.motivoRevisao ? ' revisada' + rv : ' finalizada' + rv) + ' | Kiton Engenharia Integrada | ' + o.cliente;
     corpo = '<div style="' + estilo + '"><p>Olá!</p><p>Eu sou o KAI, o assistente inteligente da Kiton Engenharia Integrada.</p>' +
-      '<p>Esta é uma mensagem automática para informar que foi finalizada uma ordem de serviço referente à sua empresa. Em anexo, segue a cópia da ordem de serviço, ' +
-      'com o registro de cada etapa, as fotos e as assinaturas. Abaixo, o resumo da execução.</p>' +
+      (o.motivoRevisao
+        ? '<p>Esta é uma mensagem automática para informar que a ordem de serviço nº ' + esc_(o.numero) + ', referente à sua empresa, foi revisada. ' +
+          'A versão em anexo (revisão ' + revTxt_(o.revisao) + ') substitui a enviada anteriormente.</p><p><b>Motivo da revisão:</b> ' + esc_(o.motivoRevisao) + '</p>'
+        : '<p>Esta é uma mensagem automática para informar que foi finalizada uma ordem de serviço referente à sua empresa. Em anexo, segue a cópia da ordem de serviço, ' +
+          'com o registro de cada etapa, as fotos e as assinaturas.' + (o.revisao ? ' Esta versão (revisão ' + revTxt_(o.revisao) + ') substitui a enviada anteriormente.' : '') + '</p>') +
+      '<p>Abaixo, o resumo da execução.</p>' +
       '<p style="margin:16px 0 0"><b>Resumo da ordem de serviço nº ' + esc_(o.numero) + '</b></p>' + tabela +
       '<p>Agradecemos a confiança no trabalho da nossa equipe. Se tiver qualquer dúvida sobre o serviço realizado, basta responder este e-mail que retornaremos o mais breve possível.</p>' +
       '<p>Para conhecer as nossas soluções e saber como podemos ajudar a sua empresa a performar ainda melhor, acesse <a href="https://' + SITE + '">' + SITE + '</a> ' +

@@ -248,6 +248,8 @@ const est = { token: null, usuario: null, dados: null };
 
 // ---------- ícones ----------
 const IC = {
+  camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  galeria:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="8.5" r="1.5"/>',
   cliente:'<path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-5h6v5M9 11h.01M15 11h.01"/>',
   copel:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
   compra:'<path d="M3 4h2l2.4 11h11.2L21 7H6.2M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>',
@@ -773,7 +775,7 @@ function telaRetorno(s) {
     <h2>Abasteceu?</h2><div class="grade" id="abast">
       ${d.abastecimentos.map(a => `<button type="button" class="opcao ${/não|nao/i.test(a) ? 'larga' : ''} ${a === abast ? 'sel' : ''}" data-v="${esc(a)}">${ic(icAbast(a))}${esc(a)}</button>`).join('')}</div>
     <div id="boxValor" class="oculto"><label class="rotulo" for="valor">Quanto você pagou? (R$)</label><input class="campo-txt" id="valor" inputmode="decimal" placeholder="0,00">
-      <div id="rPrev"></div><label class="acao leve" for="rFoto" style="cursor:pointer">${ic('recibo')} Fotografar o cupom</label><input id="rFoto" type="file" accept="image/*" capture="environment" class="oculto">
+      <div id="rPrev"></div>${botoesFoto('rFoto')}
       <p class="suave" style="margin-top:6px">Vai direto para Despesas como pedido de reembolso.</p></div>
     ${s.itens.length ? `<h2>Como voltaram as ferramentas?</h2>${s.itens.map(i => `<div class="cartao"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
       <div class="segmento" data-p="${esc(i.pat)}"><button type="button" class="sel" data-v="OK">Voltou OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Extraviado">Sumiu</button></div>
@@ -783,11 +785,11 @@ function telaRetorno(s) {
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('retorno')} Confirmar retorno</button></div>`);
   ligarHorario('hRet');
   let fotoCupom = null;
-  document.getElementById('rFoto').onchange = e => executar(async () => {
+  ligarFoto('rFoto', e => executar(async () => {
     const a = e.target.files[0]; if (!a) return;
     fotoCupom = await comprimir(a, 1600, 0.75);
     document.getElementById('rPrev').innerHTML = `<div class="fotos"><div class="foto"><img src="${fotoCupom}" alt="Cupom"></div></div>`;
-  });
+  }));
   document.querySelectorAll('#abast [data-v]').forEach(b => b.onclick = () => {
     abast = b.dataset.v; document.querySelectorAll('#abast .opcao').forEach(x => x.classList.toggle('sel', x === b));
     document.getElementById('boxValor').classList.toggle('oculto', !/colaborador/i.test(abast));
@@ -920,6 +922,10 @@ function comprimir(arquivo, max = 1280, q = 0.72) {
     img.src = url;
   });
 }
+/** Dois botões para foto: câmera (tira na hora) e galeria (escolhe uma já tirada). */
+const botoesFoto = (id, multi, estilo = '') => `<div class="grade" style="margin-top:8px;${estilo}"><label class="acao leve" for="${id}" style="cursor:pointer;margin:0">${ic('camera')} Câmera</label><label class="acao leve" for="${id}G" style="cursor:pointer;margin:0">${ic('galeria')} Galeria</label></div>
+  <input id="${id}" type="file" accept="image/*" capture="environment" ${multi ? 'multiple' : ''} class="oculto"><input id="${id}G" type="file" accept="image/*" ${multi ? 'multiple' : ''} class="oculto">`;
+function ligarFoto(id, fn) { [id, id + 'G'].forEach(k => { const e = document.getElementById(k); if (e) e.onchange = fn; }); }
 const chips = (id, lista, sel) => `<div class="pessoas" id="${id}">${lista.map(x => `<button type="button" class="pessoa ${x === sel ? 'sel' : ''}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
 function ligarChips(id, aoEscolher, multi) {
   document.querySelectorAll(`#${id} [data-v]`).forEach(b => b.onclick = () => {
@@ -1110,7 +1116,7 @@ function seloOS(o) {
   if (o.status === 'Cancelada') return '<span class="selo-txt vermelho">Cancelada</span>';
   if (o.atrasada) return '<span class="selo-txt vermelho">Atrasada para iniciar</span>';
   if (o.parada) return '<span class="selo-txt laranja">Parada há mais de 2 dias</span>';
-  if (o.status === 'Em andamento') return '<span class="selo-txt amarelo">Em andamento</span>';
+  if (o.status === 'Em andamento') return `<span class="selo-txt amarelo">Em andamento</span>${o.reaberta ? '<span class="selo-txt laranja">Reaberta</span>' : ''}`;
   return '<span class="selo-txt">Programada</span>';
 }
 const cartaoOS = (o, extra = '') => `<button type="button" class="linha" data-os="${esc(o.numero)}" style="align-items:flex-start">
@@ -1173,7 +1179,9 @@ async function telaOSDetalhe(numero, admin) {
       ${o.inicioVsPrevisto ? `<div><dt>Início</dt><dd>${esc(o.inicioVsPrevisto)}</dd></div>` : ''}
       ${o.prazo ? `<div><dt>Prazo</dt><dd>${esc(o.prazo)}</dd></div>` : ''}
       ${o.motivoCancel ? `<div><dt>Cancelamento</dt><dd>${esc(o.motivoCancel)}</dd></div>` : ''}
+      ${o.revisao ? `<div><dt>Revisão</dt><dd>${String(o.revisao).padStart(2, '0')}${o.reaberta ? ` · reaberta ${o.reaberta}x` : ''}</dd></div>` : ''}
     </dl>
+    ${o.historico ? `<p class="suave" style="white-space:pre-line">${esc(o.historico)}</p>` : ''}
     ${o.pdf ? `<a class="acao leve" href="${esc(o.pdf)}" target="_blank" rel="noopener" style="text-decoration:none">${ic('os')} Abrir PDF final</a>` : ''}
     ${r.apontamentos.length ? `<h2>Apontamentos</h2>` + r.apontamentos.map(a => `<div class="cartao"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))}${a.fim ? ' às ' + esc(hora(a.fim)) + ' · ' + dur(a.horas) : ' · em execução'}</div>
       <p class="suave" style="margin:2px 0 6px">Equipe: ${esc(a.equipe.join(', '))}${a.executado ? '<br>' + esc(a.executado) : ''}</p>
@@ -1185,7 +1193,7 @@ async function telaOSDetalhe(numero, admin) {
   const pode = !admin && ['Programada', 'Em andamento'].includes(o.status) && !o.emExecucao && !sess;
   if (pode) { ok.disabled = false; ok.innerHTML = `${ic('saida')} Iniciar`; ok.onclick = () => telaIniciarOS(o); }
   else if (!admin && sess && sess.numero === o.numero) { ok.disabled = false; ok.innerHTML = `${ic('ok')} Apontar fim`; ok.onclick = () => fluxoApontar(sess); }
-  else if (admin) { ok.remove(); adminEditarOS(o); }
+  else if (admin) { ok.remove(); adminEditarOS(o, r.apontamentos); }
   else { ok.textContent = o.emExecucao ? 'Em execução' : sess ? 'Aponte a OS em execução antes' : o.status; }
 }
 
@@ -1233,10 +1241,10 @@ function fluxoAPR(ctx, payload, voltar) {
         <label class="rotulo" for="ptN">Número da PT</label><input class="campo-txt" id="ptN" value="${esc(f.ptNumero)}">
         <label class="rotulo" for="ptE">Emitida por (nome e cargo)</label><input class="campo-txt" id="ptE" value="${esc(f.ptEmissor)}" placeholder="Ex.: Carlos Souza, técnico de segurança">
         <label class="rotulo">Foto da PT</label><div class="fotos" id="ptF">${f.ptFoto ? `<div class="foto"><img src="${f.ptFoto}" alt="Foto da PT"><button type="button" id="ptRm" aria-label="Remover foto">×</button></div>` : ''}</div>
-        <label class="acao leve" for="ptArq" style="cursor:pointer">${ic('ok')} Tirar ou escolher foto</label><input id="ptArq" type="file" accept="image/*" capture="environment" class="oculto"></div>`;
+        ${botoesFoto('ptArq')}</div>`;
     ligarSN((k, v) => { f.pt = v; document.getElementById('ptBox').classList.toggle('oculto', v !== 'Sim'); });
     const ler = () => { f.ptNumero = val('ptN').trim(); f.ptEmissor = val('ptE').trim(); };
-    document.getElementById('ptArq').onchange = e => executar(async () => { ler(); if (e.target.files[0]) f.ptFoto = await comprimir(e.target.files[0], 1400, 0.72); passoPT(); });
+    ligarFoto('ptArq', e => executar(async () => { ler(); if (e.target.files[0]) f.ptFoto = await comprimir(e.target.files[0], 1400, 0.72); passoPT(); }));
     const rm = document.getElementById('ptRm'); if (rm) rm.onclick = () => { ler(); f.ptFoto = ''; passoPT(); };
     rodape('Continuar', () => {
       ler();
@@ -1541,16 +1549,15 @@ function fluxoApontar(s) {
     } else if (p === 2) {
       $app.innerHTML = `${cab()}<h1>Fotos (opcional)</h1><p class="suave">Até 6 fotos deste período. Elas entram no PDF.</p>
         <div class="fotos" id="fotos"></div>
-        <label class="acao leve" for="aFoto" style="cursor:pointer">${ic('ok')} Tirar ou escolher foto</label>
-        <input id="aFoto" type="file" accept="image/*" capture="environment" multiple class="oculto">`;
+        ${botoesFoto('aFoto', true)}`;
       const pintar = () => {
         document.getElementById('fotos').innerHTML = fotos.map((x, i) => `<div class="foto"><img src="${x}" alt="Foto ${i + 1}"><button type="button" data-rm="${i}" aria-label="Remover foto">×</button></div>`).join('');
         document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { fotos.splice(+b.dataset.rm, 1); pintar(); });
       };
-      document.getElementById('aFoto').onchange = e => executar(async () => {
+      ligarFoto('aFoto', e => executar(async () => {
         for (const a of [...e.target.files]) { if (fotos.length >= 6) break; fotos.push(await comprimir(a, 1100, 0.7)); }
         e.target.value = ''; pintar();
-      });
+      }));
       pintar(); rodape('Continuar');
     } else {
       const cli = d.clientesInfo.find(c => c.nome === s.cliente) || { emails: [] };
@@ -1684,6 +1691,8 @@ async function adminOS(box) {
         <tr><td>Concluídas dentro do previsto</td><td class="n">${cnt(fin, 'prazo', 'Dentro do previsto')}</td></tr>
         <tr><td>Concluídas após o previsto</td><td class="n">${cnt(fin, 'prazo', 'Após o previsto')}</td></tr>
         <tr><td>Horas trabalhadas</td><td class="n">${dur(fin.reduce((s, o) => s + o.horas, 0))}</td></tr>
+        <tr><td>Reabertas (retrabalho)</td><td class="n">${L.filter(o => o.reaberta).length}</td></tr>
+        <tr><td>Corrigidas após finalizar</td><td class="n">${L.filter(o => o.revisao && !o.reaberta).length}</td></tr>
       </tbody></table></div>
       ${r.porTecnico.length ? `<div class="cartao"><div class="t">Por técnico no mês</div><table><thead><tr><th>Técnico</th><th class="n">OS</th><th class="n">Horas</th><th class="n">Final.</th><th class="n">No prazo</th><th class="n">Sem assin.</th></tr></thead><tbody>
         ${r.porTecnico.map(t => `<tr><td>${esc(t.nome)}</td><td class="n">${t.os}</td><td class="n">${dur(t.horas)}</td><td class="n">${t.finalizadas}</td><td class="n">${t.noPrazo}${t.aposPrazo ? ` / <span style="color:var(--vermelho-esc)">${t.aposPrazo} após</span>` : ''}</td><td class="n">${t.ausente}</td></tr>`).join('')}
@@ -1696,7 +1705,76 @@ async function adminOS(box) {
   document.getElementById('mesOS').onchange = carregar; await carregar(); adminAPR(document.getElementById('aprBox'));
 }
 
-function adminEditarOS(o) {
+/** Correção de OS finalizada: texto, materiais, fotos e pendências. Gera revisão do PDF. */
+function telaCorrigirOS(o, aps) {
+  topo('Corrigir OS ' + o.numero);
+  const fechados = aps.filter(a => a.fim);
+  const fotos = {}; // n -> [{id, src}] quando o administrador abre as fotos
+  let reenviar = '';
+  $app.innerHTML = `<h1>Corrigir OS ${esc(o.numero)}</h1><div id="erro"></div>
+    ${msg('info', `Gera a revisão ${String((o.revisao || 0) + 1).padStart(2, '0')} do PDF. O PDF anterior fica guardado no Drive. Assinatura, horários e localização não podem ser alterados.`)}
+    ${fechados.map(a => `<div class="cartao" data-ap="${esc(a.n)}"><div class="t">${esc(a.inicio.slice(0, 10))} · ${esc(hora(a.inicio))} às ${esc(hora(a.fim))}${a.tipo === 'Final' ? ' · Finalização' : ' · Parcial'}</div>
+      <label class="rotulo">Serviço executado</label><textarea class="campo-txt" data-ex style="min-height:110px">${esc(a.executado)}</textarea>
+      <label class="rotulo">Materiais utilizados</label><textarea class="campo-txt" data-mat placeholder="Ex.: 2 x Disjuntor 20 A; 10 m Cabo 2,5 mm²">${esc(a.materiais)}</textarea>
+      <div data-fbox><button type="button" class="link" data-vf="${esc(a.n)}">Ver e alterar as fotos (${a.fotos})</button></div></div>`).join('')}
+    <label class="rotulo" for="cPend">Pendências e recomendações</label><textarea class="campo-txt" id="cPend">${esc(o.pendencias)}</textarea>
+    <label class="rotulo" for="cMot">Motivo da correção</label><textarea class="campo-txt" id="cMot" placeholder="Ex.: material utilizado não informado no apontamento"></textarea>
+    <label class="rotulo">Reenviar a revisão ao cliente?</label>
+    <div class="segmento" id="cReenv"><button type="button" data-v="1">Sim, reenviar</button><button type="button" data-v="0">Não, só arquivar</button></div>
+    <p class="suave" style="margin-top:6px">Se reenviar, o e-mail informa o motivo e que esta versão substitui a anterior.</p>`;
+  const pintar = n => {
+    const box = document.querySelector(`[data-ap="${n}"] [data-fbox]`);
+    box.innerHTML = `<label class="rotulo">Fotos (até 6)</label><div class="fotos">${fotos[n].map((f, i) => `<div class="foto"><img src="${f.src}" alt="Foto ${i + 1}"><button type="button" data-rmf="${i}" aria-label="Remover foto">×</button></div>`).join('')}</div>${botoesFoto('cF' + n, true)}`;
+    box.querySelectorAll('[data-rmf]').forEach(b => b.onclick = () => { fotos[n].splice(+b.dataset.rmf, 1); pintar(n); });
+    ligarFoto('cF' + n, e => executar(async () => {
+      for (const a of [...e.target.files]) { if (fotos[n].length >= 6) break; const src = await comprimir(a, 1100, 0.7); fotos[n].push({ src, novo: true }); }
+      pintar(n);
+    }));
+  };
+  document.querySelectorAll('[data-vf]').forEach(b => b.onclick = () => executar(async () => {
+    const n = b.dataset.vf; const r = await api('fotosAp', { n }); fotos[n] = r.fotos.filter(f => f.src); pintar(n);
+  }));
+  document.querySelectorAll('#cReenv button').forEach(b => b.onclick = () => { reenviar = b.dataset.v; document.querySelectorAll('#cReenv button').forEach(x => x.classList.toggle('sel', x === b)); });
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar revisão</button></div>`);
+  document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const motivo = document.getElementById('cMot').value.trim();
+    if (!motivo) throw new Error('Informe o motivo da correção.');
+    if (!reenviar) throw new Error('Escolha se a revisão vai para o cliente.');
+    const apontamentos = [...document.querySelectorAll('[data-ap]')].map(c => {
+      const n = c.dataset.ap, x = { n, executado: c.querySelector('[data-ex]').value.trim(), materiais: c.querySelector('[data-mat]').value.trim() };
+      if (fotos[n]) x.fotos = fotos[n].map(f => f.novo ? f.src : f.id);
+      return x;
+    });
+    if (apontamentos.some(a => !a.executado)) throw new Error('O serviço executado não pode ficar vazio.');
+    const r = await api('corrigirOS', { numero: o.numero, motivo, apontamentos, pendencias: document.getElementById('cPend').value.trim(), reenviar: reenviar === '1' });
+    await telaOSDetalhe(o.numero, true);
+    document.getElementById('erro').innerHTML = msg(/^Erro/.test(r.envio) ? 'erro' : 'ok', `Revisão ${String(r.revisao).padStart(2, '0')} gerada.${r.envio ? ' ' + r.envio + '.' : ' Arquivada sem reenvio.'}`);
+  });
+}
+
+/** Reabertura: a OS volta para Em andamento e recebe novos apontamentos. */
+function telaReabrirOS(o) {
+  topo('Reabrir OS ' + o.numero);
+  $app.innerHTML = `<h1>Reabrir OS ${esc(o.numero)}</h1><div id="erro"></div>
+    ${msg('info', 'A OS volta para Em andamento. Os apontamentos anteriores ficam intactos. Na nova finalização, o cliente recebe a revisão completa. A reabertura conta como retrabalho no painel.')}
+    <label class="rotulo" for="rMot">Motivo da reabertura</label><textarea class="campo-txt" id="rMot" placeholder="Ex.: retorno para ajuste do inversor após teste do cliente"></textarea>
+    <label class="rotulo">Técnicos que vão executar</label>${chips('rTec', [...new Set([...(est.dados.equipeCampo || est.dados.colaboradores), ...o.tecnicos])], '')}`;
+  document.querySelectorAll('#rTec .pessoa').forEach(b => { b.classList.toggle('sel', o.tecnicos.includes(b.dataset.v)); b.onclick = () => b.classList.toggle('sel'); });
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('retorno')} Reabrir OS</button></div>`);
+  document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const motivo = document.getElementById('rMot').value.trim();
+    if (!motivo) throw new Error('Informe o motivo da reabertura.');
+    const tecnicos = lerEquipe('rTec');
+    if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
+    const r = await api('reabrirOS', { numero: o.numero, motivo, tecnicos });
+    await telaOSDetalhe(o.numero, true);
+    document.getElementById('erro').innerHTML = msg('ok', `OS reaberta (revisão ${String(r.revisao).padStart(2, '0')}). Ela aparece no app dos técnicos escolhidos.`);
+  });
+}
+
+function adminEditarOS(o, aps) {
   const box = document.getElementById('adm');
   if (!box) return;
   const edita = ['Programada', 'Em andamento'].includes(o.status);
@@ -1706,8 +1784,12 @@ function adminEditarOS(o) {
     ${o.status === 'Programada' ? `<label class="rotulo" for="admIni">Início previsto</label><input class="campo-txt" id="admIni" type="datetime-local" value="${esc(o.inicioPrevIso)}">
     <label class="rotulo" for="admFim">Término previsto</label><input class="campo-txt" id="admFim" type="datetime-local" value="${esc(o.fimPrevIso)}">` : ''}
     <button class="acao" id="admSalvar" type="button">Salvar alterações</button>
-    <button class="acao leve" id="admCancelar" type="button">Cancelar OS</button>` : '') +
-    (o.status === 'Finalizada' && /^Erro/.test(o.envio) ? `<button class="acao" id="admReenv" type="button">Reenviar ao cliente</button>` : '');
+    ${o.reaberta ? '' : '<button class="acao leve" id="admCancelar" type="button">Cancelar OS</button>'}` : '') +
+    (o.status === 'Finalizada' && /^Erro/.test(o.envio) ? `<button class="acao" id="admReenv" type="button">Reenviar ao cliente</button>` : '') +
+    (o.status === 'Finalizada' ? `<h2>Ajustar OS finalizada</h2><div class="grade"><button class="acao leve" id="admCorr" type="button" style="margin:0">Corrigir</button><button class="acao leve" id="admReab" type="button" style="margin:0">Reabrir</button></div>
+      <p class="suave" style="margin-top:8px">Corrigir: texto, materiais, fotos ou pendências, com novo PDF em revisão. Reabrir: o serviço precisa de mais execução.</p>` : '');
+  const bc = document.getElementById('admCorr'); if (bc) bc.onclick = () => telaCorrigirOS(o, aps || []);
+  const br = document.getElementById('admReab'); if (br) br.onclick = () => telaReabrirOS(o);
   if (edita) {
     document.querySelectorAll('#admTec .pessoa').forEach(b => { b.classList.toggle('sel', o.tecnicos.includes(b.dataset.v)); b.onclick = () => b.classList.toggle('sel'); });
     document.getElementById('admSalvar').onclick = () => executar(async () => {
@@ -1716,7 +1798,7 @@ function adminEditarOS(o) {
         inicioPrev: ini ? ini.value : '', fimPrev: ini ? document.getElementById('admFim').value : '' });
       await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS alterada. A agenda foi atualizada.');
     });
-    document.getElementById('admCancelar').onclick = () => executar(async () => {
+    if (document.getElementById('admCancelar')) document.getElementById('admCancelar').onclick = () => executar(async () => {
       const motivo = prompt('Motivo do cancelamento:') || '';
       if (!motivo.trim()) return;
       await api('cancelarOS', { numero: o.numero, motivo });
@@ -1776,19 +1858,18 @@ function telaNovaDespesa() {
     <label class="rotulo" for="dDesc">Descrição</label><input class="campo-txt" id="dDesc" placeholder="Ex.: almoço da equipe, pedágio de Medianeira">
     <label class="rotulo">Comprovante</label>
     <div id="dPrev"></div>
-    <label class="acao leve" for="dFoto" style="cursor:pointer;margin-top:0">${ic('recibo')} Fotografar comprovante</label>
-    <input id="dFoto" type="file" accept="image/*" capture="environment" class="oculto">
+    ${botoesFoto('dFoto')}
     <button type="button" class="link" id="semFoto" style="margin-top:10px">Não tenho comprovante</button>
     <div id="boxSem" class="oculto"><input class="campo-txt" id="dSem" placeholder="Por que não tem comprovante?" style="margin-top:8px"></div>
     <p class="regra">${ic('recibo')}<span>Só são reembolsadas despesas lançadas aqui e aprovadas pela administração.</span></p>`;
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">Salvar despesa</button></div>`);
   ligarChips('dCat', v => f.categoria = v);
   ligarChips('dPag', v => f.pagamento = v);
-  document.getElementById('dFoto').onchange = e => executar(async () => {
+  ligarFoto('dFoto', e => executar(async () => {
     const a = e.target.files[0]; if (!a) return;
     f.foto = await comprimir(a, 1600, 0.75);
     document.getElementById('dPrev').innerHTML = `<div class="fotos"><div class="foto"><img src="${f.foto}" alt="Comprovante"></div></div>`;
-  });
+  }));
   document.getElementById('semFoto').onclick = () => document.getElementById('boxSem').classList.toggle('oculto');
   document.getElementById('ant').onclick = () => telaDespesas();
   document.getElementById('ok').onclick = () => executar(async () => {
