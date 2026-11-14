@@ -1893,10 +1893,9 @@ function enviarOS2_(o, pdf, emails, modo, aps) {
     corpo = '<div style="' + estilo + '"><p>Olá!</p><p>Eu sou o KAI, o assistente inteligente da Kiton Engenharia Integrada.</p>' +
       (o.motivoRevisao
         ? '<p>Esta é uma mensagem automática para informar que a ordem de serviço nº ' + esc_(o.numero) + ', referente à sua empresa, foi revisada. ' +
-          'A versão em anexo (revisão ' + revTxt_(o.revisao) + ') substitui a enviada anteriormente.</p><p><b>Motivo da revisão:</b> ' + esc_(o.motivoRevisao) + '</p>'
+          'Em anexo, segue a versão revisada (revisão ' + revTxt_(o.revisao) + '), que substitui a enviada anteriormente, e abaixo, o resumo da execução.</p><p><b>Motivo da revisão:</b> ' + esc_(o.motivoRevisao) + '</p>'
         : '<p>Esta é uma mensagem automática para informar que foi finalizada uma ordem de serviço referente à sua empresa. Em anexo, segue a cópia da ordem de serviço, ' +
-          'com o registro de cada etapa, as fotos e as assinaturas.' + (o.revisao ? ' Esta versão (revisão ' + revTxt_(o.revisao) + ') substitui a enviada anteriormente.' : '') + '</p>') +
-      '<p>Abaixo, o resumo da execução.</p>' +
+          'e abaixo, o resumo da execução.' + (o.revisao ? ' Esta versão (revisão ' + revTxt_(o.revisao) + ') substitui a enviada anteriormente.' : '') + '</p>') +
       '<p style="margin:16px 0 0"><b>Resumo da ordem de serviço nº ' + esc_(o.numero) + '</b></p>' + tabela +
       '<p>Agradecemos a confiança no trabalho da nossa equipe. Se tiver qualquer dúvida sobre o serviço realizado, basta responder este e-mail que retornaremos o mais breve possível.</p>' +
       '<p>Para conhecer as nossas soluções e saber como podemos ajudar a sua empresa a performar ainda melhor, acesse <a href="https://' + SITE + '">' + SITE + '</a> ' +
