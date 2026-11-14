@@ -1968,7 +1968,8 @@ function txtApont_(r) {
 /** Rodapé fixo em todas as páginas dos PDFs (a tabela reserva o espaço dele em cada folha). */
 function rodapePDF_() {
   return '<div class="rodfix">Todos os direitos reservados | ' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) +
-    ' | Documento gerado automaticamente via app Kiton Hub (versão ' + esc_(VERSAO_APP) + ')</div>';
+    ' | Documento gerado automaticamente via app Kiton Hub (versão ' + esc_(VERSAO_APP) + ')<br>' +
+    esc_(EMPRESA.endereco) + ' · ' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div>';
 }
 function envolverPDF_(corpo) {
   return '<table class="pg"><tbody><tr><td>' + corpo + '</td></tr></tbody><tfoot><tr><td><div class="espaco-rod"></div></td></tr></tfoot></table>' + rodapePDF_();
@@ -1976,8 +1977,8 @@ function envolverPDF_(corpo) {
 
 /** Estilos comuns aos PDFs da OS e da APR. */
 function estiloPDF_() {
-  return '.rodfix{position:fixed;left:0;right:0;bottom:0;font-size:7pt;color:#5d6670;text-align:center;border-top:1.5px solid #CD0000;padding-top:3px;background:#fff}' +
-    'table.pg{width:100%;border-collapse:collapse}table.pg>tbody>tr>td,table.pg>tfoot>tr>td{padding:0;font-size:10pt;vertical-align:top}.espaco-rod{height:8mm}' +
+  return '.rodfix{position:fixed;left:0;right:0;bottom:0;font-size:7pt;color:#5d6670;text-align:center;border-top:1.5px solid #CD0000;padding-top:3px;background:#fff;line-height:1.45}' +
+    'table.pg{width:100%;border-collapse:collapse}table.pg>tbody>tr>td,table.pg>tfoot>tr>td{padding:0;font-size:10pt;vertical-align:top}.espaco-rod{height:11mm}' +
     '@page{size:A4;margin:12mm 13mm 10mm}body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1c1f23}' +
     '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:8px}.cab td{vertical-align:middle;padding:0 0 6px}' +
     '.emp{font-size:8pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:8.5pt;color:#5d6670}' +
@@ -2052,7 +2053,7 @@ function pdfOS2_(o, aps, modo, comAPR, aprCompleta) {
   const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() +
     '</style></head><body>' + envolverPDF_(
     '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:170px;height:auto">' +
-    '<div class="emp">' + esc_(EMPRESA.endereco) + '<br>' + esc_(EMPRESA.fone) + ' · ' + esc_(EMPRESA.email) + '</div></td>' +
+    '</td>' +
     '<td class="num"><span>' + titulo + '</span><b>Nº ' + esc_(o.numero) + (modo === 'final' && o.revisao ? ' · Rev. ' + revTxt_(o.revisao) : '') + '</b><span>' + esc_(modo === 'final' ? 'Finalizada em ' + o.finalizadaEm : 'Situação: em andamento') + '</span></td></tr></table>' +
     '<table class="d">' + linha('Cliente', o.cliente) + linha('Local / setor', o.local) + linha('Solicitante', o.solicitante) + linha('Tipo de serviço', o.tipo) +
     linha('Programação', o.inicioPrev ? o.inicioPrev + (o.fimPrev ? ' a ' + o.fimPrev : '') : 'Aberta em campo') + '</table>' +
