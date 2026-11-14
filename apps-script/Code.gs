@@ -2075,6 +2075,7 @@ function emailsEquipe_(aps) {
 function assinaturaEmail_() {
   const a = (url, t) => '<a href="' + url + '" style="color:#1c1f23;text-decoration:none">' + t + '</a>';
   return '<p style="margin:16px 0 0">Atenciosamente,</p>' +
+    '<p style="margin:12px 0 0"><img src="cid:logoKiton" alt="Kiton Engenharia Integrada" width="210" style="width:210px;height:auto;display:block"></p>' +
     '<p style="margin:14px 0 0;line-height:1.5"><b>KITON ENGENHARIA INTEGRADA</b><br>CNPJ: 29.234.872/0001-04 | CREA-PR: 76327<br>' +
     a(LINK_MAPS, 'Av. Dr. Mário Clapier Urbinatti, 1434, Jardim Canadá, Maringá/PR, CEP 87.080-120') + '<br>' +
     'Tel./WhatsApp: ' + a('https://wa.me/' + WHATS_KITON, '(44) 4141-0714') + ' | ' + a('https://' + SITE, SITE) + '</p>' +
@@ -2122,6 +2123,8 @@ function enviarOS2_(o, pdf, emails, modo, aps) {
       '<p style="margin:12px 0 0"><b>OS nº ' + esc_(o.numero) + '</b></p>' + tabela + '</div>';
   }
   const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Engenharia Integrada', replyTo: EMAIL_KITON };
+  // logo embutida no corpo (cid): aparece sem o cliente precisar liberar imagens externas
+  if (corpo.indexOf('cid:logoKiton') >= 0) opc.inlineImages = { logoKiton: Utilities.newBlob(Utilities.base64Decode(LOGO_B64), 'image/png', 'logo-kiton.png') };
   if (modo === 'final') {
     const bcc = emailsEquipe_(aps).filter(e => emails.indexOf(e) < 0);
     if (bcc.length) opc.bcc = bcc.join(',');
