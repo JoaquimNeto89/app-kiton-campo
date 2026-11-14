@@ -1708,37 +1708,57 @@ function reabrirOS_(u, req) {
 
 // ----- painel gerencial -----
 function painelOS_(req) {
-  const mes = txt_(req.mes);
+  // período: de/ate (yyyy-MM-dd); sem datas = geral. Compatível com o filtro antigo por mês (req.mes = yyyy-MM).
+  let de = txt_(req.de), ate = txt_(req.ate);
+  if (!de && !ate && txt_(req.mes)) {
+    const [a, m] = txt_(req.mes).split('-').map(Number);
+    de = req.mes + '-01'; ate = Utilities.formatDate(new Date(a, m, 0), TZ, 'yyyy-MM-dd');
+  }
+  const cliente = txt_(req.cliente), colab = txt_(req.colaborador), tipo = txt_(req.tipo);
+  const hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  const noPeriodo = d => { if (!d) return !de && !ate; const s = Utilities.formatDate(d, TZ, 'yyyy-MM-dd'); return (!de || s >= de) && (!ate || s <= ate); };
   const b = baseOS_();
-  const lista = b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]))
-    .filter(o => {
-      const ref = o.inicioPrevIso || '';
-      const ab = data_(b.os.linhas.find(x => txt_(x.get('Nº OS')) === o.numero).get('Programada em'));
-      return ['Programada', 'Em andamento'].indexOf(o.status) >= 0 || (ref ? ref.slice(0, 7) === mes : ab && Utilities.formatDate(ab, TZ, 'yyyy-MM') === mes);
-    });
-  // horas por técnico no mês (apontamentos do mês)
+  const lista = b.os.linhas.map(l => {
+    const o = resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))]);
+    o._ref = data_(l.get('Início previsto')) || data_(l.get('Iniciada em')) || data_(l.get('Programada em'));
+    return o;
+  }).filter(o => {
+    if (cliente && o.cliente !== cliente) return false;
+    if (tipo && o.tipo !== tipo) return false;
+    if (colab && o.envolvidos.indexOf(colab) < 0) return false;
+    const aberta = ['Programada', 'Em andamento'].indexOf(o.status) >= 0;
+    return noPeriodo(o._ref) || (aberta && (!ate || ate >= hoje));
+  });
+  const numeros = {}; lista.forEach(o => { numeros[o.numero] = o; delete o._ref; });
+  // horas por técnico: apontamentos do período nas OS filtradas
   const tecnicos = {};
   b.ap.linhas.forEach(a => {
     const d = data_(a.get('Início'));
-    if (!d || Utilities.formatDate(d, TZ, 'yyyy-MM') !== mes) return;
-    const os = b.os.linhas.find(x => txt_(x.get('Nº OS')) === txt_(a.get('Nº OS')));
+    const os = numeros[txt_(a.get('Nº OS'))];
+    if (!d || !os || !noPeriodo(d)) return;
     lista2_(a.get('Equipe')).forEach(n => {
-      const p = tecnicos[n] || (tecnicos[n] = { nome: n, horas: 0, apontamentos: 0, os: {}, finalizadas: {}, noPrazo: 0, aposPrazo: 0, ausente: 0 });
-      p.horas += Number(a.get('Horas')) || 0; p.apontamentos++; p.os[txt_(a.get('Nº OS'))] = 1;
+      if (colab && n !== colab) return;
+      const p = tecnicos[n] || (tecnicos[n] = { nome: n, horas: 0, apontamentos: 0, os: {}, finalizadas: {}, noPrazo: 0, aposPrazo: 0, ausente: 0, reabertas: {} });
+      p.horas += Number(a.get('Horas')) || 0; p.apontamentos++; p.os[os.numero] = 1;
+      if (os.reaberta) p.reabertas[os.numero] = 1;
       if (txt_(a.get('Cliente ausente (motivo)'))) p.ausente++;
-      if (txt_(a.get('Tipo')) === 'Final' && os) {
-        p.finalizadas[txt_(a.get('Nº OS'))] = 1;
-        if (txt_(os.get('Prazo')) === 'Dentro do previsto') p.noPrazo++;
-        if (txt_(os.get('Prazo')) === 'Após o previsto') p.aposPrazo++;
+      if (txt_(a.get('Tipo')) === 'Final') {
+        p.finalizadas[os.numero] = 1;
+        if (os.prazo === 'Dentro do previsto') p.noPrazo++;
+        if (os.prazo === 'Após o previsto') p.aposPrazo++;
       }
     });
   });
   const porTecnico = Object.keys(tecnicos).sort().map(k => {
     const p = tecnicos[k];
-    return { nome: p.nome, horas: Math.round(p.horas * 10) / 10, apontamentos: p.apontamentos, os: Object.keys(p.os).length,
-      finalizadas: Object.keys(p.finalizadas).length, noPrazo: p.noPrazo, aposPrazo: p.aposPrazo, ausente: p.ausente };
+    return { nome: p.nome, horas: Math.round(p.horas * 10000) / 10000, apontamentos: p.apontamentos, os: Object.keys(p.os).length,
+      finalizadas: Object.keys(p.finalizadas).length, noPrazo: p.noPrazo, aposPrazo: p.aposPrazo, ausente: p.ausente, reabertas: Object.keys(p.reabertas).length };
   });
-  return { ok: true, mes, lista: lista.reverse(), porTecnico };
+  // por cliente (horas e quantidade)
+  const cli = {};
+  lista.forEach(o => { const c = cli[o.cliente] || (cli[o.cliente] = { cliente: o.cliente, os: 0, horas: 0, finalizadas: 0 }); c.os++; c.horas += o.horas; if (o.status === 'Finalizada') c.finalizadas++; });
+  const porCliente = Object.keys(cli).map(k => cli[k]).sort((a, c) => c.horas - a.horas);
+  return { ok: true, de, ate, lista: lista.reverse(), porTecnico, porCliente };
 }
 
 // ----- PDF e e-mail -----

@@ -459,7 +459,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = telaMeusItens;
-  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.apr ? 'os' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os || pd.treinos ? 'os' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.treinos ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -815,8 +815,8 @@ function telaRetorno(s) {
 async function telaAdmin(aba) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
-  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['os', 'OS', 'os'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
-    const pd = est.dados.pendencias || {}; const n = !pk ? 0 : pk === 'os' ? (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0) : pd[pk];
+  $app.innerHTML = `<div class="abas">${(aba === 'acessos' ? [['acessos', 'Acessos']] : [['aberto', 'Itens', 'itens'], ['desp', 'Despesas', 'despesas'], ['cli', 'Novos clientes cadastrados', 'clientes'], ['os', 'OS', 'os'], ['seg', 'Segurança', 'seg'], ['pres', 'Presença'], ['fech', 'Mês']]).map(([k, t, pk]) => {
+    const pd = est.dados.pendencias || {}; const n = !pk ? 0 : pk === 'seg' ? (pd.apr || 0) + (pd.treinos || 0) : pd[pk];
     return `<button type="button" data-t="${k}" class="${k === aba ? 'sel' : ''}">${t}${n ? `<span class="bolinha">${n}</span>` : ''}</button>`; }).join('')}</div><div id="erro"></div><div id="conteudo"></div>`;
   $app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaAdmin(b.dataset.t));
   document.getElementById('ant').onclick = () => carregarInicio();
@@ -848,6 +848,8 @@ async function telaAdmin(aba) {
     await adminDespesas(box);
   } else if (aba === 'os') {
     await adminOS(box);
+  } else if (aba === 'seg') {
+    box.innerHTML = '<h1>Segurança</h1><div id="aprBox"></div>'; await adminAPR(document.getElementById('aprBox'));
   } else if (aba === 'cli') {
     await adminClientes(box);
   } else if (aba === 'pres') {
@@ -1383,7 +1385,7 @@ async function adminAPR(box) {
       const lib = b.dataset.l === '1';
       if (lib && !confirm('Liberar por exceção? A responsabilidade pela liberação fica registrada no seu nome.')) return;
       await api('decidirAPR', { n: b.dataset.dec, liberar: lib, justificativa: just });
-      await recarregarDados(); telaAdmin('os');
+      await recarregarDados(); telaAdmin('seg');
     }));
   });
 }
@@ -1662,14 +1664,47 @@ async function telaOutraOSCliente(cliente) {
 }
 
 // ---------- administração: painel de OS ----------
+/** Filtros do painel de OS: ficam guardados enquanto o app está aberto. */
+const filtroOS = { periodo: 'mes', mes: '', ano: '', de: '', ate: '', cliente: '', colaborador: '', tipo: '', visao: 'lista', status: '' };
+function intervaloOS(f) {
+  if (f.periodo === 'mes') { const [a, m] = f.mes.split('-').map(Number); return { de: f.mes + '-01', ate: `${f.mes}-${doisDig(new Date(a, m, 0).getDate())}` }; }
+  if (f.periodo === 'ano') return { de: f.ano + '-01-01', ate: f.ano + '-12-31' };
+  if (f.periodo === 'periodo') return { de: f.de, ate: f.ate };
+  return { de: '', ate: '' };
+}
 async function adminOS(box) {
-  const h = new Date(), mes = `${h.getFullYear()}-${doisDig(h.getMonth() + 1)}`;
-  box.innerHTML = `<h1>Ordens de serviço</h1><button class="acao" id="progAdm" type="button" style="margin-top:0">${ic('calib')} Programar OS</button><div id="aprBox"></div>
-    <input class="campo-txt" id="mesOS" type="month" value="${mes}" style="margin-top:12px"><div id="painel" style="margin-top:12px"></div>`;
+  const h = new Date(), d = est.dados, f = filtroOS;
+  if (!f.mes) f.mes = `${h.getFullYear()}-${doisDig(h.getMonth() + 1)}`;
+  if (!f.ano) f.ano = String(h.getFullYear());
+  const anos = []; for (let a = h.getFullYear(); a >= 2026; a--) anos.push(String(a));
+  const sel = (id, rot, lista, v) => `<label class="rotulo" for="${id}">${rot}</label><select class="campo-txt" id="${id}"><option value="">Todos</option>${lista.map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+  box.innerHTML = `<h1>Ordens de serviço</h1><button class="acao" id="progAdm" type="button" style="margin-top:0">${ic('calib')} Programar OS</button>
+    <div class="cartao" style="margin-top:12px"><div class="t">Filtros</div>
+      <div class="segmento" id="fPer">${[['mes', 'Mês'], ['ano', 'Ano'], ['periodo', 'Período'], ['geral', 'Geral']].map(([k, t]) => `<button type="button" data-v="${k}" class="${f.periodo === k ? 'sel' : ''}">${t}</button>`).join('')}</div>
+      <div id="fPerBox" style="margin-top:10px">
+        ${f.periodo === 'mes' ? `<input class="campo-txt" id="fMes" type="month" value="${f.mes}">` : ''}
+        ${f.periodo === 'ano' ? `<select class="campo-txt" id="fAno">${anos.map(a => `<option ${a === f.ano ? 'selected' : ''}>${a}</option>`).join('')}</select>` : ''}
+        ${f.periodo === 'periodo' ? `<label class="rotulo" for="fDe" style="margin-top:0">De</label><input class="campo-txt" id="fDe" type="date" value="${f.de}" style="width:100%;min-width:0">
+          <label class="rotulo" for="fAte">Até</label><input class="campo-txt" id="fAte" type="date" value="${f.ate}" style="width:100%;min-width:0">` : ''}
+        ${f.periodo === 'geral' ? '<p class="suave" style="margin:0">Todas as OS desde o início.</p>' : ''}</div>
+      ${f.mais || f.cliente || f.colaborador || f.tipo ? `${sel('fCli', 'Cliente', d.clientesInfo.map(c => c.nome), f.cliente)}
+      ${sel('fCol', 'Colaborador', d.equipeCampo || d.colaboradores, f.colaborador)}
+      ${sel('fTipo', 'Tipo de serviço', d.tiposOS, f.tipo)}
+      ${f.cliente || f.colaborador || f.tipo ? '<button type="button" class="link" id="fLimpar">Limpar filtros</button>' : ''}`
+      : '<button type="button" class="link" id="fMais">+ Filtrar por cliente, colaborador ou tipo</button>'}
+    </div>
+    <div class="segmento" id="fVis" style="margin-top:12px"><button type="button" data-v="lista" class="${f.visao === 'lista' ? 'sel' : ''}">Lista de OS</button><button type="button" data-v="resumo" class="${f.visao === 'resumo' ? 'sel' : ''}">Resumo</button></div>
+    <div id="painel" style="margin-top:12px"></div>`;
   document.getElementById('progAdm').onclick = () => telaProgramarOS();
-  let filtro = '';
-  const carregar = () => executar(async () => {
-    const r = await api('painelOS', { mes: document.getElementById('mesOS').value });
+  const refazer = () => adminOS(box);
+  document.querySelectorAll('#fPer button').forEach(b => b.onclick = () => { f.periodo = b.dataset.v; refazer(); });
+  document.querySelectorAll('#fVis button').forEach(b => b.onclick = () => { f.visao = b.dataset.v; refazer(); });
+  const liga = (id, k) => { const e = document.getElementById(id); if (e) e.onchange = () => { f[k] = e.value; refazer(); }; };
+  liga('fMes', 'mes'); liga('fAno', 'ano'); liga('fDe', 'de'); liga('fAte', 'ate'); liga('fCli', 'cliente'); liga('fCol', 'colaborador'); liga('fTipo', 'tipo');
+  const lp = document.getElementById('fLimpar'); if (lp) lp.onclick = () => { f.cliente = f.colaborador = f.tipo = ''; f.mais = false; refazer(); };
+  const fm = document.getElementById('fMais'); if (fm) fm.onclick = () => { f.mais = true; refazer(); };
+  await executar(async () => {
+    const r = await api('painelOS', Object.assign(intervaloOS(f), { cliente: f.cliente, colaborador: f.colaborador, tipo: f.tipo }));
     const L = r.lista;
     const grupos = [
       ['Programada', 'Programadas', o => o.status === 'Programada' && !o.atrasada, ''],
@@ -1681,10 +1716,11 @@ async function adminOS(box) {
     ];
     const fin = L.filter(o => o.status === 'Finalizada');
     const cnt = (lista, k, v) => lista.filter(o => o[k] === v).length;
-    const visiveis = filtro ? L.filter(grupos.find(g => g[0] === filtro)[2]) : L;
-    document.getElementById('painel').innerHTML = `<div class="cal-resumo" style="grid-template-columns:repeat(3,1fr)">` +
-      grupos.map(g => `<button type="button" class="cal-qd ${g[3]}${filtro === g[0] ? ' ativo' : ''}" data-f="${g[0]}"><b>${L.filter(g[2]).length}</b><span>${g[1]}</span></button>`).join('') + `</div>
-      <div class="cartao" style="margin-top:12px"><div class="t">Execução das finalizadas (${fin.length})</div><table><tbody>
+    const quadros = `<div class="cal-resumo" style="grid-template-columns:repeat(3,1fr)">` +
+      grupos.map(g => `<button type="button" class="cal-qd ${g[3]}${f.status === g[0] ? ' ativo' : ''}" data-f="${g[0]}"><b>${L.filter(g[2]).length}</b><span>${g[1]}</span></button>`).join('') + `</div>`;
+    let html;
+    if (f.visao === 'resumo') {
+      html = quadros + `<div class="cartao" style="margin-top:12px"><div class="t">Execução das finalizadas (${fin.length})</div><table><tbody>
         <tr><td>Iniciadas antes do programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'Antes do programado')}</td></tr>
         <tr><td>Iniciadas no dia programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'No dia programado')}</td></tr>
         <tr><td>Iniciadas depois do programado</td><td class="n">${cnt(fin, 'inicioVsPrevisto', 'Depois do programado')}</td></tr>
@@ -1694,15 +1730,23 @@ async function adminOS(box) {
         <tr><td>Reabertas (retrabalho)</td><td class="n">${L.filter(o => o.reaberta).length}</td></tr>
         <tr><td>Corrigidas após finalizar</td><td class="n">${L.filter(o => o.revisao && !o.reaberta).length}</td></tr>
       </tbody></table></div>
-      ${r.porTecnico.length ? `<div class="cartao"><div class="t">Por técnico no mês</div><table><thead><tr><th>Técnico</th><th class="n">OS</th><th class="n">Horas</th><th class="n">Final.</th><th class="n">No prazo</th><th class="n">Sem assin.</th></tr></thead><tbody>
-        ${r.porTecnico.map(t => `<tr><td>${esc(t.nome)}</td><td class="n">${t.os}</td><td class="n">${dur(t.horas)}</td><td class="n">${t.finalizadas}</td><td class="n">${t.noPrazo}${t.aposPrazo ? ` / <span style="color:var(--vermelho-esc)">${t.aposPrazo} após</span>` : ''}</td><td class="n">${t.ausente}</td></tr>`).join('')}
+      ${r.porTecnico.length ? `<div class="cartao"><div class="t">Por técnico</div><div style="overflow-x:auto"><table style="min-width:420px"><thead><tr><th>Técnico</th><th class="n">OS</th><th class="n">Horas</th><th class="n">Final.</th><th class="n">No prazo</th><th class="n">Reab.</th><th class="n">Sem assin.</th></tr></thead><tbody>
+        ${r.porTecnico.map(t => `<tr><td>${esc(t.nome)}</td><td class="n">${t.os}</td><td class="n">${dur(t.horas)}</td><td class="n">${t.finalizadas}</td><td class="n">${t.noPrazo}${t.aposPrazo ? ` / <span style="color:var(--vermelho-esc)">${t.aposPrazo} após</span>` : ''}</td><td class="n">${t.reabertas || 0}</td><td class="n">${t.ausente}</td></tr>`).join('')}
+      </tbody></table></div></div>` : ''}
+      ${r.porCliente.length ? `<div class="cartao"><div class="t">Por cliente</div><table><thead><tr><th>Cliente</th><th class="n">OS</th><th class="n">Final.</th><th class="n">Horas</th></tr></thead><tbody>
+        ${r.porCliente.map(c => `<tr><td>${esc(c.cliente)}</td><td class="n">${c.os}</td><td class="n">${c.finalizadas}</td><td class="n">${dur(c.horas)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}
-      <h2>${filtro ? esc(grupos.find(g => g[0] === filtro)[1]) : 'Todas as OS'} (${visiveis.length})</h2>
-      ${visiveis.length ? visiveis.map(o => cartaoOS(o, `<span class="selo-txt" style="margin-left:4px">${esc(o.tecnicos.join(', '))}</span>`)).join('') : msg('info', 'Nenhuma OS neste filtro.')}`;
-    document.querySelectorAll('#painel [data-f]').forEach(b => b.onclick = () => { filtro = filtro === b.dataset.f ? '' : b.dataset.f; carregar(); });
+      ${L.length ? '' : msg('info', 'Nenhuma OS com esses filtros.')}`;
+    } else {
+      const g = grupos.find(x => x[0] === f.status);
+      const visiveis = g ? L.filter(g[2]) : L;
+      html = quadros + `<h2>${g ? esc(g[1]) : 'Todas as OS'} (${visiveis.length})</h2>
+        ${visiveis.length ? visiveis.map(o => cartaoOS(o, `<span class="selo-txt" style="margin-left:4px">${esc(o.tecnicos.join(', '))}</span>`)).join('') : msg('info', 'Nenhuma OS com esses filtros.')}`;
+    }
+    document.getElementById('painel').innerHTML = html;
+    document.querySelectorAll('#painel [data-f]').forEach(b => b.onclick = () => { f.status = f.status === b.dataset.f ? '' : b.dataset.f; f.visao = 'lista'; refazer(); });
     document.querySelectorAll('#painel [data-os]').forEach(b => b.onclick = () => telaOSDetalhe(b.dataset.os, true));
   });
-  document.getElementById('mesOS').onchange = carregar; await carregar(); adminAPR(document.getElementById('aprBox'));
 }
 
 /** Correção de OS finalizada: texto, materiais, fotos e pendências. Gera revisão do PDF. */
