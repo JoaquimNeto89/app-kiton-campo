@@ -1274,7 +1274,7 @@ function fluxoAPR(ctx, payload, voltar) {
       return `<div style="margin-bottom:6px"><b>${esc(n)}</b><br>${it}</div>`;
     }).join('');
     const itensDe = s => cfg.itens.filter(it => it.s === s && (comp || it.m === 'A') && (!it.cond || it.cond === f.condicao));
-    const htmlIt = it => `<div class="apr-it"><p>${esc(it.t)}${it.imp ? ' <span class="imp">Impeditivo</span>' : ''}</p>${sn(it.id, f.respostas[it.id])}</div>`;
+    const htmlIt = it => `<div class="apr-it"><p>${esc(it.t)}${it.imp || (it.impCond && it.impCond === f.condicao) ? ' <span class="imp">Impeditivo</span>' : ''}</p>${sn(it.id, f.respostas[it.id])}</div>`;
     const secao = ([s, nome]) => {
       if (!comp && (s === 'C' || s === 'D')) return '';
       let extra = '';
@@ -1493,7 +1493,7 @@ function telaProgramarOS() {
 function fluxoApontar(s) {
   topo('Apontar OS ' + s.numero);
   const d = est.dados, chave = 'kc_ap_' + s.n;
-  let f = { tipo: '', executado: '', materiais: [], pendencias: '', ausente: false, motivo: '', assinante: '', cargo: '', emails: null, extra: '' };
+  let f = { tipo: '', executado: '', materiais: [], pendencias: '', ausente: false, motivo: '', assinante: '', cargo: '', emails: null, extra: '', incluirAPR: '' };
   try { Object.assign(f, JSON.parse(lerLocal(chave) || '{}')); } catch (e) { /* rascunho inválido */ }
   const fotos = []; let assinatura = null, tracos = 0, p = 0;
   const passos = ['Situação', 'Serviço', 'Fotos', 'Assinatura'];
@@ -1567,7 +1567,10 @@ function fluxoApontar(s) {
           <p class="suave" style="margin-top:6px">Fica destacado para a administração e no PDF.</p></div>
         ${f.tipo === 'Final' ? `<label class="rotulo">Enviar a OS para</label><div id="aMails">${cli.emails.map(e => `<label class="linha" style="font-weight:500"><input type="checkbox" value="${esc(e)}" ${f.emails.includes(e) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(e)}</label>`).join('') || '<p class="suave">Este cliente não tem e-mail cadastrado.</p>'}</div>
           <input class="campo-txt" id="aExtra" type="email" inputmode="email" placeholder="Outro e-mail (opcional)" value="${esc(f.extra)}">
-          <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>` : `<p class="suave" style="margin-top:12px">O PDF deste apontamento vai só para a Kiton (contato@). O cliente recebe tudo na finalização.</p>`}
+          <p class="suave" style="margin-top:8px">A Kiton (contato@) sempre recebe uma cópia.</p>
+          <label class="rotulo">Enviar a APR junto no PDF do cliente?</label>
+          <div class="segmento" id="aApr"><button type="button" data-v="Sim" class="${f.incluirAPR === 'Sim' ? 'sel' : ''}">Sim, incluir</button><button type="button" data-v="Não" class="${f.incluirAPR === 'Não' ? 'sel' : ''}">Não incluir</button></div>
+          <p class="suave" style="margin-top:6px">Decisão do responsável técnico. A APR fica registrada na Kiton nos dois casos.</p>` : `<p class="suave" style="margin-top:12px">O PDF deste apontamento vai só para a Kiton (contato@). O cliente recebe tudo na finalização.</p>`}
         ${blocoHorario('hFim', 'Que horas terminou?')}`;
       ligarHorario('hFim');
       const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
@@ -1579,6 +1582,7 @@ function fluxoApontar(s) {
         document.getElementById('boxAss').classList.toggle('oculto', f.ausente); document.getElementById('boxAus').classList.toggle('oculto', !f.ausente);
         if (!f.ausente && !assinatura) montar();
       });
+      document.querySelectorAll('#aApr button').forEach(b => b.onclick = () => { f.incluirAPR = b.dataset.v; document.querySelectorAll('#aApr button').forEach(x => x.classList.toggle('sel', x === b)); });
       rodape(`${ic('ok')} ${f.tipo === 'Final' ? 'Finalizar OS' : 'Salvar parcial'}`);
     }
   }
@@ -1587,12 +1591,13 @@ function fluxoApontar(s) {
       if (f.ausente && !f.motivo) throw new Error('Explique por que não há assinatura.');
       if (!f.ausente && (!assinatura || tracos < 1)) throw new Error('Peça para o cliente assinar no quadro.');
       if (!f.ausente && !f.assinante) throw new Error('Informe o nome de quem assinou.');
+      if (f.tipo === 'Final' && !f.incluirAPR) throw new Error('Escolha se a APR vai junto no PDF do cliente.');
       const emails = f.tipo === 'Final' ? [...(f.emails || []), f.extra].filter(Boolean) : [];
       if (emails.length > 3) throw new Error('No máximo 3 e-mails do cliente.');
       const horario = lerHorarioApos('hFim', s.inicio, 'do início do apontamento');
       const geo = await localizacao();
       const r = await api('apontarOS', { n: s.n, tipo: f.tipo, executado: f.executado, materiais: f.materiais, pendencias: f.pendencias, fotos,
-        assinatura: f.ausente ? '' : assinatura, assinante: f.assinante, cargo: f.cargo, ausente: f.ausente ? f.motivo : '', emails, horario, geo });
+        assinatura: f.ausente ? '' : assinatura, assinante: f.assinante, cargo: f.cargo, ausente: f.ausente ? f.motivo : '', emails, horario, geo, incluirAPR: f.incluirAPR === 'Sim' });
       guardar(chave, null);
       await recarregarDados();
       telaEAgora(r);

@@ -41,7 +41,7 @@ const CAB = {
   'Ordens de serviço': ['Nº OS', 'Status', 'Cliente', 'Local / setor', 'Solicitante', 'Tipo de serviço', 'Solicitação / problema',
     'Início previsto', 'Término previsto', 'Técnicos designados', 'Programada por', 'Programada em', 'Evento na agenda', 'Iniciada em',
     'Início x programado', 'Último apontamento', 'Finalizada em', 'Prazo', 'Horas trabalhadas', 'Apontamentos', 'Pendências / recomendações',
-    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações'],
+    'E-mails do cliente', 'Envio', 'PDF final', 'Motivo do cancelamento', 'Observações', 'APR no PDF do cliente'],
   'Apontamentos de OS': ['Nº', 'Nº OS', 'Início', 'Fim', 'Horas', 'Tipo', 'Equipe', 'Serviço executado', 'Materiais utilizados', 'Fotos',
     'Assinatura', 'Assinado por', 'Cargo / setor de quem assinou', 'Cliente ausente (motivo)', 'PDF do apontamento', 'Check-in',
     'Lat. início', 'Long. início', 'Lat. fim', 'Long. fim', 'Registrado por', 'Iniciado lançado em', 'Fim lançado em', 'Lançamento tardio'],
@@ -1316,7 +1316,7 @@ const APR_ITENS = [
   { id: 'p1', s: 'E', t: 'Vestimenta antichama compatível com o risco?', imp: true, m: 'C' },
   { id: 'p2', s: 'E', t: 'Luvas isolantes inspecionadas (se houver contato com partes energizadas)?', m: 'C' },
   { id: 'p3', s: 'E', t: 'Capacete, óculos ou protetor facial e calçado de segurança?', m: 'A' },
-  { id: 'p4', s: 'E', t: 'Detector de tensão testado antes do uso?', m: 'C' },
+  { id: 'p4', s: 'E', t: 'Instrumento usado no teste de ausência de tensão (detector, multímetro, alicate ou outro) verificado antes do uso?', m: 'C', impCond: 'Desenergizada' },
   { id: 'p5', s: 'E', t: 'Tapete isolante ou outro EPC aplicável?', m: 'C' },
   { id: 'g1', s: 'G', t: 'Rota de fuga identificada?', m: 'A' },
   { id: 'g2', s: 'G', t: 'Extintor próximo?', m: 'A' },
@@ -1398,7 +1398,7 @@ function avaliarAPR_(apr, equipe, tipoOS) {
     const v = txt_(resp[it.id]);
     if (['Sim', 'Não', 'N/A'].indexOf(v) < 0) throw new Error('Responda todos os itens da APR (falta: ' + it.t + ').');
     linhas.push(it.t + ' ' + v);
-    if (it.imp && v === 'Não') imped.push(it.t.replace(/\?$/, '') + ': Não');
+    if ((it.imp || it.impCond === condicao) && v === 'Não') imped.push(it.t.replace(/\?$/, '') + ': Não');
   });
   const riscos = [];
   if (modelo === 'Completa') {
@@ -1584,7 +1584,8 @@ function apontarOS_(u, req) {
     if (prevFim) set_(b.os, lo._linha, 'Prazo', fim.getTime() <= prevFim.getTime() ? 'Dentro do previsto' : 'Após o previsto');
     agendaFinal_(lo);
     osInfo.pendencias = txt_(req.pendencias); osInfo.status = 'Finalizada'; osInfo.finalizadaEm = fmt_(fim);
-    pdf = pdfOS2_(osInfo, todos, 'final');
+    if (b.os.cab['APR no PDF do cliente'] !== undefined) set_(b.os, lo._linha, 'APR no PDF do cliente', req.incluirAPR === true ? 'Sim' : 'Não');
+    pdf = pdfOS2_(osInfo, todos, 'final', req.incluirAPR === true);
     link = pasta.createFile(pdf).getUrl();
     set_(b.os, lo._linha, 'PDF final', link);
     try { enviarOS2_(osInfo, pdf, emails, 'final', todos); envio = 'Enviada em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm'); }
@@ -1697,7 +1698,7 @@ function txtApont_(r) {
   return r.total + (r.total === 1 ? ' (finalização)' : ' (' + r.parciais + ' parcia' + (r.parciais === 1 ? 'l' : 'is') + ' e 1 de finalização)');
 }
 
-function pdfOS2_(o, aps, modo) {
+function pdfOS2_(o, aps, modo, comAPR) {
   const linha = (rot, val) => val ? '<tr><td class="r">' + rot + '</td><td>' + quebra_(val) + '</td></tr>' : '';
   const bloco = (tit, val) => val ? '<div class="b"><div class="bt">' + tit + '</div><div class="bc">' + quebra_(val) + '</div></div>' : '';
   const r = resumoExecucao_(aps);
@@ -1706,10 +1707,10 @@ function pdfOS2_(o, aps, modo) {
   const aprs = aprPorApontamento_();
   const blocoAPR = a => {
     const x = aprs[txt_(a.get('Nº'))];
-    if (!x) return '';
+    if (!x || (modo === 'final' && !comAPR)) return '';
     const pt = txt_(x.get('PT')) === 'Sim' ? 'Sim' + (txt_(x.get('Nº da PT')) ? ', nº ' + txt_(x.get('Nº da PT')) : '') + (txt_(x.get('Emissor da PT')) ? ', emitida por ' + txt_(x.get('Emissor da PT')) : '') + (txt_(x.get('Foto da PT')) ? ', foto arquivada' : '') : txt_(x.get('PT'));
-    // a exceção fica registrada na aba APR e no PDF interno; o PDF do cliente mostra apenas que a atividade foi liberada
-    const sit = txt_(x.get('Situação')) === 'Liberada por exceção' && modo !== 'final' ? 'Liberada por exceção (' + txt_(x.get('Decisão por')) + ')' : 'Liberada';
+    // no PDF do cliente a APR só entra quando o técnico responsável escolhe enviar na finalização
+    const sit = txt_(x.get('Situação')) === 'Liberada por exceção' ? 'Liberada por exceção (' + txt_(x.get('Decisão por')) + ')' : 'Liberada';
     return '<div class="b"><div class="bt">Análise preliminar de risco (APR)</div><table class="d">' +
       linha('APR', 'Nº ' + txt_(x.get('Nº APR')) + ' · ' + txt_(x.get('Modelo')).toLowerCase() + ' · ' + sit + ' · responsável: ' + txt_(x.get('Responsável pela atividade'))) +
       linha('PT e instalação', 'PT: ' + pt + ' · Instalação: ' + txt_(x.get('Condição da instalação')).toLowerCase()) +
