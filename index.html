@@ -1308,7 +1308,7 @@ async function telaOSDetalhe(numero, admin) {
       ${a.tipo ? `<span class="selo-txt ${a.tipo === 'Final' ? 'verde' : 'amarelo'}">${a.tipo === 'Final' ? 'Finalização' : 'Parcial'}</span>` : ''}
       ${a.ausente ? `<span class="selo-txt laranja">Cliente ausente</span>` : a.assinante ? `<span class="selo-txt">Assinado por ${esc(a.assinante)}</span>` : ''}
       ${a.apr ? `<button type="button" class="acao leve ver-apr" data-apr="${esc(a.apr)}">${ic('admin')} Ver APR nº ${esc(a.apr)}</button>` : ''}</div>`).join('') : ''}
-    ${admin ? '<div id="adm"></div>' : ''}`;
+    ${admin || est.usuario.perfil === 'Administrador' ? '<div id="adm"></div>' : ''}`;
   document.querySelectorAll('[data-apr]').forEach(b => b.onclick = () => verAPR({ n: b.dataset.apr }));
   const pc = document.getElementById('pdfComp');
   if (pc) pc.onclick = () => abrirPdfComApr(o.numero);
@@ -1316,8 +1316,10 @@ async function telaOSDetalhe(numero, admin) {
   const pode = !admin && ['Programada', 'Em andamento'].includes(o.status) && !o.emExecucao && !sess;
   if (pode) { ok.disabled = false; ok.innerHTML = `${ic('saida')} Iniciar`; ok.onclick = () => telaIniciarOS(o); }
   else if (!admin && sess && sess.numero === o.numero) { ok.disabled = false; ok.innerHTML = `${ic('ok')} Apontar fim`; ok.onclick = () => fluxoApontar(sess); }
-  else if (admin) { ok.remove(); adminEditarOS(o, r.apontamentos); }
+  else if (admin) { ok.remove(); }
   else { ok.textContent = o.emExecucao ? 'Em execução' : sess ? 'Aponte a OS em execução antes' : o.status; }
+  // administrador vê as ações de administração em qualquer caminho (menu, painel ou módulo de OS)
+  if (est.usuario.perfil === 'Administrador') adminEditarOS(o, r.apontamentos);
 }
 
 // ---------- APR antes de iniciar a OS ----------
@@ -2109,41 +2111,70 @@ function telaReabrirOS(o) {
 function adminEditarOS(o, aps) {
   const box = document.getElementById('adm');
   if (!box) return;
+  aps = aps || [];
   const edita = ['Programada', 'Em andamento'].includes(o.status);
+  const semAp = !aps.length;
   if (o.status === 'Aguardando aprovação') {
-    box.innerHTML = `<button class="acao" id="admAprovar" type="button">${ic('ok')} Revisar e aprovar</button>`;
-    document.getElementById('admAprovar').onclick = () => telaAprovarOS(o, aps || []);
+    box.innerHTML = `<h2>Administração</h2><button class="acao" id="admAprovar" type="button">${ic('ok')} Revisar e aprovar</button>`;
+    document.getElementById('admAprovar').onclick = () => telaAprovarOS(o, aps);
     return;
   }
-  box.innerHTML = (edita ? `<h2>Alterar</h2>
-    <label class="rotulo">Técnicos (quem vai executar ou continuar)</label>${chips('admTec', [...new Set([...(est.dados.equipeCampo || est.dados.colaboradores), ...o.tecnicos])], '')}
-    <label class="rotulo" for="admLocal">Local / setor</label><input class="campo-txt" id="admLocal" value="${esc(o.local)}">
-    ${o.status === 'Programada' ? `<label class="rotulo" for="admIni">Início previsto</label><input class="campo-txt" id="admIni" type="datetime-local" value="${esc(o.inicioPrevIso)}">
-    <label class="rotulo" for="admFim">Término previsto</label><input class="campo-txt" id="admFim" type="datetime-local" value="${esc(o.fimPrevIso)}">` : ''}
-    <button class="acao" id="admSalvar" type="button">Salvar alterações</button>
-    ${o.reaberta ? '' : '<button class="acao leve" id="admCancelar" type="button">Cancelar OS</button>'}` : '') +
+  box.innerHTML = `<h2>Administração</h2>` +
+    (edita ? `<button class="acao" id="admEditar" type="button">${ic('os')} Editar OS</button>
+      ${o.reaberta ? '' : '<button class="acao leve" id="admCancelar" type="button">Cancelar OS</button>'}` : '') +
+    (semAp && ['Programada', 'Cancelada'].includes(o.status) ? `<button class="acao leve" id="admExcluir" type="button" style="color:var(--vermelho-esc)">Excluir OS</button>
+      <p class="suave" style="margin-top:6px">Excluir apaga a OS de vez (para OS criada por engano). Só é possível enquanto ela não teve nenhum apontamento.</p>` : '') +
     (o.status === 'Finalizada' && /^Erro|sem envio/.test(o.envio) ? `<button class="acao" id="admReenv" type="button">Enviar ao cliente</button>` : '') +
-    (o.status === 'Finalizada' ? `<h2>Ajustar OS finalizada</h2><div class="grade"><button class="acao leve" id="admCorr" type="button" style="margin:0">Corrigir</button><button class="acao leve" id="admReab" type="button" style="margin:0">Reabrir</button></div>
-      <p class="suave" style="margin-top:8px">Corrigir: texto, materiais, fotos ou pendências, com novo PDF em revisão. Reabrir: o serviço precisa de mais execução.</p>` : '');
-  const bc = document.getElementById('admCorr'); if (bc) bc.onclick = () => telaCorrigirOS(o, aps || []);
-  const br = document.getElementById('admReab'); if (br) br.onclick = () => telaReabrirOS(o);
-  if (edita) {
-    document.querySelectorAll('#admTec .pessoa').forEach(b => { b.classList.toggle('sel', o.tecnicos.includes(b.dataset.v)); b.onclick = () => b.classList.toggle('sel'); });
-    document.getElementById('admSalvar').onclick = () => executar(async () => {
-      const ini = document.getElementById('admIni');
-      await api('editarOS', { numero: o.numero, tecnicos: lerEquipe('admTec'), local: document.getElementById('admLocal').value,
-        inicioPrev: ini ? ini.value : '', fimPrev: ini ? document.getElementById('admFim').value : '' });
-      await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS alterada. A agenda foi atualizada.');
-    });
-    if (document.getElementById('admCancelar')) document.getElementById('admCancelar').onclick = () => executar(async () => {
-      const motivo = prompt('Motivo do cancelamento:') || '';
-      if (!motivo.trim()) return;
-      await api('cancelarOS', { numero: o.numero, motivo });
-      await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS cancelada e retirada da agenda.');
-    });
-  }
-  const re = document.getElementById('admReenv');
-  if (re) re.onclick = () => executar(async () => { await api('reenviarOS', { numero: o.numero }); document.getElementById('erro').innerHTML = msg('ok', 'OS reenviada.'); });
+    (o.status === 'Finalizada' ? `<div class="grade"><button class="acao leve" id="admCorr" type="button" style="margin:0">Corrigir</button><button class="acao leve" id="admReab" type="button" style="margin:0">Reabrir</button></div>
+      <p class="suave" style="margin-top:8px">Corrigir: texto, materiais, fotos ou pendências, com novo PDF em revisão. Reabrir: o serviço precisa de mais execução. OS com apontamento não é excluída, para manter o histórico assinado pelo cliente.</p>` : '');
+  const liga = (id, fn) => { const e = document.getElementById(id); if (e) e.onclick = fn; };
+  liga('admEditar', () => telaEditarOS(o, aps));
+  liga('admCorr', () => telaCorrigirOS(o, aps));
+  liga('admReab', () => telaReabrirOS(o));
+  liga('admCancelar', () => executar(async () => {
+    const motivo = prompt('Motivo do cancelamento:') || '';
+    if (!motivo.trim()) return;
+    await api('cancelarOS', { numero: o.numero, motivo });
+    await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS cancelada e retirada da agenda.');
+  }));
+  liga('admExcluir', () => executar(async () => {
+    if (!confirm(`Excluir a OS ${o.numero} de vez? Ela sai da planilha e da agenda e não pode ser recuperada.`)) return;
+    await api('excluirOS', { numero: o.numero });
+    await recarregarDados(); telaAdmin('os');
+    document.getElementById('erro').innerHTML = msg('ok', `OS ${o.numero} excluída.`);
+  }));
+  liga('admReenv', () => executar(async () => { await api('reenviarOS', { numero: o.numero }); await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS enviada ao cliente.'); }));
+}
+
+/** Edição completa da OS aberta (programada ou em andamento). */
+function telaEditarOS(o, aps) {
+  topo('Editar OS ' + o.numero);
+  const d = est.dados, f = { tipo: o.tipo }, temAp = aps.length > 0;
+  $app.innerHTML = `<h1>Editar OS ${esc(o.numero)}</h1><div id="erro"></div>
+    <label class="rotulo" for="eCli">Cliente</label>
+    ${temAp ? `<input class="campo-txt" value="${esc(o.cliente)}" disabled><p class="suave" style="margin-top:6px">O cliente não muda depois do primeiro apontamento (o check-in já foi feito nele).</p>`
+      : `<select class="campo-txt" id="eCli">${d.clientesInfo.map(c => `<option ${c.nome === o.cliente ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select>`}
+    <label class="rotulo" for="eLocal">Local / setor / equipamento</label><input class="campo-txt" id="eLocal" value="${esc(o.local)}">
+    <label class="rotulo">Tipo de serviço</label>${chips('eTipo', d.tiposOS, o.tipo)}
+    <label class="rotulo" for="eSol">Quem solicitou</label><input class="campo-txt" id="eSol" value="${esc(o.solicitante || '')}">
+    <label class="rotulo" for="eSolic">Solicitação / o que deve ser feito</label><textarea class="campo-txt" id="eSolic">${esc(o.solicitacao || '')}</textarea>
+    <label class="rotulo" for="eIni">Início previsto</label><input class="campo-txt" id="eIni" type="datetime-local" value="${esc(o.inicioPrevIso)}">
+    <label class="rotulo" for="eFim">Término previsto</label><input class="campo-txt" id="eFim" type="datetime-local" value="${esc(o.fimPrevIso)}">
+    <label class="rotulo">Técnicos (quem vai executar ou continuar)</label>${chips('eTec', [...new Set([...(d.equipeCampo || d.colaboradores), ...o.tecnicos])], '')}
+    <p class="suave" style="margin-top:8px">A agenda GERAL é atualizada junto.</p>`;
+  ligarChips('eTipo', v => f.tipo = v);
+  document.querySelectorAll('#eTec .pessoa').forEach(b => { b.classList.toggle('sel', o.tecnicos.includes(b.dataset.v)); b.onclick = () => b.classList.toggle('sel'); });
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar alterações</button></div>`);
+  document.getElementById('ant').onclick = () => telaOSDetalhe(o.numero, true);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const ini = document.getElementById('eIni').value, fim = document.getElementById('eFim').value;
+    if (fim && ini && fim < ini) throw new Error('O término previsto está antes do início.');
+    const cli = document.getElementById('eCli');
+    await api('editarOS', { numero: o.numero, cliente: cli ? cli.value : '', tipo: f.tipo, local: document.getElementById('eLocal').value,
+      solicitante: document.getElementById('eSol').value, solicitacao: document.getElementById('eSolic').value,
+      tecnicos: lerEquipe('eTec'), inicioPrev: ini, fimPrev: fim });
+    sujo = false; await telaOSDetalhe(o.numero, true); document.getElementById('erro').innerHTML = msg('ok', 'OS alterada. A agenda foi atualizada.');
+  });
 }
 
 /** Quadro de assinatura com dedo ou caneta. Devolve PNG com fundo branco. */

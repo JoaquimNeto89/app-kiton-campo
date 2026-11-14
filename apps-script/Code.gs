@@ -107,6 +107,7 @@ function rotear_(req) {
     case 'apontarOS': return comTrava_(() => apontarOS_(u, req));
     case 'encerrarAtendimento': return comTrava_(() => encerrarAtendimento_(u, req));
     case 'editarOS': exigirAdmin_(u); return comTrava_(() => editarOS_(u, req));
+    case 'excluirOS': exigirAdmin_(u); return comTrava_(() => excluirOS_(u, req));
     case 'cancelarOS': exigirAdmin_(u); return comTrava_(() => cancelarOS_(u, req));
     case 'painelOS': exigirAdmin_(u); return painelOS_(req);
     case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
@@ -1183,6 +1184,14 @@ function editarOS_(u, req) {
   const tecnicos = (req.tecnicos || []).map(txt_).filter(Boolean);
   if (!tecnicos.length) throw new Error('Escolha pelo menos um técnico.');
   set_(t, l._linha, 'Técnicos designados', tecnicos.join(', '));
+  const temAp = ler_(ABA.apont).linhas.some(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (txt_(req.cliente) && txt_(req.cliente) !== txt_(l.get('Cliente'))) {
+    if (temAp) throw new Error('O cliente não pode ser trocado depois que a OS teve apontamento (o check-in já foi feito nele).');
+    if (!clientes_().some(c => c.nome === txt_(req.cliente))) throw new Error('Cliente não cadastrado.');
+    set_(t, l._linha, 'Cliente', txt_(req.cliente));
+  }
+  if (txt_(req.tipo)) set_(t, l._linha, 'Tipo de serviço', txt_(req.tipo));
+  if (req.solicitante !== undefined) set_(t, l._linha, 'Solicitante', txt_(req.solicitante));
   if (txt_(req.local) !== '' || req.local === '') set_(t, l._linha, 'Local / setor', txt_(req.local));
   if (req.solicitacao !== undefined) set_(t, l._linha, 'Solicitação / problema', txt_(req.solicitacao));
   let ini = data_(l.get('Início previsto')), fim = data_(l.get('Término previsto'));
@@ -1191,10 +1200,21 @@ function editarOS_(u, req) {
     if (fim && fim.getTime() < ini.getTime()) throw new Error('O término previsto está antes do início.');
     set_(t, l._linha, 'Início previsto', ini); set_(t, l._linha, 'Término previsto', fim || '');
   }
-  const o = { numero: txt_(req.numero), cliente: txt_(l.get('Cliente')), local: txt_(req.local), tipo: txt_(l.get('Tipo de serviço')), tecnicos,
-    solicitante: txt_(l.get('Solicitante')), solicitacao: req.solicitacao !== undefined ? txt_(req.solicitacao) : txt_(l.get('Solicitação / problema')) };
+  const o = { numero: txt_(req.numero), cliente: txt_(req.cliente) || txt_(l.get('Cliente')), local: txt_(req.local), tipo: txt_(req.tipo) || txt_(l.get('Tipo de serviço')), tecnicos,
+    solicitante: req.solicitante !== undefined ? txt_(req.solicitante) : txt_(l.get('Solicitante')), solicitacao: req.solicitacao !== undefined ? txt_(req.solicitacao) : txt_(l.get('Solicitação / problema')) };
   if (ini) set_(t, l._linha, 'Evento na agenda', agendaAtualizar_(txt_(l.get('Evento na agenda')), o, ini, fim));
   set_(t, l._linha, 'Observações', [txt_(l.get('Observações')), 'Alterada por ' + u.nome + ' em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm')].filter(Boolean).join(' | '));
+  return { ok: true };
+}
+
+/** Exclusão definitiva: só para OS que nunca teve apontamento (ex.: programada por engano). As demais são canceladas. */
+function excluirOS_(u, req) {
+  const t = ler_(ABA.os);
+  const l = t.linhas.find(x => txt_(x.get('Nº OS')) === txt_(req.numero));
+  if (!l) throw new Error('OS não encontrada.');
+  if (ler_(ABA.apont).linhas.some(x => txt_(x.get('Nº OS')) === txt_(req.numero))) throw new Error('Esta OS já tem apontamento e não pode ser excluída. Use Cancelar (se estiver aberta) para manter o histórico.');
+  agendaApagar_(txt_(l.get('Evento na agenda')));
+  t.sh.deleteRow(l._linha);
   return { ok: true };
 }
 
