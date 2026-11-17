@@ -50,6 +50,10 @@ const CAB = {
     'Triagem', 'PT', 'Nº da PT', 'Foto da PT', 'Emissor da PT', 'Condição da instalação', 'Justificativa (energizado)', 'Respostas',
     'Riscos adicionais e medidas', 'Impedimentos', 'Situação', 'Decisão por', 'Justificativa da decisão', 'Data da decisão', 'Lat.', 'Long.',
     'Ciência do cliente', 'Dados da OS'],
+  'EPI - Catálogo': ['Código', 'Descrição', 'CA', 'Validade do CA', 'Fabricante', 'Tamanhos', 'Troca a cada (dias)', 'Ativo', 'Observações'],
+  'EPI - Entregas': ['Nº', 'Data', 'Colaborador', 'Código EPI', 'Descrição', 'CA', 'Tamanho', 'Quantidade', 'Motivo', 'Entregue por', 'Assinatura',
+    'Próxima troca', 'Situação', 'Devolvido em', 'Observações'],
+  'Termos de ferramentas': ['Nº', 'Data', 'Colaborador', 'Itens', 'Quantidade de itens', 'Valor total (R$)', 'Assinatura', 'Registrado por', 'Lat.', 'Long.'],
   'Despesas': ['Nº', 'Data', 'Colaborador', 'Categoria', 'Valor (R$)', 'Pagamento', 'Cliente / obra', 'Descrição', 'Comprovante',
     'Saída vinculada', 'Lançado em', 'Situação', 'Conferido por', 'Data da conferência', 'Motivo da recusa', 'Reembolsado em']
 };
@@ -113,6 +117,14 @@ function rotear_(req) {
     case 'reenviarOS': exigirAdmin_(u); return reenviarOS_(u, req);
     case 'fotosAp': exigirAdmin_(u); return fotosAp_(req);
     case 'verAPR': return verAPR_(u, req);
+    // ferramentas individuais e EPI
+    case 'epiPainel': exigirAdmin_(u); return epiPainel_();
+    case 'colabEPI': return colabEPI_(u, req);
+    case 'salvarEpi': exigirAdmin_(u); return comTrava_(() => salvarEpi_(u, req));
+    case 'entregarEpi': exigirAdmin_(u); return comTrava_(() => entregarEpi_(u, req));
+    case 'devolverEpi': exigirAdmin_(u); return comTrava_(() => devolverEpi_(u, req));
+    case 'assinarTermo': exigirAdmin_(u); return comTrava_(() => assinarTermo_(u, req));
+    case 'docPDF': return docPDF_(u, req);
     case 'pdfComAPR': return comTrava_(() => pdfComAPR_(u, req));
     case 'aprovarOS': exigirAdmin_(u); return comTrava_(() => aprovarOS_(u, req));
     case 'devolverOS': exigirAdmin_(u); return comTrava_(() => devolverOS_(u, req));
@@ -418,6 +430,7 @@ function inicio_(u) {
       catch (e) { return []; } })(),
     apr: { secoes: APR_SECOES, itens: APR_ITENS, riscos: APR_RISCOS, condicoes: APR_CONDICOES, triagem: APR_TRIAGEM, reduzida: tiposAprReduzida_(), treinos: TREINOS.map(x => x[0]) },
     treinamentos: (() => { const tr = treinamentos_(), o = {}; equipeCampo.forEach(n => { o[n] = {}; TREINOS.forEach(([k]) => { const d = (tr[n] || {})[k]; o[n][k] = d ? dia_(d) : ''; }); }); return o; })(),
+    meusEpis: (() => { try { const e = entregasEPI_(u.nome); return { emUso: e.filter(x => x.situacao === 'Em uso').map(x => ({ desc: x.desc, ca: x.ca, data: x.data, tamanho: x.tamanho, qtd: x.qtd, proxTroca: x.proxTroca, diasTroca: x.diasTroca })), avisos: avisosEPI_(e) }; } catch (er) { return { emUso: [], avisos: [] }; } })(),
     meusTreinos: (() => { const d = treinamentos_()[u.nome] || {}; return TREINOS.map(([k]) => ({ k, venc: d[k] ? dia_(d[k]) : '', dias: diasAte_(d[k]) }))
       .filter(x => x.dias !== null && x.dias <= AVISO_TREINO_DIAS); })(),
     categoriasDespesa: lista_('Categoria de despesa'),
@@ -433,6 +446,7 @@ function pendenciasAdmin_() {
     os: (() => { const b = baseOS_(); return b.os.linhas.map(l => resumoOS_(l, b.porOS[txt_(l.get('Nº OS'))])).filter(o => o.atrasada || o.parada).length; })(),
     apr: aprBloqueadas_().length,
     aprovar: ler_(ABA.os).linhas.filter(l => txt_(l.get('Status')) === ST_APROVACAO).length,
+    epi: pendenciasEPI_(),
     treinos: situacaoTreinos_().filter(p => p.itens.some(i => i.dias !== null && i.dias <= AVISO_TREINO_DIAS)).length
   };
 }
@@ -1890,6 +1904,245 @@ function devolverOS_(u, req) {
   set_(t, l._linha, 'Observações', obs ? obs + '\n' + linha : linha);
   if (t.cab['Devolvida'] !== undefined) set_(t, l._linha, 'Devolvida', (Number(l.get('Devolvida')) || 0) + 1);
   return { ok: true };
+}
+
+// ---------- ferramentas individuais e EPI (NR-6) ----------
+const ABA_EPI_CAT = 'EPI - Catálogo', ABA_EPI_ENT = 'EPI - Entregas', ABA_TERMOS = 'Termos de ferramentas';
+const MOTIVOS_EPI = ['Admissão', 'Troca por desgaste', 'Troca periódica', 'Perda', 'Dano', 'Outro'];
+
+function funcaoDe_(nome) {
+  const l = ler_(ABA.colab).linhas.find(x => txt_(x.get('Nome')) === nome);
+  return l ? txt_(l.get('Função')) : '';
+}
+
+/** Itens de uso individual sob responsabilidade do colaborador. */
+function itensIndividuais_(nome) {
+  return ler_(ABA.itens).linhas.filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' && txt_(l.get('Uso')) === 'Individual' &&
+    txt_(l.get('Responsável (uso individual)')).toLowerCase() === nome.toLowerCase()).map(l => ({
+    pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), grupo: txt_(l.get('Grupo')), tipo: txt_(l.get('Tipo')),
+    ident: txt_(l.get('Nº pintado / gravado')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
+    estado: txt_(l.get('Estado')), valor: Number(l.get('Valor de reposição (R$)')) || 0
+  }));
+}
+
+function catalogoEPI_() {
+  return ler_(ABA_EPI_CAT).linhas.filter(l => txt_(l.get('Descrição'))).map(l => {
+    const v = data_(l.get('Validade do CA'));
+    return { codigo: txt_(l.get('Código')), desc: txt_(l.get('Descrição')), ca: txt_(l.get('CA')), validadeCA: v ? dia_(v) : '', diasCA: diasAte_(v),
+      fabricante: txt_(l.get('Fabricante')), tamanhos: txt_(l.get('Tamanhos')), trocaDias: Number(l.get('Troca a cada (dias)')) || 0,
+      ativo: txt_(l.get('Ativo')) !== 'Não', obs: txt_(l.get('Observações')), linha: l._linha };
+  });
+}
+
+function entregasEPI_(nome) {
+  const cat = {}; catalogoEPI_().forEach(c => cat[c.codigo] = c);
+  return ler_(ABA_EPI_ENT).linhas.filter(l => !nome || txt_(l.get('Colaborador')) === nome).map(l => {
+    const prox = data_(l.get('Próxima troca')), c = cat[txt_(l.get('Código EPI'))] || {};
+    return { n: txt_(l.get('Nº')), data: dia_(l.get('Data')), dataD: data_(l.get('Data')), colaborador: txt_(l.get('Colaborador')), codigo: txt_(l.get('Código EPI')),
+      desc: txt_(l.get('Descrição')), ca: txt_(l.get('CA')), tamanho: txt_(l.get('Tamanho')), qtd: txt_(l.get('Quantidade')), motivo: txt_(l.get('Motivo')),
+      entreguePor: txt_(l.get('Entregue por')), assinatura: txt_(l.get('Assinatura')), proxTroca: prox ? dia_(prox) : '', diasTroca: diasAte_(prox),
+      situacao: txt_(l.get('Situação')) || 'Em uso', diasCA: c.diasCA === undefined ? null : c.diasCA, validadeCA: c.validadeCA || '' };
+  });
+}
+
+/** Avisos de EPI em uso: troca vencida ou próxima e CA vencido. */
+function avisosEPI_(lista) {
+  return lista.filter(e => e.situacao === 'Em uso').map(e => {
+    const a = [];
+    if (e.diasTroca !== null && e.diasTroca < 0) a.push('troca vencida em ' + e.proxTroca);
+    else if (e.diasTroca !== null && e.diasTroca <= 15) a.push('troca prevista em ' + e.proxTroca);
+    if (e.diasCA !== null && e.diasCA < 0) a.push('CA vencido em ' + e.validadeCA);
+    return a.length ? { colaborador: e.colaborador, desc: e.desc, ca: e.ca, texto: a.join(' e ') } : null;
+  }).filter(Boolean);
+}
+
+function chaveItens_(itens) { return itens.map(i => i.pat).sort().join(','); }
+
+function termoAtual_(nome) {
+  const ts = ler_(ABA_TERMOS).linhas.filter(l => txt_(l.get('Colaborador')) === nome);
+  const l = ts[ts.length - 1];
+  if (!l) return null;
+  return { n: txt_(l.get('Nº')), data: fmt_(l.get('Data')), itens: txt_(l.get('Itens')), assinatura: txt_(l.get('Assinatura')), por: txt_(l.get('Registrado por')) };
+}
+
+function situacaoTermo_(nome, itens) {
+  if (!itens.length) return 'Sem itens';
+  const t = termoAtual_(nome);
+  if (!t) return 'Pendente de assinatura';
+  return t.itens === chaveItens_(itens) ? 'Assinado em ' + t.data : 'Desatualizado (itens mudaram)';
+}
+
+function epiPainel_() {
+  const campo = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim' && txt_(l.get('Função')) !== 'Administrativo');
+  const todas = entregasEPI_();
+  const pessoas = campo.map(l => {
+    const nome = txt_(l.get('Nome')), itens = itensIndividuais_(nome), eps = todas.filter(e => e.colaborador === nome);
+    return { nome, funcao: txt_(l.get('Função')), itens: itens.length, termo: situacaoTermo_(nome, itens),
+      episEmUso: eps.filter(e => e.situacao === 'Em uso').length, avisos: avisosEPI_(eps).map(a => a.desc + ': ' + a.texto) };
+  });
+  const cat = catalogoEPI_();
+  return { ok: true, pessoas, catalogo: cat, motivos: MOTIVOS_EPI,
+    caVencendo: cat.filter(c => c.ativo && c.diasCA !== null && c.diasCA <= 30).map(c => ({ desc: c.desc, ca: c.ca, validadeCA: c.validadeCA, dias: c.diasCA })) };
+}
+
+function pendenciasEPI_() {
+  try {
+    const p = epiPainel_();
+    return p.pessoas.filter(x => x.avisos.length || /Pendente|Desatualizado/.test(x.termo)).length + p.caVencendo.length;
+  } catch (e) { return 0; }
+}
+
+function colabEPI_(u, req) {
+  const nome = txt_(req.colaborador) || u.nome;
+  if (u.perfil !== 'Administrador' && nome !== u.nome) throw new Error('Você só pode consultar os seus itens.');
+  const itens = itensIndividuais_(nome), eps = entregasEPI_(nome);
+  eps.forEach(e => delete e.dataD);
+  return { ok: true, nome, funcao: funcaoDe_(nome), itens, termo: situacaoTermo_(nome, itens), termoAtual: termoAtual_(nome),
+    episEmUso: eps.filter(e => e.situacao === 'Em uso'), historico: eps.slice().reverse(), avisos: avisosEPI_(eps) };
+}
+
+function salvarEpi_(u, req) {
+  const t = ler_(ABA_EPI_CAT);
+  const d = req.epi || {};
+  if (!txt_(d.desc)) throw new Error('Informe a descrição do EPI.');
+  if (!txt_(d.ca)) throw new Error('Informe o número do CA (Certificado de Aprovação).');
+  const valCA = d.validadeCA ? dataIso_(d.validadeCA) : null;
+  const campos = { 'Descrição': txt_(d.desc), 'CA': txt_(d.ca), 'Validade do CA': valCA || '', 'Fabricante': txt_(d.fabricante), 'Tamanhos': txt_(d.tamanhos),
+    'Troca a cada (dias)': Number(d.trocaDias) || '', 'Ativo': d.ativo === false ? 'Não' : 'Sim', 'Observações': txt_(d.obs) };
+  if (txt_(d.codigo)) {
+    const l = t.linhas.find(x => txt_(x.get('Código')) === txt_(d.codigo));
+    if (!l) throw new Error('EPI não encontrado.');
+    Object.keys(campos).forEach(k => set_(t, l._linha, k, campos[k]));
+    return { ok: true, codigo: txt_(d.codigo) };
+  }
+  const codigo = 'EPI-' + ('00' + (t.linhas.length + 1)).slice(-3);
+  anexar_(t, Object.assign({ 'Código': codigo }, campos));
+  return { ok: true, codigo };
+}
+
+/** Entrega de EPI com assinatura do colaborador na tela (registro exigido pela NR-6). */
+function entregarEpi_(u, req) {
+  const nome = txt_(req.colaborador);
+  if (!ler_(ABA.colab).linhas.some(l => txt_(l.get('Nome')) === nome)) throw new Error('Escolha o colaborador.');
+  const itens = (req.itens || []).filter(i => txt_(i.codigo));
+  if (!itens.length) throw new Error('Escolha pelo menos um EPI.');
+  const motivo = MOTIVOS_EPI.indexOf(txt_(req.motivo)) >= 0 ? txt_(req.motivo) : '';
+  if (!motivo) throw new Error('Informe o motivo da entrega.');
+  if (!txt_(req.assinatura)) throw new Error('O colaborador precisa assinar o recebimento.');
+  const cat = {}; catalogoEPI_().forEach(c => cat[c.codigo] = c);
+  itens.forEach(i => { const c = cat[txt_(i.codigo)]; if (!c) throw new Error('EPI não cadastrado: ' + i.codigo); if (c.diasCA !== null && c.diasCA < 0) throw new Error('O CA de ' + c.desc + ' está vencido (' + c.validadeCA + '). Atualize o catálogo antes de entregar.'); });
+  const agora = new Date();
+  const ass = salvarImagem_(pasta_(['Kiton Hub', 'EPI', nome]), req.assinatura, 'image/png', 'Entrega EPI ' + Utilities.formatDate(agora, TZ, 'yyyy-MM-dd HHmm') + '.png');
+  const t = ler_(ABA_EPI_ENT);
+  // o EPI anterior do mesmo tipo, em uso, passa a "Substituído"
+  itens.forEach(i => t.linhas.filter(l => txt_(l.get('Colaborador')) === nome && txt_(l.get('Código EPI')) === txt_(i.codigo) && (txt_(l.get('Situação')) || 'Em uso') === 'Em uso')
+    .forEach(l => { set_(t, l._linha, 'Situação', 'Substituído'); set_(t, l._linha, 'Devolvido em', agora); }));
+  let n = proximoNumero_(t, 'Nº');
+  const nums = [];
+  itens.forEach(i => {
+    const c = cat[txt_(i.codigo)];
+    const prox = c.trocaDias ? new Date(agora.getTime() + c.trocaDias * 864e5) : '';
+    anexar_(t, { 'Nº': n, 'Data': agora, 'Colaborador': nome, 'Código EPI': c.codigo, 'Descrição': c.desc, 'CA': c.ca, 'Tamanho': txt_(i.tamanho),
+      'Quantidade': Number(i.qtd) || 1, 'Motivo': motivo, 'Entregue por': u.nome, 'Assinatura': ass, 'Próxima troca': prox, 'Situação': 'Em uso', 'Observações': txt_(req.obs) });
+    nums.push(n); n++;
+  });
+  return { ok: true, numeros: nums };
+}
+
+function devolverEpi_(u, req) {
+  const t = ler_(ABA_EPI_ENT);
+  const l = t.linhas.find(x => txt_(x.get('Nº')) === txt_(req.n));
+  if (!l) throw new Error('Entrega não encontrada.');
+  set_(t, l._linha, 'Situação', 'Devolvido'); set_(t, l._linha, 'Devolvido em', new Date());
+  if (txt_(req.obs)) set_(t, l._linha, 'Observações', [txt_(l.get('Observações')), txt_(req.obs)].filter(Boolean).join(' | '));
+  return { ok: true };
+}
+
+/** Termo de responsabilidade das ferramentas individuais, assinado na tela. */
+function assinarTermo_(u, req) {
+  const nome = txt_(req.colaborador);
+  const itens = itensIndividuais_(nome);
+  if (!itens.length) throw new Error('Este colaborador não tem ferramentas de uso individual cadastradas.');
+  if (!txt_(req.assinatura)) throw new Error('O colaborador precisa assinar o termo.');
+  const agora = new Date();
+  const ass = salvarImagem_(pasta_(['Kiton Hub', 'Termos de ferramentas', nome]), req.assinatura, 'image/png', 'Termo ' + Utilities.formatDate(agora, TZ, 'yyyy-MM-dd HHmm') + '.png');
+  const t = ler_(ABA_TERMOS), g = req.geo || null;
+  const n = proximoNumero_(t, 'Nº');
+  anexar_(t, { 'Nº': n, 'Data': agora, 'Colaborador': nome, 'Itens': chaveItens_(itens), 'Quantidade de itens': itens.length,
+    'Valor total (R$)': itens.reduce((s, i) => s + i.valor, 0), 'Assinatura': ass, 'Registrado por': u.nome, 'Lat.': g ? g.lat : '', 'Long.': g ? g.lng : '' });
+  return { ok: true, n };
+}
+
+// ----- documentos para impressão -----
+function cabDoc_(titulo, linha2) {
+  return '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:190px;height:auto"></td>' +
+    '<td class="num"><span>' + titulo + '</span><b style="font-size:12pt">' + esc_(linha2 || '') + '</b><span>Emitido em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + '</span></td></tr></table>';
+}
+function pdfDoc_(corpo, nomeArq) {
+  const html = '<html><head><meta charset="utf-8"><style>' + estiloPDF_() +
+    'table.lst{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:8.5pt}table.lst th,table.lst td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;vertical-align:middle}' +
+    'table.lst th{font-weight:bold;border-bottom:2px solid #1c1f23;background:#f3f4f6}table.lst img{height:26px}.decl{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4;font-size:8.8pt;margin:6px 0}' +
+    '.assbox{margin-top:14px;width:60%;border-top:1px solid #1c1f23;padding-top:3px;font-size:8.5pt}.assbox img{height:55px;display:block;margin-bottom:2px}' +
+    '</style></head><body>' + envolverPDF_(corpo) + '</body></html>';
+  return Utilities.newBlob(html, 'text/html', 'doc.html').getAs('application/pdf').setName(nomeArq);
+}
+function dadosColab_(nome) {
+  return '<table class="d"><tr><td class="r">Colaborador</td><td>' + esc_(nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
+    '<tr><td class="r">Empresa</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>';
+}
+
+function docTermo_(nome) {
+  const itens = itensIndividuais_(nome), t = termoAtual_(nome);
+  const valido = t && t.itens === chaveItens_(itens);
+  const ass = valido && t.assinatura ? imgDrive_(t.assinatura) : '';
+  const total = itens.reduce((s, i) => s + i.valor, 0);
+  const corpo = cabDoc_('TERMO DE RESPONSABILIDADE', 'Ferramentas de uso individual') + dadosColab_(nome) +
+    '<div class="b"><div class="bt">Ferramentas e equipamentos sob responsabilidade do colaborador</div>' +
+    '<table class="lst"><tr><th>Patrimônio</th><th>Descrição</th><th>Marca / modelo</th><th>Nº de série</th><th>Nº pintado</th><th>Estado</th><th>Valor (R$)</th></tr>' +
+    (itens.length ? itens.map(i => '<tr><td>' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(i.ident) + '</td><td>' + esc_(i.estado) + '</td><td>' + i.valor.toFixed(2).replace('.', ',') + '</td></tr>').join('')
+      : '<tr><td colspan="7">Nenhum item cadastrado.</td></tr>') +
+    '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th>' + total.toFixed(2).replace('.', ',') + '</th></tr></table></div>' +
+    '<div class="decl">Declaro ter recebido da ' + esc_(EMPRESA.nome) + ' as ferramentas e equipamentos relacionados acima, em bom estado de conservação e funcionamento, para uso exclusivo nas atividades da empresa. ' +
+    'Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar imediatamente qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no desligamento. ' +
+    'Estou ciente de que danos causados por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, conforme a legislação trabalhista e o acordo vigente.</div>' +
+    '<div class="assbox">' + (ass ? '<img src="' + ass + '">' : '<div style="height:50px"></div>') + esc_(nome) + (valido ? ' · assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : ' · data: ____/____/______') + '</div>';
+  return pdfDoc_(corpo, 'Termo de ferramentas - ' + nome + '.pdf');
+}
+
+function docFichaEPI_(nome) {
+  const eps = entregasEPI_(nome).sort((a, b) => (a.dataD || 0) - (b.dataD || 0));
+  const corpo = cabDoc_('FICHA DE CONTROLE DE EPI', 'Conforme NR-6') + dadosColab_(nome) +
+    '<div class="decl">Declaro ter recebido gratuitamente os Equipamentos de Proteção Individual (EPI) relacionados abaixo, com Certificado de Aprovação (CA) válido, e ter sido orientado e treinado quanto ao uso adequado, guarda e conservação. ' +
+    'Comprometo-me a usá-los apenas para a finalidade a que se destinam, responsabilizar-me pela guarda e conservação, comunicar qualquer alteração que os torne impróprios para uso e cumprir as determinações da empresa sobre o uso adequado, ciente de que a recusa injustificada ao uso constitui ato faltoso.</div>' +
+    '<div class="b"><div class="bt">Registro de entregas</div><table class="lst"><tr><th>Data</th><th>EPI</th><th>CA</th><th>Tam.</th><th>Qtd.</th><th>Motivo</th><th>Situação</th><th>Assinatura</th></tr>' +
+    (eps.length ? eps.map(e => '<tr><td>' + esc_(e.data) + '</td><td>' + esc_(e.desc) + '</td><td>' + esc_(e.ca) + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
+      (e.assinatura ? '<img src="' + imgDrive_(e.assinatura) + '">' : '') + '</td></tr>').join('') : '<tr><td colspan="8">Nenhuma entrega registrada.</td></tr>') + '</table></div>' +
+    '<p style="font-size:8pt;color:#5d6670">As assinaturas foram coletadas na tela do aparelho no momento de cada entrega, pelo app Kiton Hub.</p>';
+  return pdfDoc_(corpo, 'Ficha de EPI - ' + nome + '.pdf');
+}
+
+function docLista_(tipo) {
+  const titulo = tipo === 'epc' ? 'LISTA DE EPC' : 'LISTA DE FERRAMENTAS E INSTRUMENTOS DE USO COLETIVO';
+  const itens = ler_(ABA.itens).linhas.filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' &&
+    (tipo === 'epc' ? txt_(l.get('Tipo')) === 'EPC' : (txt_(l.get('Uso')) || 'Coletivo') === 'Coletivo' && txt_(l.get('Tipo')) !== 'EPC'));
+  const corpo = cabDoc_(titulo, itens.length + ' itens') +
+    '<table class="lst"><tr><th>Patrimônio</th><th>Descrição</th><th>Tipo</th><th>Marca / modelo</th><th>Nº de série</th><th>Nº pintado</th><th>Estado</th>' + (tipo === 'epc' ? '' : '<th>Calibração</th>') + '</tr>' +
+    itens.map(l => {
+      const st = txt_(l.get('Status da calibração')), val = dia_(l.get('Validade da calibração'));
+      return '<tr><td>' + esc_(l.get('Patrimônio')) + '</td><td>' + esc_(l.get('Descrição')) + '</td><td>' + esc_(l.get('Tipo')) + '</td><td>' + esc_(l.get('Marca / modelo')) + '</td><td>' + esc_(l.get('Nº de série')) +
+        '</td><td>' + esc_(l.get('Nº pintado / gravado')) + '</td><td>' + esc_(l.get('Estado')) + '</td>' + (tipo === 'epc' ? '' : '<td>' + (txt_(l.get('Tipo')) === 'Instrumento' ? esc_(st === 'Válido' ? 'Válida até ' + val : st || 'Sem calibração') : 'Não requer') + '</td>') + '</tr>';
+    }).join('') + '</table>';
+  return pdfDoc_(corpo, (tipo === 'epc' ? 'Lista de EPC' : 'Lista de ferramentas coletivas') + ' - ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd') + '.pdf');
+}
+
+function docPDF_(u, req) {
+  const doc = txt_(req.doc), nome = txt_(req.colaborador) || u.nome;
+  const admin = u.perfil === 'Administrador';
+  if (!admin && (['termo', 'ficha'].indexOf(doc) < 0 || nome !== u.nome)) throw new Error('Você só pode abrir os seus documentos.');
+  const pdf = doc === 'termo' ? docTermo_(nome) : doc === 'ficha' ? docFichaEPI_(nome) : doc === 'epc' ? docLista_('epc') : doc === 'coletivas' ? docLista_('coletivas') : null;
+  if (!pdf) throw new Error('Documento desconhecido.');
+  const link = pasta_(['Kiton Hub', 'Documentos emitidos', Utilities.formatDate(new Date(), TZ, 'yyyy-MM')]).createFile(pdf).getUrl();
+  return { ok: true, link };
 }
 
 // ----- painel gerencial -----

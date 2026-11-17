@@ -198,6 +198,7 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .apr-lin{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:15px}.apr-lin:last-child{border-bottom:0}.apr-lin .selo-txt{flex:none;margin:0}
 .pdfs{margin-top:4px}.pdfs .acao{margin:0;min-height:58px;font-size:15px;padding:8px 10px;gap:8px;text-decoration:none;text-align:left;justify-content:flex-start}
 .pdfs .acao small{display:block;font-weight:500;font-size:12.5px;color:var(--cinza)}
+.decl-app{background:#fff;border-left:4px solid var(--vermelho);border-radius:8px;padding:10px 12px;margin:14px 0 4px;font-size:15px;line-height:1.4}
 .ver-apr{margin:8px 0 0;min-height:42px;font-size:15px;padding:6px 12px;width:auto}
 .mat .scan{margin:0;min-height:0;padding:0;display:grid;place-items:center}
 .menu-cab .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff}
@@ -374,18 +375,18 @@ function abrirMenu() {
   const item = (k, icone, t, n) => `<button type="button" class="menu-it" data-menu="${k}">${ic(icone)}<span>${t}</span>${bol(n)}</button>`;
   document.getElementById('menuPainel').innerHTML = `<div class="menu-cab"><b>${esc(est.usuario.nome)}</b><button type="button" class="icone-btn" id="menuX" aria-label="Fechar o menu"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${item('inicio', 'cliente', 'Início')}${item('saidas', 'saida', 'Saídas e retornos')}${item('checkin', 'pino', 'Check-in em obra')}
-    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens')}
+    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens e EPI')}
     ${admin ? `<div class="menu-sec">Administração</div>
       ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
       ${item('a-aprovar', 'ok', 'OS para aprovar', pd.aprovar)}${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
-      ${item('a-seg', 'admin', 'Segurança (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-pres', 'pino', 'Presença em obra')}
+      ${item('a-seg', 'admin', 'Segurança (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-epi', 'ferr', 'Ferramentas e EPI', pd.epi)}${item('a-pres', 'pino', 'Presença em obra')}
       ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
     <div class="menu-sec"></div>
     <a class="menu-it" href="${esc(linkAjuda())}" target="_blank" rel="noopener" id="menuAjuda"><span class="q" style="background:#25D366">?</span><span>Ajuda e dúvidas</span></a>
     ${item('sair', 'voltar', 'Sair do app')}`;
   document.getElementById('menu').classList.remove('oculto'); document.body.style.overflow = 'hidden';
   document.getElementById('menuX').onclick = fecharMenu;
-  const acoes = { inicio: carregarInicio, saidas: telaSaidas, checkin: telaCheckin, os: telaOS, desp: telaDespesas, meus: telaMeusItens,
+  const acoes = { inicio: carregarInicio, saidas: telaSaidas, checkin: telaCheckin, os: telaOS, desp: telaDespesas, meus: () => telaMeusItens(),
     calib: telaCalibracao, cad: telaCadastros, sair: () => { if (confirm('Sair do app neste celular?')) sair(); } };
   document.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => {
     fecharMenu(); const k = b.dataset.menu;
@@ -555,10 +556,10 @@ function telaInicio() {
         return mod('mOS', 'os', 'Ordem de serviço', ds, st); })()}
       ${mod('mDesp', 'recibo', 'Despesas', 'Comprovantes e reembolso')}
     </div>
-    <button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens</b><span class="suave" style="display:block">${nMeus ? 'Ferramentas e equipamentos no seu nome' : 'Nenhum item no seu nome'}</span></span>${ic('seta')}</button>
+    ${(() => { const me = d.meusEpis || { emUso: [], avisos: [] }; return `<button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens e EPI</b><span class="suave" style="display:block">${nMeus} ferramenta(s) e ${me.emUso.length} EPI no seu nome</span>${me.avisos.length ? `<span class="selo-txt laranja" style="margin-top:4px">${me.avisos.length} EPI para trocar</span>` : ''}</span>${ic('seta')}</button>`; })()}
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0) + (pd.aprovar || 0);
-        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.treinos ? pd.treinos + ' pessoa(s) com treinamento vencendo' : ''].filter(Boolean).join(', ');
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0) + (pd.aprovar || 0) + (pd.epi || 0);
+        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.treinos ? pd.treinos + ' pessoa(s) com treinamento vencendo' : '', pd.epi ? pd.epi + ' pendência(s) de EPI ou termo' : ''].filter(Boolean).join(', ');
         return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, OS, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
@@ -571,7 +572,7 @@ function telaInicio() {
   document.getElementById('mCheckin').onclick = telaCheckin;
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
-  document.getElementById('mMeus').onclick = telaMeusItens;
+  document.getElementById('mMeus').onclick = () => telaMeusItens();
   if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.aprovar ? 'aprovar' : pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.treinos ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
@@ -926,7 +927,7 @@ function telaRetorno(s) {
 }
 
 // ---------- administração ----------
-async function telaAdmin(aba) {
+async function telaAdmin(aba, sub) {
   topo('Administração');
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Início</button></div>`);
   $app.innerHTML = `<div id="erro"></div><div id="conteudo"></div>`;
@@ -959,6 +960,8 @@ async function telaAdmin(aba) {
     await adminDespesas(box);
   } else if (aba === 'os') {
     await adminOS(box);
+  } else if (aba === 'epi') {
+    await adminEPI(box, sub);
   } else if (aba === 'aprovar') {
     await adminAprovar(box);
   } else if (aba === 'seg') {
@@ -1083,18 +1086,207 @@ function parecidos(digitado, lista) {
 }
 
 // ---------- meus itens ----------
-function telaMeusItens() {
-  topo('Meus itens'); voltarInicio();
-  const m = est.dados.meus || [];
-  const total = m.reduce((s, i) => s + (i.valor || 0), 0);
-  $app.innerHTML = `<h1>Meus itens</h1>
-    <p class="suave">Ferramentas e equipamentos de uso individual que estão sob a sua responsabilidade. Eles não aparecem na retirada porque já ficam com você.</p>
-    ${m.length ? m.map(i => `<div class="cartao"><div class="t">${esc(i.grupo && i.ident ? i.grupo + ' ' + i.ident : i.desc)}<span class="pat">${esc(i.pat)}</span></div>
-      <p class="suave" style="margin:2px 0 0">${esc([i.desc !== i.grupo ? i.desc : '', i.marca, i.serie ? 'série ' + i.serie : ''].filter(Boolean).join(' · '))}</p>
-      ${linhaCal(i)}</div>`).join('') + `<p class="suave">${m.length} ${m.length === 1 ? 'item' : 'itens'} · valor de reposição ${reais(total)}</p>`
-      : msg('info', 'Nenhum item de uso individual está no seu nome.')}
-    <p class="regra">${ic('ferr')}<span>Perda ou quebra por mau uso pode ser descontada pelo valor de reposição. Algo errado nesta lista? Fale com a administração.</span></p>`;
+// ---------- ferramentas individuais e EPI ----------
+/** Abre um documento PDF gerado no servidor (termo, ficha de EPI ou listas). */
+function abrirDoc(doc, colaborador) {
+  const w = window.open('', '_blank');
+  if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Gerando o documento…</p>');
+  executar(async () => {
+    try { const x = await api('docPDF', { doc, colaborador }); if (w) w.location.href = x.link; else window.location.href = x.link; }
+    catch (e) { if (w) w.close(); throw e; }
+  });
+}
+const seloTermo = t => /^Assinado/.test(t) ? `<span class="selo-txt verde">Termo ${esc(t.toLowerCase())}</span>` : t === 'Sem itens' ? '<span class="selo-txt">Sem ferramentas individuais</span>' : `<span class="selo-txt vermelho">Termo: ${esc(t.toLowerCase())}</span>`;
+
+/** Consulta do colaborador: ferramentas individuais e EPI em uso. */
+async function telaMeusItens(aba) {
+  aba = aba === 'epi' ? 'epi' : 'ferr';
+  topo('Meus itens e EPI'); voltarInicio();
+  $app.innerHTML = `<h1>Meus itens e EPI</h1>
+    <div class="segmento nao-suja" id="miAba"><button type="button" data-v="ferr" class="${aba === 'ferr' ? 'sel' : ''}">Ferramentas</button><button type="button" data-v="epi" class="${aba === 'epi' ? 'sel' : ''}">EPI</button></div>
+    <div id="erro"></div><div id="miBox" style="margin-top:12px"><p class="suave">Carregando…</p></div>`;
   document.getElementById('ini').onclick = () => telaInicio();
+  document.querySelectorAll('#miAba button').forEach(b => b.onclick = () => telaMeusItens(b.dataset.v));
+  await executar(async () => {
+    const r = await api('colabEPI', {});
+    const box = document.getElementById('miBox');
+    if (aba === 'ferr') {
+      const total = r.itens.reduce((s, i) => s + (i.valor || 0), 0);
+      box.innerHTML = `<p class="suave">Ferramentas e equipamentos de uso individual sob a sua responsabilidade. Eles não aparecem na retirada porque já ficam com você.</p>
+        <p style="margin:0 0 10px">${seloTermo(r.termo)}</p>
+        ${r.itens.length ? r.itens.map(i => `<div class="cartao"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
+          <p class="suave" style="margin:2px 0 0">${esc([i.marca, i.serie ? 'série ' + i.serie : '', i.ident ? 'nº ' + i.ident : ''].filter(Boolean).join(' · '))}</p></div>`).join('') +
+          `<p class="suave">${r.itens.length} ${r.itens.length === 1 ? 'item' : 'itens'} · valor de reposição ${reais(total)}</p>
+          <button type="button" class="acao leve" id="miTermo">${ic('os')} Ver meu termo de responsabilidade</button>`
+          : msg('info', 'Nenhuma ferramenta de uso individual está no seu nome.')}
+        <p class="regra">${ic('ferr')}<span>Perda ou quebra por mau uso pode ser descontada pelo valor de reposição. Algo errado nesta lista? Fale com a administração.</span></p>`;
+      const bt = document.getElementById('miTermo'); if (bt) bt.onclick = () => abrirDoc('termo');
+    } else {
+      box.innerHTML = `<p class="suave">EPI entregues a você e em uso. A troca é feita pela administração.</p>
+        ${r.avisos.length ? msg('erro', r.avisos.map(a => a.desc + ': ' + a.texto).join('. ') + '. Procure a administração.') : ''}
+        ${r.episEmUso.length ? r.episEmUso.map(e => `<div class="cartao"><div class="t">${esc(e.desc)}<span class="pat">CA ${esc(e.ca)}</span></div>
+          <p class="suave" style="margin:2px 0 0">Entregue em ${esc(e.data)}${e.tamanho ? ' · tamanho ' + esc(e.tamanho) : ''} · ${esc(e.qtd)} un.${e.proxTroca ? ' · troca prevista em ' + esc(e.proxTroca) : ''}</p></div>`).join('')
+          : msg('info', 'Nenhum EPI registrado no seu nome.')}
+        <button type="button" class="acao leve" id="miFicha">${ic('os')} Ver minha ficha de EPI</button>`;
+      document.getElementById('miFicha').onclick = () => abrirDoc('ficha');
+    }
+  });
+}
+
+/** Administração: colaboradores, catálogo de EPI e listas para imprimir. */
+async function adminEPI(box, aba) {
+  aba = aba || 'pessoas';
+  box.innerHTML = `<h1>Ferramentas e EPI</h1>
+    <div class="segmento nao-suja" id="eAba"><button type="button" data-v="pessoas" class="${aba === 'pessoas' ? 'sel' : ''}">Colaboradores</button><button type="button" data-v="cat" class="${aba === 'cat' ? 'sel' : ''}">Catálogo de EPI</button><button type="button" data-v="listas" class="${aba === 'listas' ? 'sel' : ''}">Listas</button></div>
+    <div id="eBox" style="margin-top:12px"><p class="suave">Carregando…</p></div>`;
+  document.querySelectorAll('#eAba button').forEach(b => b.onclick = () => adminEPI(box, b.dataset.v));
+  const eBox = document.getElementById('eBox');
+  if (aba === 'listas') {
+    eBox.innerHTML = `<p class="suave">Documentos gerais para entregar ao cliente ou arquivar. O termo e a ficha de EPI de cada colaborador ficam na tela dele (aba Colaboradores).</p>
+      <button type="button" class="acao leve" data-doc="coletivas">${ic('os')} Lista de ferramentas e instrumentos de uso coletivo</button>
+      <button type="button" class="acao leve" data-doc="epc">${ic('os')} Lista de EPC</button>
+      <button type="button" class="acao leve" id="eNovoItem">${ic('ferr')} Cadastrar ferramenta, EPC ou instrumento</button>`;
+    eBox.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => abrirDoc(b.dataset.doc));
+    document.getElementById('eNovoItem').onclick = () => telaNovoItem({ voltar: () => telaAdmin('epi') });
+    return;
+  }
+  await executar(async () => {
+    const r = await api('epiPainel');
+    est.epi = r;
+    if (aba === 'pessoas') {
+      eBox.innerHTML = (r.caVencendo.length ? msg('erro', 'CA vencido ou vencendo: ' + r.caVencendo.map(c => `${c.desc} (CA ${c.ca}, ${c.dias < 0 ? 'vencido em' : 'vence em'} ${c.validadeCA})`).join('; ') + '. Atualize no catálogo.') : '') +
+        r.pessoas.map(p => `<button type="button" class="linha" data-col="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b>
+          <small>${esc(p.funcao)} · ${p.itens} ferramenta(s) individual(is) · ${p.episEmUso} EPI em uso</small>
+          <span style="display:block;margin-top:6px">${seloTermo(p.termo)}${p.avisos.map(a => `<span class="selo-txt laranja">${esc(a)}</span>`).join('')}</span></span><span class="fim">${ic('seta')}</span></button>`).join('');
+      eBox.querySelectorAll('[data-col]').forEach(b => b.onclick = () => telaColabEPI(b.dataset.col));
+    } else {
+      eBox.innerHTML = `<button type="button" class="acao" id="eNovoEpi" style="margin-top:0">${ic('ok')} Cadastrar EPI</button>` +
+        (r.catalogo.length ? r.catalogo.map(c => `<button type="button" class="linha" data-epi="${esc(c.codigo)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(c.desc)}</b>
+          <small>${esc(c.codigo)} · CA ${esc(c.ca)}${c.validadeCA ? ' · válido até ' + esc(c.validadeCA) : ''}${c.fabricante ? ' · ' + esc(c.fabricante) : ''}${c.trocaDias ? ' · troca a cada ' + c.trocaDias + ' dias' : ''}</small>
+          <span style="display:block;margin-top:6px">${!c.ativo ? '<span class="selo-txt">Inativo</span>' : c.diasCA !== null && c.diasCA < 0 ? '<span class="selo-txt vermelho">CA vencido</span>' : c.diasCA !== null && c.diasCA <= 30 ? '<span class="selo-txt laranja">CA vence em ' + c.diasCA + ' dias</span>' : '<span class="selo-txt verde">CA válido</span>'}</span></span><span class="fim">${ic('seta')}</span></button>`).join('')
+          : msg('info', 'Nenhum EPI cadastrado. Comece pelo botão acima.'));
+      document.getElementById('eNovoEpi').onclick = () => telaEpiForm(null);
+      eBox.querySelectorAll('[data-epi]').forEach(b => b.onclick = () => telaEpiForm(r.catalogo.find(c => c.codigo === b.dataset.epi)));
+    }
+  });
+}
+
+function telaEpiForm(c) {
+  topo(c ? 'Editar EPI' : 'Cadastrar EPI');
+  c = c || { ativo: true };
+  const iso = d => { if (!d) return ''; const [a, b, y] = d.split('/'); return `${y}-${b}-${a}`; };
+  $app.innerHTML = `<h1>${c.codigo ? 'Editar EPI' : 'Cadastrar EPI'}</h1><div id="erro"></div>
+    <label class="rotulo" for="fDesc">Descrição</label><input class="campo-txt" id="fDesc" value="${esc(c.desc || '')}" placeholder="Ex.: Luva isolante classe 0">
+    <label class="rotulo" for="fCa">Número do CA</label><input class="campo-txt" id="fCa" value="${esc(c.ca || '')}" inputmode="numeric">
+    <label class="rotulo" for="fVal">Validade do CA</label><input class="campo-txt" id="fVal" type="date" value="${esc(iso(c.validadeCA))}">
+    <p class="suave" style="margin-top:6px">Consulte a validade no site de CA do Ministério do Trabalho. Com o CA vencido o app não deixa entregar o EPI.</p>
+    <label class="rotulo" for="fFab">Fabricante</label><input class="campo-txt" id="fFab" value="${esc(c.fabricante || '')}">
+    <label class="rotulo" for="fTam">Tamanhos (opcional)</label><input class="campo-txt" id="fTam" value="${esc(c.tamanhos || '')}" placeholder="Ex.: P, M, G ou 38 a 44">
+    <label class="rotulo" for="fTroca">Troca a cada (dias, opcional)</label><input class="campo-txt" id="fTroca" type="number" min="0" value="${c.trocaDias || ''}" placeholder="Ex.: 180">
+    <label class="rotulo" for="fObs">Observações</label><textarea class="campo-txt" id="fObs">${esc(c.obs || '')}</textarea>
+    ${c.codigo ? `<label class="linha" style="font-weight:500"><input type="checkbox" id="fAtivo" ${c.ativo ? 'checked' : ''} style="width:22px;height:22px"> Ativo (aparece para entrega)</label>` : ''}`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar</button></div>`);
+  document.getElementById('ant').onclick = () => telaAdmin('epi', 'cat');
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const at = document.getElementById('fAtivo');
+    await api('salvarEpi', { epi: { codigo: c.codigo || '', desc: document.getElementById('fDesc').value, ca: document.getElementById('fCa').value, validadeCA: document.getElementById('fVal').value,
+      fabricante: document.getElementById('fFab').value, tamanhos: document.getElementById('fTam').value, trocaDias: document.getElementById('fTroca').value, obs: document.getElementById('fObs').value, ativo: at ? at.checked : true } });
+    sujo = false; telaAdmin('epi', 'cat');
+  });
+}
+
+async function telaColabEPI(nome, aviso) {
+  topo(nome);
+  $app.innerHTML = `<h1>${esc(nome)}</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="cBox"><p class="suave">Carregando…</p></div>`;
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Ferramentas e EPI</button></div>`);
+  document.getElementById('ant').onclick = () => telaAdmin('epi');
+  await executar(async () => {
+    const r = await api('colabEPI', { colaborador: nome });
+    const total = r.itens.reduce((s, i) => s + (i.valor || 0), 0);
+    document.getElementById('cBox').innerHTML = `<p class="suave" style="margin-top:-8px">${esc(r.funcao)}</p>
+      <h2>Ferramentas de uso individual</h2><p style="margin:0 0 8px">${seloTermo(r.termo)}</p>
+      ${r.itens.length ? r.itens.map(i => `<div class="cartao"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
+        <p class="suave" style="margin:2px 0 0">${esc([i.marca, i.serie ? 'série ' + i.serie : '', i.ident ? 'nº ' + i.ident : '', reais(i.valor)].filter(Boolean).join(' · '))}</p></div>`).join('') +
+        `<p class="suave">${r.itens.length} itens · ${reais(total)}</p>` : msg('info', 'Nenhuma ferramenta individual cadastrada para este colaborador.')}
+      <div class="grade"><button type="button" class="acao leve" id="cNovoItem" style="margin:0">${ic('ferr')} Cadastrar ferramenta</button>
+        <button type="button" class="acao leve" id="cTermo" style="margin:0" ${r.itens.length ? '' : 'disabled'}>${ic('os')} Imprimir termo</button></div>
+      ${r.itens.length ? `<button type="button" class="acao" id="cAssTermo">${ic('ok')} Colher assinatura do termo</button>` : ''}
+      <h2>EPI em uso</h2>
+      ${r.avisos.length ? msg('erro', r.avisos.map(a => a.desc + ': ' + a.texto).join('. ')) : ''}
+      ${r.episEmUso.length ? r.episEmUso.map(e => `<div class="cartao"><div class="t">${esc(e.desc)}<span class="pat">CA ${esc(e.ca)}</span></div>
+        <p class="suave" style="margin:2px 0 6px">Entregue em ${esc(e.data)} · ${esc(e.motivo)}${e.tamanho ? ' · tam. ' + esc(e.tamanho) : ''} · ${esc(e.qtd)} un.${e.proxTroca ? ' · troca em ' + esc(e.proxTroca) : ''}</p>
+        <button type="button" class="link" data-dev="${esc(e.n)}">Registrar devolução</button></div>`).join('') : msg('info', 'Nenhum EPI em uso registrado.')}
+      <div class="grade"><button type="button" class="acao" id="cEntregar" style="margin:0">${ic('ok')} Entregar EPI</button>
+        <button type="button" class="acao leve" id="cFicha" style="margin:0">${ic('os')} Imprimir ficha de EPI</button></div>
+      ${r.historico.length ? `<h2>Histórico de EPI</h2>` + r.historico.map(e => `<div class="cartao"><div class="t">${esc(e.data)} · ${esc(e.desc)}</div>
+        <p class="suave" style="margin:2px 0 0">CA ${esc(e.ca)} · ${esc(e.motivo)} · entregue por ${esc(e.entreguePor)} · <b>${esc(e.situacao)}</b></p></div>`).join('') : ''}`;
+    document.getElementById('cNovoItem').onclick = () => telaNovoItem({ responsavel: nome, voltar: () => telaColabEPI(nome) });
+    document.getElementById('cTermo').onclick = () => abrirDoc('termo', nome);
+    document.getElementById('cFicha').onclick = () => abrirDoc('ficha', nome);
+    document.getElementById('cEntregar').onclick = () => telaEntregarEpi(nome);
+    const at = document.getElementById('cAssTermo'); if (at) at.onclick = () => telaAssinarTermo(nome, r.itens);
+    document.querySelectorAll('[data-dev]').forEach(b => b.onclick = () => executar(async () => {
+      const obs = prompt('Devolução do EPI. Observação (opcional):');
+      if (obs === null) return;
+      await api('devolverEpi', { n: b.dataset.dev, obs }); telaColabEPI(nome, 'Devolução registrada.');
+    }));
+  });
+}
+
+function telaEntregarEpi(nome) {
+  topo('Entregar EPI');
+  const cat = ((est.epi && est.epi.catalogo) || []).filter(c => c.ativo);
+  const motivos = (est.epi && est.epi.motivos) || ['Admissão', 'Troca por desgaste', 'Troca periódica', 'Perda', 'Dano', 'Outro'];
+  const f = { motivo: '' }; let assinatura = null, tracos = 0;
+  $app.innerHTML = `<h1>Entregar EPI</h1><p class="suave">${esc(nome)}</p><div id="erro"></div>
+    ${cat.length ? '' : msg('erro', 'Cadastre os EPI no catálogo antes de entregar.')}
+    <label class="rotulo">EPI entregues</label>
+    ${cat.map(c => `<div class="apr-it" data-c="${esc(c.codigo)}"><label style="display:flex;gap:10px;align-items:flex-start;font-weight:500"><input type="checkbox" style="width:22px;height:22px;flex:none;margin-top:2px" ${c.diasCA !== null && c.diasCA < 0 ? 'disabled' : ''}>
+      <span>${esc(c.desc)}<small class="suave" style="display:block">CA ${esc(c.ca)}${c.diasCA !== null && c.diasCA < 0 ? ' · <b style="color:var(--vermelho-esc)">CA vencido</b>' : ''}</small></span></label>
+      <div class="grade oculto" style="margin-top:8px"><input class="campo-txt" data-tam placeholder="Tamanho" ${c.tamanhos ? `list="dl${esc(c.codigo)}"` : ''}><input class="campo-txt" data-qtd type="number" min="1" value="1" placeholder="Qtd."></div>
+      ${c.tamanhos ? `<datalist id="dl${esc(c.codigo)}">${c.tamanhos.split(/[,;]/).map(t => `<option value="${esc(t.trim())}">`).join('')}</datalist>` : ''}</div>`).join('')}
+    <label class="rotulo">Motivo</label>${chips('eMot', motivos, '')}
+    <label class="rotulo" for="eObs">Observação (opcional)</label><input class="campo-txt" id="eObs">
+    <div class="decl-app">Declaro ter recebido gratuitamente os EPI marcados acima, com CA válido, e ter sido orientado quanto ao uso, guarda e conservação, conforme a NR-6.</div>
+    <label class="rotulo">Assinatura de ${esc(nome)}</label>
+    <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>`;
+  document.querySelectorAll('[data-c] input[type=checkbox]').forEach(ch => ch.onchange = () => ch.closest('[data-c]').querySelector('.grade').classList.toggle('oculto', !ch.checked));
+  ligarChips('eMot', v => f.motivo = v);
+  const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+  montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Registrar entrega</button></div>`);
+  document.getElementById('ant').onclick = () => telaColabEPI(nome);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const itens = [...document.querySelectorAll('[data-c]')].filter(d => d.querySelector('input[type=checkbox]').checked)
+      .map(d => ({ codigo: d.dataset.c, tamanho: d.querySelector('[data-tam]').value.trim(), qtd: d.querySelector('[data-qtd]').value || 1 }));
+    if (!itens.length) throw new Error('Marque pelo menos um EPI.');
+    if (!f.motivo) throw new Error('Escolha o motivo da entrega.');
+    if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');
+    await api('entregarEpi', { colaborador: nome, itens, motivo: f.motivo, obs: document.getElementById('eObs').value, assinatura });
+    sujo = false; await recarregarDados(); telaColabEPI(nome, `Entrega de ${itens.length} EPI registrada com assinatura.`);
+  });
+}
+
+function telaAssinarTermo(nome, itens) {
+  topo('Termo de responsabilidade');
+  let assinatura = null, tracos = 0;
+  const total = itens.reduce((s, i) => s + (i.valor || 0), 0);
+  $app.innerHTML = `<h1>Termo de responsabilidade</h1><p class="suave">${esc(nome)} · ferramentas de uso individual</p><div id="erro"></div>
+    <div class="cartao">${itens.map(i => `<div class="apr-lin"><span>${esc(i.desc)}<small class="suave" style="display:block">${esc(i.pat)}${i.serie ? ' · série ' + esc(i.serie) : ''}</small></span><span>${reais(i.valor)}</span></div>`).join('')}
+      <div class="apr-lin"><b>Total (${itens.length} itens)</b><b>${reais(total)}</b></div></div>
+    <div class="decl-app">Declaro ter recebido da Kiton Engenharia Integrada as ferramentas e equipamentos relacionados acima, em bom estado, para uso exclusivo nas atividades da empresa. Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no desligamento. Estou ciente de que danos por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, conforme a legislação trabalhista e o acordo vigente.</div>
+    <label class="rotulo">Assinatura de ${esc(nome)}</label>
+    <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>`;
+  const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+  montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Registrar assinatura</button></div>`);
+  document.getElementById('ant').onclick = () => telaColabEPI(nome);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');
+    const geo = await localizacao();
+    await api('assinarTermo', { colaborador: nome, assinatura, geo });
+    sujo = false; await recarregarDados(); telaColabEPI(nome, 'Termo assinado. O PDF já sai com a assinatura.');
+  });
 }
 
 // ---------- check-in em obra ----------
@@ -2253,11 +2445,12 @@ function telaNovaDespesa() {
 }
 
 // ---------- cadastro de item pelo app ----------
-async function telaNovoItem() {
+async function telaNovoItem(pre) {
+  pre = pre && pre.voltar ? pre : null;
   topo('Cadastrar item');
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">Cadastrar</button></div>`);
   $app.innerHTML = `<h1>Cadastrar item</h1><div id="erro"></div><p class="suave">Carregando…</p>`;
-  document.getElementById('ant').onclick = () => telaCadastros();
+  document.getElementById('ant').onclick = () => pre ? pre.voltar() : telaCadastros();
   let info;
   await executar(async () => { info = await api('cadastroInfo'); });
   if (!info) return;
@@ -2309,6 +2502,10 @@ async function telaNovoItem() {
   ['nFam', 'nTip', 'nQtd'].forEach(id => document.getElementById(id).oninput = prox);
   ligarChips('nTipo', marcarTipo);
   ligarChips('nUso', v => { f.uso = v; document.getElementById('boxResp').classList.toggle('oculto', v !== 'Individual'); });
+  if (pre && pre.responsavel) {
+    f.uso = 'Individual'; document.querySelectorAll('#nUso .pessoa').forEach(b => b.classList.toggle('sel', b.dataset.v === 'Individual'));
+    document.getElementById('boxResp').classList.remove('oculto'); document.getElementById('nResp').value = pre.responsavel;
+  }
   ligarChips('nEst', v => f.estado = v);
   ligarChips('nPer', v => f.periodicidade = v);
   document.getElementById('ok').onclick = () => executar(async () => {
@@ -2326,8 +2523,8 @@ async function telaNovoItem() {
     barra(`<div class="dentro"><button class="acao leve" id="fim" type="button">Cadastros</button><button class="acao" id="outro" type="button">Cadastrar outro</button></div>`);
     $app.innerHTML = `<div class="feito-tela"><div class="selo">${ic('ok')}</div><h1>${r.criados.length === 1 ? 'Item cadastrado' : r.criados.length + ' itens cadastrados'}</h1>
       <p class="suave">${r.criados.map(esc).join(', ')}</p>${msg('info', 'Escreva o código na etiqueta e cole na peça.')}</div>`;
-    document.getElementById('fim').onclick = telaCadastros;
-    document.getElementById('outro').onclick = telaNovoItem;
+    document.getElementById('fim').onclick = () => pre ? pre.voltar() : telaCadastros();
+    document.getElementById('outro').onclick = () => telaNovoItem(pre);
   });
 }
 
