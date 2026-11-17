@@ -379,7 +379,7 @@ function abrirMenu() {
     ${admin ? `<div class="menu-sec">Administração</div>
       ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
       ${item('a-aprovar', 'ok', 'OS para aprovar', pd.aprovar)}${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
-      ${item('a-seg', 'admin', 'Segurança (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-epi', 'ferr', 'Ferramentas e EPI', pd.epi)}${item('a-pres', 'pino', 'Presença em obra')}
+      ${item('a-seg', 'admin', 'Gestão SST (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-epi', 'ferr', 'Ferramentas e EPI', pd.epi)}${item('a-pres', 'pino', 'Presença em obra')}
       ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
     <div class="menu-sec"></div>
     <a class="menu-it" href="${esc(linkAjuda())}" target="_blank" rel="noopener" id="menuAjuda"><span class="q" style="background:#25D366">?</span><span>Ajuda e dúvidas</span></a>
@@ -965,7 +965,7 @@ async function telaAdmin(aba, sub) {
   } else if (aba === 'aprovar') {
     await adminAprovar(box);
   } else if (aba === 'seg') {
-    box.innerHTML = '<h1>Segurança</h1><div id="aprBox"></div>'; await adminAPR(document.getElementById('aprBox'));
+    box.innerHTML = '<h1>Gestão SST</h1><div id="aprBox"></div>'; await adminAPR(document.getElementById('aprBox'));
   } else if (aba === 'cli') {
     await adminClientes(box);
   } else if (aba === 'pres') {
