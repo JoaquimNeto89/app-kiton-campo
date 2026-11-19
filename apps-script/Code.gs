@@ -53,6 +53,8 @@ const CAB = {
   'EPI - Catálogo': ['Código', 'Descrição', 'CA', 'Validade do CA', 'Fabricante', 'Tamanhos', 'Troca a cada (dias)', 'Ativo', 'Observações'],
   'EPI - Entregas': ['Nº', 'Data', 'Colaborador', 'Código EPI', 'Descrição', 'CA', 'Tamanho', 'Quantidade', 'Motivo', 'Entregue por', 'Assinatura',
     'Próxima troca', 'Situação', 'Devolvido em', 'Observações'],
+  'SST - Tipos de documento': ['Código', 'Documento', 'Categoria', 'Escopo', 'Controle', 'Validade (meses)', 'Aplica a', 'Bloqueia OS', 'Sensível', 'Vai no pacote', 'Ativo', 'Ordem', 'Observações'],
+  'SST - Documentos': ['Nº', 'Escopo', 'Colaborador', 'Código do tipo', 'Documento', 'Emissão', 'Validade', 'Situação informada', 'Arquivo', 'Tipo do arquivo', 'Observações', 'Registrado por', 'Registrado em', 'Atual'],
   'Termos de ferramentas': ['Nº', 'Data', 'Colaborador', 'Itens', 'Quantidade de itens', 'Valor total (R$)', 'Assinatura', 'Registrado por', 'Lat.', 'Long.'],
   'Despesas': ['Nº', 'Data', 'Colaborador', 'Categoria', 'Valor (R$)', 'Pagamento', 'Cliente / obra', 'Descrição', 'Comprovante',
     'Saída vinculada', 'Lançado em', 'Situação', 'Conferido por', 'Data da conferência', 'Motivo da recusa', 'Reembolsado em']
@@ -125,6 +127,15 @@ function rotear_(req) {
     case 'devolverEpi': exigirAdmin_(u); return comTrava_(() => devolverEpi_(u, req));
     case 'assinarTermo': exigirAdmin_(u); return comTrava_(() => assinarTermo_(u, req));
     case 'docPDF': return docPDF_(u, req);
+    // gestão SST: documentos
+    case 'sstPainel': exigirAdmin_(u); return sstPainel_();
+    case 'sstDocs': return sstDocs_(u, req);
+    case 'salvarDocSST': exigirAdmin_(u); return comTrava_(() => salvarDocSST_(u, req));
+    case 'excluirDocSST': exigirAdmin_(u); return comTrava_(() => excluirDocSST_(u, req));
+    case 'arquivoSST': return arquivoSST_(u, req);
+    case 'salvarTipoSST': exigirAdmin_(u); return comTrava_(() => salvarTipoSST_(u, req));
+    case 'salvarPessoaSST': exigirAdmin_(u); return comTrava_(() => salvarPessoaSST_(u, req));
+    case 'pacoteSST': exigirAdmin_(u); return pacoteSST_(u, req);
     case 'pdfComAPR': return comTrava_(() => pdfComAPR_(u, req));
     case 'aprovarOS': exigirAdmin_(u); return comTrava_(() => aprovarOS_(u, req));
     case 'devolverOS': exigirAdmin_(u); return comTrava_(() => devolverOS_(u, req));
@@ -433,6 +444,7 @@ function inicio_(u) {
     meusEpis: (() => { try { const e = entregasEPI_(u.nome); return { emUso: e.filter(x => x.situacao === 'Em uso').map(x => ({ desc: x.desc, ca: x.ca, data: x.data, tamanho: x.tamanho, qtd: x.qtd, proxTroca: x.proxTroca, diasTroca: x.diasTroca })), avisos: avisosEPI_(e) }; } catch (er) { return { emUso: [], avisos: [] }; } })(),
     meusTreinos: (() => { const d = treinamentos_()[u.nome] || {}; return TREINOS.map(([k]) => ({ k, venc: d[k] ? dia_(d[k]) : '', dias: diasAte_(d[k]) }))
       .filter(x => x.dias !== null && x.dias <= AVISO_TREINO_DIAS); })(),
+    meusDocs: meusDocsSST_(u),
     categoriasDespesa: lista_('Categoria de despesa'),
     pagamentosDespesa: lista_('Pagamento de despesa')
   };
@@ -447,6 +459,7 @@ function pendenciasAdmin_() {
     apr: aprBloqueadas_().length,
     aprovar: ler_(ABA.os).linhas.filter(l => txt_(l.get('Status')) === ST_APROVACAO).length,
     epi: pendenciasEPI_(),
+    sst: pendenciasSST_(),
     treinos: situacaoTreinos_().filter(p => p.itens.some(i => i.dias !== null && i.dias <= AVISO_TREINO_DIAS)).length
   };
 }
@@ -2143,6 +2156,331 @@ function docPDF_(u, req) {
   if (!pdf) throw new Error('Documento desconhecido.');
   const link = pasta_(['Kiton Hub', 'Documentos emitidos', Utilities.formatDate(new Date(), TZ, 'yyyy-MM')]).createFile(pdf).getUrl();
   return { ok: true, link };
+}
+
+// ----- Gestão SST: documentos da empresa e dos colaboradores, com anexo e validade -----
+const ABA_SST_TIPOS = 'SST - Tipos de documento', ABA_SST_DOCS = 'SST - Documentos';
+const SST_AVISO_DIAS = 30;
+const SST_VINCULOS = ['Sócio / administração', 'Contrato (prestador)', 'CLT'];
+const SST_GRUPOS = ['Operacional e técnico', 'Administrativo'];
+const SST_APLICA = ['Todos', 'Operacional e técnico', 'Administrativo', 'Prestador', 'CLT', 'Sócio', 'Opcional'];
+const SST_CONTROLES = ['Vencimento', 'Sob demanda', 'Sem validade'];
+const SST_SITUACOES = ['', 'Positiva', 'Pendência', 'Revisão pendente'];
+// [código, documento, categoria, escopo, controle, meses, aplica a, bloqueia OS, sensível, vai no pacote]
+const SST_TIPOS_PADRAO = [
+  ['E01', 'Contrato social (última alteração)', 'Societário', 'Empresa', 'Sem validade', '', 'Empresa', '', 'Não', 'Sim'],
+  ['E02', 'Cartão CNPJ', 'Societário', 'Empresa', 'Sob demanda', 3, 'Empresa', '', 'Não', 'Sim'],
+  ['E03', 'Ficha cadastral Kiton', 'Societário', 'Empresa', 'Sem validade', '', 'Empresa', '', 'Não', 'Sim'],
+  ['E04', 'Inscrição Estadual (CICAD)', 'Fiscal', 'Empresa', 'Sob demanda', 1, 'Empresa', '', 'Não', 'Sim'],
+  ['E05', 'CND Federal (Receita e PGFN)', 'Fiscal', 'Empresa', 'Vencimento', 6, 'Empresa', '', 'Não', 'Sim'],
+  ['E06', 'CND Estadual (PR)', 'Fiscal', 'Empresa', 'Vencimento', 2, 'Empresa', '', 'Não', 'Sim'],
+  ['E07', 'CND Municipal (Maringá)', 'Fiscal', 'Empresa', 'Vencimento', 3, 'Empresa', '', 'Não', 'Sim'],
+  ['E08', 'CRF do FGTS', 'Fiscal', 'Empresa', 'Sob demanda', 1, 'Empresa', '', 'Não', 'Sim'],
+  ['E09', 'CNDT (débitos trabalhistas)', 'Fiscal', 'Empresa', 'Vencimento', 6, 'Empresa', '', 'Não', 'Sim'],
+  ['E10', 'Certidão de registro e quitação CREA-PR', 'Técnico', 'Empresa', 'Vencimento', 12, 'Empresa', '', 'Não', 'Sim'],
+  ['E11', 'Alvará de localização', 'Licenças', 'Empresa', 'Vencimento', 12, 'Empresa', '', 'Não', 'Sim'],
+  ['E12', 'Laudo ambiental', 'Licenças', 'Empresa', 'Sem validade', '', 'Empresa', '', 'Não', 'Não'],
+  ['E13', 'Laudo de postura', 'Licenças', 'Empresa', 'Sem validade', '', 'Empresa', '', 'Não', 'Não'],
+  ['E14', 'Licença do Corpo de Bombeiros', 'Licenças', 'Empresa', 'Vencimento', 12, 'Empresa', '', 'Não', 'Não'],
+  ['E15', 'Apólice de seguro de vida coletivo', 'Seguros', 'Empresa', 'Vencimento', 12, 'Empresa', '', 'Não', 'Sim'],
+  ['E16', 'PGR (Programa de Gerenciamento de Riscos)', 'SST da empresa', 'Empresa', 'Vencimento', 24, 'Empresa', '', 'Não', 'Sim'],
+  ['E17', 'PCMSO', 'SST da empresa', 'Empresa', 'Vencimento', 12, 'Empresa', '', 'Não', 'Sim'],
+  ['E18', 'LTCAT', 'SST da empresa', 'Empresa', 'Sem validade', '', 'Empresa', '', 'Não', 'Não'],
+  ['E19', 'LIP (insalubridade e periculosidade)', 'SST da empresa', 'Empresa', 'Sem validade', '', 'Empresa', '', 'Não', 'Não'],
+  ['C01', 'ASO (Atestado de Saúde Ocupacional)', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Todos', 'ASO', 'Não', 'Sim'],
+  ['C02', 'Exame clínico', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Todos', '', 'Sim', 'Não'],
+  ['C03', 'Acuidade visual', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Todos', '', 'Sim', 'Não'],
+  ['C04', 'Audiometria', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Operacional e técnico', '', 'Sim', 'Não'],
+  ['C05', 'Eletrocardiograma (ECG)', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Operacional e técnico', '', 'Sim', 'Não'],
+  ['C06', 'Eletroencefalograma (EEG)', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Operacional e técnico', '', 'Sim', 'Não'],
+  ['C07', 'Avaliação psicossocial', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Operacional e técnico', '', 'Sim', 'Não'],
+  ['C08', 'Glicemia em jejum', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Operacional e técnico', '', 'Sim', 'Não'],
+  ['C09', 'Hemograma completo', 'Saúde ocupacional', 'Colaborador', 'Vencimento', 12, 'Operacional e técnico', '', 'Sim', 'Não'],
+  ['C10', 'NR-10 (básico ou reciclagem)', 'Treinamentos NR', 'Colaborador', 'Vencimento', 24, 'Operacional e técnico', 'NR-10', 'Não', 'Sim'],
+  ['C11', 'NR-10 SEP', 'Treinamentos NR', 'Colaborador', 'Vencimento', 24, 'Opcional', 'NR-10 SEP', 'Não', 'Sim'],
+  ['C12', 'NR-33 (espaço confinado)', 'Treinamentos NR', 'Colaborador', 'Vencimento', 12, 'Opcional', 'NR-33', 'Não', 'Sim'],
+  ['C13', 'NR-35 (trabalho em altura)', 'Treinamentos NR', 'Colaborador', 'Vencimento', 24, 'Operacional e técnico', 'NR-35', 'Não', 'Sim'],
+  ['C14', 'Ordem de serviço de SST (NR-1)', 'Treinamentos NR', 'Colaborador', 'Sem validade', '', 'Todos', '', 'Não', 'Sim'],
+  ['C15', 'Ficha de EPI (papel, anterior ao app)', 'EPI', 'Colaborador', 'Sem validade', '', 'Opcional', '', 'Não', 'Sim'],
+  ['C16', 'Contrato de prestação de serviço', 'Contratual', 'Colaborador', 'Vencimento', 12, 'Prestador', '', 'Sim', 'Não'],
+  ['C17', 'CCMEI / cartão CNPJ do prestador', 'Contratual', 'Colaborador', 'Sem validade', '', 'Prestador', '', 'Não', 'Não'],
+  ['C18', 'CNH', 'Documentos pessoais', 'Colaborador', 'Vencimento', '', 'Opcional', '', 'Sim', 'Não'],
+  ['C19', 'Carteira do conselho profissional (CREA)', 'Documentos pessoais', 'Colaborador', 'Sem validade', '', 'Opcional', '', 'Não', 'Sim'],
+  ['C20', 'Declaração do profissional para ART', 'Contratual', 'Colaborador', 'Sem validade', '', 'Opcional', '', 'Não', 'Não']
+];
+
+function tiposSST_() {
+  const t = ler_(ABA_SST_TIPOS);
+  if (!t.linhas.length) {
+    SST_TIPOS_PADRAO.forEach((x, i) => anexar_(t, { 'Código': x[0], 'Documento': x[1], 'Categoria': x[2], 'Escopo': x[3], 'Controle': x[4], 'Validade (meses)': x[5],
+      'Aplica a': x[6], 'Bloqueia OS': x[7], 'Sensível': x[8], 'Vai no pacote': x[9], 'Ativo': 'Sim', 'Ordem': i + 1 }));
+    return tiposSST_();
+  }
+  return t.linhas.filter(l => txt_(l.get('Código'))).map(l => ({
+    codigo: txt_(l.get('Código')), doc: txt_(l.get('Documento')), categoria: txt_(l.get('Categoria')), escopo: txt_(l.get('Escopo')) || 'Colaborador',
+    controle: txt_(l.get('Controle')) || 'Vencimento', meses: Number(l.get('Validade (meses)')) || 0, aplica: txt_(l.get('Aplica a')) || 'Opcional',
+    bloqueia: txt_(l.get('Bloqueia OS')), sensivel: txt_(l.get('Sensível')) === 'Sim', pacote: txt_(l.get('Vai no pacote')) !== 'Não',
+    ativo: txt_(l.get('Ativo')) !== 'Não', ordem: Number(l.get('Ordem')) || 999, obs: txt_(l.get('Observações'))
+  })).sort((a, b) => a.ordem - b.ordem);
+}
+
+function docsSST_() {
+  return ler_(ABA_SST_DOCS).linhas.filter(l => txt_(l.get('Nº')) && txt_(l.get('Atual')) !== 'Excluído').map(l => ({
+    n: txt_(l.get('Nº')), escopo: txt_(l.get('Escopo')), colaborador: txt_(l.get('Colaborador')), codigo: txt_(l.get('Código do tipo')), doc: txt_(l.get('Documento')),
+    emissao: data_(l.get('Emissão')), validade: data_(l.get('Validade')), situacao: txt_(l.get('Situação informada')), arquivo: txt_(l.get('Arquivo')),
+    mime: txt_(l.get('Tipo do arquivo')), obs: txt_(l.get('Observações')), por: txt_(l.get('Registrado por')), em: data_(l.get('Registrado em')), atual: txt_(l.get('Atual')) !== 'Não'
+  }));
+}
+
+function pessoasSST_() {
+  return ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => {
+    const funcao = txt_(l.get('Função'));
+    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)',
+      grupo: txt_(l.get('Grupo PCMSO')) || (funcao === 'Administrativo' ? 'Administrativo' : 'Operacional e técnico') };
+  });
+}
+
+function exigidoSST_(tipo, p) {
+  if (!tipo.ativo || tipo.escopo !== 'Colaborador') return false;
+  switch (tipo.aplica) {
+    case 'Todos': return true;
+    case 'Operacional e técnico': case 'Administrativo': return p.grupo === tipo.aplica;
+    case 'Prestador': return p.vinculo === 'Contrato (prestador)';
+    case 'CLT': return p.vinculo === 'CLT';
+    case 'Sócio': return p.vinculo === 'Sócio / administração';
+  }
+  return false;
+}
+
+/** Validade efetiva: a informada; senão emissão + meses do tipo; "Sem validade" não vence. */
+function validadeSST_(tipo, d) {
+  if (tipo && tipo.controle === 'Sem validade') return null;
+  if (d.validade) return d.validade;
+  if (d.emissao && tipo && tipo.meses) { const v = new Date(d.emissao.getTime()); v.setMonth(v.getMonth() + tipo.meses); return v; }
+  return null;
+}
+
+/** Situação para a tela: cor + texto. */
+function situacaoSST_(tipo, d, exigido) {
+  if (!d) return exigido ? { cor: 'vermelho', texto: 'Faltando', chave: 'faltando' } : { cor: '', texto: 'Não anexado', chave: 'nao' };
+  const v = validadeSST_(tipo, d), dias = diasAte_(v);
+  if (d.situacao === 'Positiva' || d.situacao === 'Pendência') return { cor: 'vermelho', texto: d.situacao, chave: 'vencido', dias, validade: dia_(v) };
+  if (d.situacao === 'Revisão pendente') return { cor: 'laranja', texto: 'Revisão pendente', chave: 'vencendo', dias, validade: dia_(v) };
+  if (!v) return { cor: 'verde', texto: tipo && tipo.controle === 'Sem validade' ? 'Em dia (sem validade)' : 'Em dia', chave: 'ok', dias: null, validade: '' };
+  if (tipo && tipo.controle === 'Sob demanda' && dias < 0) return { cor: 'cinza', texto: 'Emitir de novo quando solicitado', chave: 'demanda', dias, validade: dia_(v) };
+  if (dias < 0) return { cor: 'vermelho', texto: 'Vencido em ' + dia_(v), chave: 'vencido', dias, validade: dia_(v) };
+  if (dias <= SST_AVISO_DIAS) return { cor: 'laranja', texto: dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + (dias === 1 ? ' dia' : ' dias'), chave: 'vencendo', dias, validade: dia_(v) };
+  return { cor: 'verde', texto: 'Válido até ' + dia_(v), chave: 'ok', dias, validade: dia_(v) };
+}
+
+function docOut_(d, tipo) {
+  return { n: d.n, codigo: d.codigo, doc: d.doc, emissao: dia_(d.emissao), validadeInformada: dia_(d.validade), validade: dia_(validadeSST_(tipo, d)),
+    situacao: d.situacao, obs: d.obs, por: d.por, em: fmt_(d.em), temArquivo: !!d.arquivo, mime: d.mime };
+}
+
+/** Itens (tipo + documento atual + histórico) de um escopo/colaborador. */
+function itensSST_(tipos, docs, escopo, p) {
+  const meus = docs.filter(d => d.escopo === escopo && (escopo === 'Empresa' || d.colaborador === p.nome));
+  const out = [];
+  tipos.filter(t => t.escopo === escopo).forEach(t => {
+    const dt = meus.filter(d => d.codigo === t.codigo).sort((a, b) => (b.em ? b.em.getTime() : 0) - (a.em ? a.em.getTime() : 0));
+    const atual = dt.find(d => d.atual) || null;
+    const exig = escopo === 'Empresa' ? t.ativo && t.controle !== 'Sob demanda' : exigidoSST_(t, p);
+    if (!exig && !dt.length) { out.push({ tipo: t, atual: null, hist: [], st: situacaoSST_(t, null, false), exigido: false }); return; }
+    out.push({ tipo: t, atual, hist: dt.filter(d => d !== atual), st: situacaoSST_(t, atual, exig), exigido: exig });
+  });
+  return out;
+}
+
+const resumoSST_ = itens => ({
+  vencidos: itens.filter(i => i.st.chave === 'vencido').length, vencendo: itens.filter(i => i.st.chave === 'vencendo').length,
+  faltando: itens.filter(i => i.st.chave === 'faltando').length, ok: itens.filter(i => i.st.chave === 'ok').length
+});
+
+const itemOut_ = (i, comHist) => ({ codigo: i.tipo.codigo, doc: i.tipo.doc, categoria: i.tipo.categoria, controle: i.tipo.controle, sensivel: i.tipo.sensivel,
+  bloqueia: i.tipo.bloqueia, exigido: i.exigido, st: i.st, atual: i.atual ? docOut_(i.atual, i.tipo) : null, hist: comHist ? i.hist.map(d => docOut_(d, i.tipo)) : i.hist.length });
+
+function tipoOut_(t) { return { codigo: t.codigo, doc: t.doc, categoria: t.categoria, escopo: t.escopo, controle: t.controle, meses: t.meses, aplica: t.aplica,
+  bloqueia: t.bloqueia, sensivel: t.sensivel, pacote: t.pacote, ativo: t.ativo, obs: t.obs }; }
+
+function sstPainel_() {
+  const tipos = tiposSST_(), docs = docsSST_();
+  const empresa = itensSST_(tipos, docs, 'Empresa', null);
+  const pessoas = pessoasSST_().map(p => {
+    const it = itensSST_(tipos, docs, 'Colaborador', p);
+    return { nome: p.nome, funcao: p.funcao, vinculo: p.vinculo, grupo: p.grupo, resumo: resumoSST_(it),
+      alertas: it.filter(i => ['vencido', 'vencendo', 'faltando'].indexOf(i.st.chave) >= 0).map(i => ({ doc: i.tipo.doc, st: i.st })) };
+  });
+  return { ok: true, tipos: tipos.map(tipoOut_), empresa: empresa.filter(i => i.tipo.ativo || i.atual).map(i => itemOut_(i, false)), resumoEmpresa: resumoSST_(empresa),
+    pessoas, listas: { vinculos: SST_VINCULOS, grupos: SST_GRUPOS, aplica: SST_APLICA, controles: SST_CONTROLES, situacoes: SST_SITUACOES.filter(Boolean), bloqueios: TREINOS.map(x => x[0]) } };
+}
+
+function pendenciasSST_() {
+  try {
+    const tipos = tiposSST_(), docs = docsSST_();
+    const conta = it => it.filter(i => ['vencido', 'faltando'].indexOf(i.st.chave) >= 0).length;
+    return conta(itensSST_(tipos, docs, 'Empresa', null)) + pessoasSST_().reduce((s, p) => s + conta(itensSST_(tipos, docs, 'Colaborador', p)), 0);
+  } catch (e) { return 0; }
+}
+
+/** Documentos de um escopo (Empresa) ou de um colaborador, com histórico. Colaborador só vê os próprios. */
+function sstDocs_(u, req) {
+  const admin = u.perfil === 'Administrador';
+  const escopo = req.escopo === 'Empresa' ? 'Empresa' : 'Colaborador';
+  if (escopo === 'Empresa' && !admin) throw new Error('Acesso restrito à administração.');
+  const nome = escopo === 'Empresa' ? '' : (admin ? txt_(req.colaborador) || u.nome : u.nome);
+  const p = escopo === 'Empresa' ? null : pessoasSST_().find(x => x.nome === nome) || { nome, vinculo: '', grupo: '' };
+  const tipos = tiposSST_();
+  const it = itensSST_(tipos, docsSST_(), escopo, p).filter(i => admin || i.atual || i.exigido);
+  return { ok: true, escopo, pessoa: p, itens: it.filter(i => i.tipo.ativo || i.atual || i.hist.length).map(i => itemOut_(i, true)), resumo: resumoSST_(it) };
+}
+
+function salvarDocSST_(u, req) {
+  const tipos = tiposSST_();
+  const tipo = tipos.find(t => t.codigo === txt_(req.codigo));
+  if (!tipo) throw new Error('Escolha o tipo de documento.');
+  const escopo = tipo.escopo, nome = escopo === 'Empresa' ? '' : txt_(req.colaborador);
+  if (escopo === 'Colaborador' && !pessoasSST_().some(p => p.nome === nome)) throw new Error('Colaborador não encontrado.');
+  const dIso = s => { const x = txt_(s); if (!x) return ''; const d = Utilities.parseDate(x.slice(0, 10), TZ, 'yyyy-MM-dd'); if (isNaN(d)) throw new Error('Data inválida.'); return d; };
+  const emissao = dIso(req.emissao), validade = dIso(req.validade);
+  if (tipo.controle !== 'Sem validade' && !emissao && !validade) throw new Error('Informe a data de emissão ou a validade.');
+  const situacao = SST_SITUACOES.indexOf(txt_(req.situacao)) >= 0 ? txt_(req.situacao) : '';
+  const t = ler_(ABA_SST_DOCS);
+  let n = txt_(req.n), arquivo = '', mime = '';
+  if (req.arquivo) {
+    const bl = blobDe_(req.arquivo, 'application/pdf', 'doc');
+    mime = bl.getContentType();
+    const ext = mime === 'application/pdf' ? '.pdf' : mime === 'image/png' ? '.png' : '.jpg';
+    const base = (escopo === 'Empresa' ? '' : nome + ' - ') + tipo.doc + (emissao ? ' - ' + Utilities.formatDate(emissao, TZ, 'yyyy-MM-dd') : '');
+    bl.setName(base.replace(/[\\/:*?"<>|]/g, '-') + ext);
+    const pasta = escopo === 'Empresa' ? pasta_(['Kiton Hub', 'Gestão SST', 'Empresa']) : pasta_(['Kiton Hub', 'Gestão SST', 'Colaboradores', nome]);
+    arquivo = pasta.createFile(bl).getId();
+  }
+  if (n) {
+    // edição de um documento já registrado (datas, situação, observação; arquivo novo opcional)
+    const l = t.linhas.find(x => txt_(x.get('Nº')) === n);
+    if (!l) throw new Error('Documento não encontrado.');
+    set_(t, l._linha, 'Emissão', emissao); set_(t, l._linha, 'Validade', validade); set_(t, l._linha, 'Situação informada', situacao);
+    set_(t, l._linha, 'Observações', txt_(req.obs));
+    if (arquivo) { set_(t, l._linha, 'Arquivo', arquivo); set_(t, l._linha, 'Tipo do arquivo', mime); }
+  } else {
+    if (!arquivo) throw new Error('Anexe o arquivo do documento (PDF ou foto).');
+    t.linhas.filter(l => txt_(l.get('Escopo')) === escopo && txt_(l.get('Colaborador')) === nome && txt_(l.get('Código do tipo')) === tipo.codigo && txt_(l.get('Atual')) === 'Sim')
+      .forEach(l => set_(t, l._linha, 'Atual', 'Não'));
+    n = String(proximoNumero_(t, 'Nº'));
+    anexar_(t, { 'Nº': n, 'Escopo': escopo, 'Colaborador': nome, 'Código do tipo': tipo.codigo, 'Documento': tipo.doc, 'Emissão': emissao, 'Validade': validade,
+      'Situação informada': situacao, 'Arquivo': arquivo, 'Tipo do arquivo': mime, 'Observações': txt_(req.obs), 'Registrado por': u.nome, 'Registrado em': new Date(), 'Atual': 'Sim' });
+  }
+  sincronizarTreino_(tipo, nome);
+  return { ok: true, n };
+}
+
+/** O vencimento do documento atual alimenta a coluna de treinamento usada pela APR (bloqueio de OS). */
+function sincronizarTreino_(tipo, nome) {
+  if (!tipo.bloqueia || !nome) return;
+  const par = TREINOS.find(x => x[0] === tipo.bloqueia);
+  if (!par) return;
+  const d = docsSST_().find(x => x.escopo === 'Colaborador' && x.colaborador === nome && x.codigo === tipo.codigo && x.atual);
+  const v = d ? validadeSST_(tipo, d) : null;
+  const t = ler_(ABA.colab);
+  const l = t.linhas.find(x => txt_(x.get('Nome')) === nome);
+  if (l && t.cab[par[1]] !== undefined) set_(t, l._linha, par[1], v ? dia_(v) : '');
+}
+
+function excluirDocSST_(u, req) {
+  const t = ler_(ABA_SST_DOCS);
+  const l = t.linhas.find(x => txt_(x.get('Nº')) === txt_(req.n));
+  if (!l) throw new Error('Documento não encontrado.');
+  const era = txt_(l.get('Atual')) === 'Sim', esc0 = txt_(l.get('Escopo')), nome = txt_(l.get('Colaborador')), cod = txt_(l.get('Código do tipo'));
+  set_(t, l._linha, 'Atual', 'Excluído');
+  if (era) {
+    // o registro anterior mais recente volta a ser o atual
+    const ant = t.linhas.filter(x => x !== l && txt_(x.get('Escopo')) === esc0 && txt_(x.get('Colaborador')) === nome && txt_(x.get('Código do tipo')) === cod && txt_(x.get('Atual')) === 'Não')
+      .sort((a, b) => (data_(b.get('Registrado em')) || 0) - (data_(a.get('Registrado em')) || 0))[0];
+    if (ant) set_(t, ant._linha, 'Atual', 'Sim');
+  }
+  const tipo = tiposSST_().find(x => x.codigo === cod);
+  if (tipo) sincronizarTreino_(tipo, nome);
+  return { ok: true };
+}
+
+/** Conteúdo do arquivo (base64). Colaborador: só os próprios, sem download (visualização com marca d'água no app). */
+function arquivoSST_(u, req) {
+  const d = docsSST_().find(x => x.n === txt_(req.n));
+  if (!d || !d.arquivo) throw new Error('Arquivo não encontrado.');
+  const admin = u.perfil === 'Administrador';
+  if (!admin && !(d.escopo === 'Colaborador' && d.colaborador === u.nome)) throw new Error('Você só pode visualizar os seus documentos.');
+  const bl = DriveApp.getFileById(d.arquivo).getBlob();
+  return { ok: true, nome: bl.getName(), mime: bl.getContentType(), base64: Utilities.base64Encode(bl.getBytes()), podeBaixar: admin, titulo: d.doc + (d.colaborador ? ' · ' + d.colaborador : '') };
+}
+
+function salvarTipoSST_(u, req) {
+  const x = req.tipo || {};
+  const doc = txt_(x.doc);
+  if (!doc) throw new Error('Informe o nome do documento.');
+  const escopo = x.escopo === 'Empresa' ? 'Empresa' : 'Colaborador';
+  const controle = SST_CONTROLES.indexOf(x.controle) >= 0 ? x.controle : 'Vencimento';
+  const aplica = escopo === 'Empresa' ? 'Empresa' : (SST_APLICA.indexOf(x.aplica) >= 0 ? x.aplica : 'Opcional');
+  const bloqueia = TREINOS.some(t => t[0] === x.bloqueia) && escopo === 'Colaborador' ? x.bloqueia : '';
+  const t = ler_(ABA_SST_TIPOS);
+  const vals = { 'Documento': doc, 'Categoria': txt_(x.categoria) || 'Outros', 'Escopo': escopo, 'Controle': controle, 'Validade (meses)': Number(x.meses) || '',
+    'Aplica a': aplica, 'Bloqueia OS': bloqueia, 'Sensível': x.sensivel ? 'Sim' : 'Não', 'Vai no pacote': x.pacote ? 'Sim' : 'Não', 'Ativo': x.ativo === false ? 'Não' : 'Sim', 'Observações': txt_(x.obs) };
+  if (x.codigo) {
+    const l = t.linhas.find(y => txt_(y.get('Código')) === txt_(x.codigo));
+    if (!l) throw new Error('Tipo não encontrado.');
+    Object.keys(vals).forEach(k => set_(t, l._linha, k, vals[k]));
+    return { ok: true, codigo: x.codigo };
+  }
+  const pre = escopo === 'Empresa' ? 'E' : 'C';
+  const max = t.linhas.reduce((m, l) => { const c = txt_(l.get('Código')); return c[0] === pre ? Math.max(m, Number(c.slice(1)) || 0) : m; }, 0);
+  const codigo = pre + String(max + 1).padStart(2, '0');
+  anexar_(t, Object.assign({ 'Código': codigo, 'Ordem': t.linhas.length + 1 }, vals));
+  return { ok: true, codigo };
+}
+
+function salvarPessoaSST_(u, req) {
+  const t = ler_(ABA.colab);
+  const l = t.linhas.find(x => txt_(x.get('Nome')) === txt_(req.colaborador));
+  if (!l) throw new Error('Colaborador não encontrado.');
+  if (SST_VINCULOS.indexOf(req.vinculo) < 0 || SST_GRUPOS.indexOf(req.grupo) < 0) throw new Error('Escolha o vínculo e o grupo.');
+  ['Vínculo', 'Grupo PCMSO'].forEach(c => { if (t.cab[c] === undefined) { t.sh.getRange(1, t.sh.getLastColumn() + 1).setValue(c); } });
+  const t2 = ler_(ABA.colab);
+  set_(t2, l._linha, 'Vínculo', req.vinculo); set_(t2, l._linha, 'Grupo PCMSO', req.grupo);
+  return { ok: true };
+}
+
+/** Pacote para o cliente: capa (PDF) + lista ordenada dos documentos que o app junta no celular. Exames (sensíveis) nunca entram. */
+function pacoteSST_(u, req) {
+  const tipos = tiposSST_(), docs = docsSST_(), porCod = {};
+  tipos.forEach(t => { porCod[t.codigo] = t; });
+  const lista = [];
+  const pega = (escopo, nome) => itensSST_(tipos, docs, escopo, escopo === 'Empresa' ? null : pessoasSST_().find(p => p.nome === nome) || { nome })
+    .filter(i => i.atual && i.atual.arquivo && i.tipo.pacote && !i.tipo.sensivel && ['Positiva', 'Pendência'].indexOf(i.atual.situacao) < 0);
+  const linhasCapa = [];
+  if (req.empresa) pega('Empresa').forEach(i => { lista.push({ n: i.atual.n, titulo: i.tipo.doc }); linhasCapa.push(['Kiton Engenharia Integrada', i.tipo.doc, i.st.validade || 'Sem validade', i.st]); });
+  (req.pessoas || []).forEach(nome => pega('Colaborador', txt_(nome)).forEach(i => {
+    lista.push({ n: i.atual.n, titulo: i.tipo.doc + ' · ' + nome }); linhasCapa.push([nome, i.tipo.doc, i.st.validade || 'Sem validade', i.st]);
+  }));
+  if (!lista.length) throw new Error('Nenhum documento anexado para o pacote.');
+  const cor = st => st.cor === 'vermelho' ? '#b42318' : st.cor === 'laranja' ? '#b54708' : '#1c1f23';
+  const corpo = cabDoc_('PACOTE DE DOCUMENTAÇÃO', txt_(req.titulo) || 'Integração de segurança') +
+    '<table class="d"><tr><td class="r">Empresa</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr>' +
+    (txt_(req.cliente) ? '<tr><td class="r">Destinatário</td><td>' + esc_(req.cliente) + '</td></tr>' : '') +
+    '<tr><td class="r">Colaboradores</td><td>' + esc_((req.pessoas || []).join(', ') || '-') + '</td></tr></table>' +
+    '<div class="b"><div class="bt">Documentos anexados a este pacote, na ordem</div><table class="lst"><tr><th>#</th><th>Titular</th><th>Documento</th><th>Validade</th></tr>' +
+    linhasCapa.map((r, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc_(r[0]) + '</td><td>' + esc_(r[1]) + '</td><td style="color:' + cor(r[3]) + '">' + esc_(r[2]) + '</td></tr>').join('') + '</table></div>' +
+    '<p style="font-size:8pt;color:#555">Documentos de saúde ocupacional (exames complementares) não são compartilhados, conforme a LGPD. A aptidão consta no ASO de cada colaborador.</p>';
+  const capa = pdfDoc_(corpo, 'Capa.pdf');
+  return { ok: true, capa: Utilities.base64Encode(capa.getBytes()), lista };
+}
+
+function meusDocsSST_(u) {
+  try {
+    const p = pessoasSST_().find(x => x.nome === u.nome);
+    if (!p) return null;
+    const it = itensSST_(tiposSST_(), docsSST_(), 'Colaborador', p);
+    return resumoSST_(it);
+  } catch (e) { return null; }
 }
 
 // ----- painel gerencial -----

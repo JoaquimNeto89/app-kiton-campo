@@ -198,6 +198,12 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .apr-lin{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:15px}.apr-lin:last-child{border-bottom:0}.apr-lin .selo-txt{flex:none;margin:0}
 .pdfs{margin-top:4px}.pdfs .acao{margin:0;min-height:58px;font-size:15px;padding:8px 10px;gap:8px;text-decoration:none;text-align:left;justify-content:flex-start}
 .pdfs .acao small{display:block;font-weight:500;font-size:12.5px;color:var(--cinza)}
+.abas-rol{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.abas-rol::-webkit-scrollbar{display:none}
+.abas-rol button{flex:none;border:1.5px solid var(--borda,#cfd4da);background:#fff;border-radius:20px;padding:8px 14px;font:inherit;font-size:15px;font-weight:600;color:inherit;cursor:pointer}
+.abas-rol button.sel{background:#1c1f23;color:#fff;border-color:#1c1f23}
+#visor{position:fixed;inset:0;z-index:60;background:#1c1f23;display:flex;flex-direction:column;-webkit-user-select:none;user-select:none}
+#visor.oculto{display:none}.visor-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;color:#fff}
+.visor-cab .icone-btn{color:#fff}.visor-corpo{flex:1;overflow:auto;padding:8px;-webkit-touch-callout:none}
 .decl-app{background:#fff;border-left:4px solid var(--vermelho);border-radius:8px;padding:10px 12px;margin:14px 0 4px;font-size:15px;line-height:1.4}
 .ver-apr{margin:8px 0 0;min-height:42px;font-size:15px;padding:6px 12px;width:auto}
 .mat .scan{margin:0;min-height:0;padding:0;display:grid;place-items:center}
@@ -375,11 +381,11 @@ function abrirMenu() {
   const item = (k, icone, t, n) => `<button type="button" class="menu-it" data-menu="${k}">${ic(icone)}<span>${t}</span>${bol(n)}</button>`;
   document.getElementById('menuPainel').innerHTML = `<div class="menu-cab"><b>${esc(est.usuario.nome)}</b><button type="button" class="icone-btn" id="menuX" aria-label="Fechar o menu"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${item('inicio', 'cliente', 'Início')}${item('saidas', 'saida', 'Saídas e retornos')}${item('checkin', 'pino', 'Check-in em obra')}
-    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens e EPI')}
+    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens e documentos')}
     ${admin ? `<div class="menu-sec">Administração</div>
       ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
       ${item('a-aprovar', 'ok', 'OS para aprovar', pd.aprovar)}${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
-      ${item('a-seg', 'admin', 'Gestão SST (APR e treinamentos)', (pd.apr || 0) + (pd.treinos || 0))}${item('a-epi', 'ferr', 'Ferramentas e EPI', pd.epi)}${item('a-pres', 'pino', 'Presença em obra')}
+      ${item('a-seg', 'admin', 'Gestão SST', (pd.apr || 0) + (pd.sst || 0) + (pd.epi || 0))}${item('a-pres', 'pino', 'Presença em obra')}
       ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
     <div class="menu-sec"></div>
     <a class="menu-it" href="${esc(linkAjuda())}" target="_blank" rel="noopener" id="menuAjuda"><span class="q" style="background:#25D366">?</span><span>Ajuda e dúvidas</span></a>
@@ -556,10 +562,10 @@ function telaInicio() {
         return mod('mOS', 'os', 'Ordem de serviço', ds, st); })()}
       ${mod('mDesp', 'recibo', 'Despesas', 'Comprovantes e reembolso')}
     </div>
-    ${(() => { const me = d.meusEpis || { emUso: [], avisos: [] }; return `<button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens e EPI</b><span class="suave" style="display:block">${nMeus} ferramenta(s) e ${me.emUso.length} EPI no seu nome</span>${me.avisos.length ? `<span class="selo-txt laranja" style="margin-top:4px">${me.avisos.length} EPI para trocar</span>` : ''}</span>${ic('seta')}</button>`; })()}
+    ${(() => { const me = d.meusEpis || { emUso: [], avisos: [] }; return `<button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens e documentos</b><span class="suave" style="display:block">${nMeus} ferramenta(s), ${me.emUso.length} EPI e seus documentos de SST</span>${me.avisos.length ? `<span class="selo-txt laranja" style="margin-top:4px">${me.avisos.length} EPI para trocar</span>` : ''}${d.meusDocs && (d.meusDocs.vencidos || d.meusDocs.faltando) ? `<span class="selo-txt vermelho" style="margin-top:4px">${d.meusDocs.vencidos + d.meusDocs.faltando} documento(s) vencido(s) ou faltando</span>` : d.meusDocs && d.meusDocs.vencendo ? `<span class="selo-txt laranja" style="margin-top:4px">${d.meusDocs.vencendo} documento(s) vencendo</span>` : ''}</span>${ic('seta')}</button>`; })()}
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.treinos || 0) + (pd.aprovar || 0) + (pd.epi || 0);
-        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.treinos ? pd.treinos + ' pessoa(s) com treinamento vencendo' : '', pd.epi ? pd.epi + ' pendência(s) de EPI ou termo' : ''].filter(Boolean).join(', ');
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.sst || 0) + (pd.aprovar || 0) + (pd.epi || 0);
+        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.sst ? pd.sst + ' documento(s) de SST vencido(s) ou faltando' : '', pd.epi ? pd.epi + ' pendência(s) de EPI ou termo' : ''].filter(Boolean).join(', ');
         return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, OS, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
@@ -573,7 +579,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = () => telaMeusItens();
-  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.aprovar ? 'aprovar' : pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.treinos ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.aprovar ? 'aprovar' : pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.sst || pd.epi ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -965,7 +971,7 @@ async function telaAdmin(aba, sub) {
   } else if (aba === 'aprovar') {
     await adminAprovar(box);
   } else if (aba === 'seg') {
-    box.innerHTML = '<h1>Gestão SST</h1><div id="aprBox"></div>'; await adminAPR(document.getElementById('aprBox'));
+    await adminSST(box, sub);
   } else if (aba === 'cli') {
     await adminClientes(box);
   } else if (aba === 'pres') {
@@ -1100,13 +1106,14 @@ const seloTermo = t => /^Assinado/.test(t) ? `<span class="selo-txt verde">Termo
 
 /** Consulta do colaborador: ferramentas individuais e EPI em uso. */
 async function telaMeusItens(aba) {
-  aba = aba === 'epi' ? 'epi' : 'ferr';
-  topo('Meus itens e EPI'); voltarInicio();
-  $app.innerHTML = `<h1>Meus itens e EPI</h1>
-    <div class="segmento nao-suja" id="miAba"><button type="button" data-v="ferr" class="${aba === 'ferr' ? 'sel' : ''}">Ferramentas</button><button type="button" data-v="epi" class="${aba === 'epi' ? 'sel' : ''}">EPI</button></div>
+  aba = ['epi', 'docs'].includes(aba) ? aba : 'ferr';
+  topo('Meus itens e documentos'); voltarInicio();
+  $app.innerHTML = `<h1>Meus itens e documentos</h1>
+    <div class="segmento nao-suja" id="miAba"><button type="button" data-v="ferr" class="${aba === 'ferr' ? 'sel' : ''}">Ferramentas</button><button type="button" data-v="epi" class="${aba === 'epi' ? 'sel' : ''}">EPI</button><button type="button" data-v="docs" class="${aba === 'docs' ? 'sel' : ''}">Documentos</button></div>
     <div id="erro"></div><div id="miBox" style="margin-top:12px"><p class="suave">Carregando…</p></div>`;
   document.getElementById('ini').onclick = () => telaInicio();
   document.querySelectorAll('#miAba button').forEach(b => b.onclick = () => telaMeusItens(b.dataset.v));
+  if (aba === 'docs') return meusDocumentos(document.getElementById('miBox'));
   await executar(async () => {
     const r = await api('colabEPI', {});
     const box = document.getElementById('miBox');
@@ -1286,6 +1293,310 @@ function telaAssinarTermo(nome, itens) {
     const geo = await localizacao();
     await api('assinarTermo', { colaborador: nome, assinatura, geo });
     sujo = false; await recarregarDados(); telaColabEPI(nome, 'Termo assinado. O PDF já sai com a assinatura.');
+  });
+}
+
+// ---------- Gestão SST: documentos ----------
+const corSST = c => c === 'cinza' ? '' : c;
+const seloSST = st => `<span class="selo-txt ${corSST(st.cor)}">${esc(st.texto)}</span>`;
+const resumoSSTtxt = r => [r.vencidos ? `<span class="selo-txt vermelho">${r.vencidos} vencido(s)</span>` : '', r.faltando ? `<span class="selo-txt vermelho">${r.faltando} faltando</span>` : '',
+  r.vencendo ? `<span class="selo-txt laranja">${r.vencendo} a vencer ou revisar</span>` : '', !r.vencidos && !r.faltando && !r.vencendo ? '<span class="selo-txt verde">Tudo em dia</span>' : ''].join('');
+const porCategoria = itens => { const g = {}; itens.forEach(i => { (g[i.categoria] = g[i.categoria] || []).push(i); }); return g; };
+const ehKiton = p => p.vinculo !== 'Contrato (prestador)';
+
+async function adminSST(box, sub) {
+  sub = sub || 'painel';
+  const abas = [['painel', 'Painel'], ['empresa', 'Documentos gerais'], ['kiton', 'Colaboradores Kiton'], ['terc', 'Terceirizados'], ['apr', 'APR'], ['epi', 'EPI e ferramentas']];
+  box.innerHTML = `<h1>Gestão SST</h1><div class="abas-rol nao-suja" id="sAba">${abas.map(([k, t]) => `<button type="button" data-v="${k}" class="${k === sub ? 'sel' : ''}">${t}</button>`).join('')}</div><div id="sBox" style="margin-top:12px"><p class="suave">Carregando…</p></div>`;
+  document.querySelectorAll('#sAba button').forEach(b => b.onclick = () => adminSST(box, b.dataset.v));
+  const sBox = document.getElementById('sBox');
+  if (sub === 'apr') return adminAPR(sBox);
+  if (sub === 'epi') { sBox.innerHTML = '<div id="eWrap"></div>'; return adminEPI(document.getElementById('eWrap')); }
+  await executar(async () => {
+    const r = await api('sstPainel'); est.sst = r;
+    if (sub === 'painel') {
+      const alertas = [];
+      r.empresa.filter(i => ['vencido', 'vencendo', 'faltando'].includes(i.st.chave)).forEach(i => alertas.push({ quem: 'Empresa', doc: i.doc, st: i.st, ir: () => telaDocSST({ escopo: 'Empresa', codigo: i.codigo }) }));
+      r.pessoas.forEach(p => p.alertas.forEach(a => alertas.push({ quem: p.nome, doc: a.doc, st: a.st, ir: () => telaPessoaSST(p.nome) })));
+      alertas.sort((a, b) => (a.st.chave === 'vencendo') - (b.st.chave === 'vencendo'));
+      sBox.innerHTML = `<button type="button" class="linha" data-ir="empresa" style="align-items:flex-start"><span style="flex:1"><b>Documentos gerais da empresa</b><span style="display:block;margin-top:6px">${resumoSSTtxt(r.resumoEmpresa)}</span></span><span class="fim">${ic('seta')}</span></button>
+        ${r.pessoas.map(p => `<button type="button" class="linha" data-p="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b><small>${esc(p.vinculo)} · ${esc(p.grupo)}</small><span style="display:block;margin-top:6px">${resumoSSTtxt(p.resumo)}</span></span><span class="fim">${ic('seta')}</span></button>`).join('')}
+        <button type="button" class="acao" id="sPacote">${ic('os')} Gerar pacote para cliente</button>
+        <h2>Pendências (${alertas.length})</h2>
+        ${alertas.length ? alertas.map((a, i) => `<button type="button" class="linha" data-al="${i}" style="align-items:flex-start"><span style="flex:1"><b>${esc(a.doc)}</b><small>${esc(a.quem)}</small><span style="display:block;margin-top:6px">${seloSST(a.st)}</span></span><span class="fim">${ic('seta')}</span></button>`).join('') : msg('ok', 'Nenhuma pendência de documentação.')}`;
+      sBox.querySelector('[data-ir]').onclick = () => adminSST(box, 'empresa');
+      sBox.querySelectorAll('[data-p]').forEach(b => b.onclick = () => telaPessoaSST(b.dataset.p));
+      sBox.querySelectorAll('[data-al]').forEach(b => b.onclick = () => alertas[b.dataset.al].ir());
+      document.getElementById('sPacote').onclick = () => telaPacoteSST([]);
+    } else if (sub === 'empresa') {
+      const g = porCategoria(r.empresa);
+      sBox.innerHTML = `<p style="margin:0 0 8px">${resumoSSTtxt(r.resumoEmpresa)}</p>` + Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => linhaDocSST(i)).join('')).join('') +
+        `<div class="grade"><button type="button" class="acao leve" id="sTipos" style="margin:0">${ic('tabela')} Tipos de documento</button><button type="button" class="acao leve" id="sPacote" style="margin:0">${ic('os')} Gerar pacote</button></div>`;
+      sBox.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => telaDocSST({ escopo: 'Empresa', codigo: b.dataset.doc }));
+      document.getElementById('sTipos').onclick = () => telaTiposSST();
+      document.getElementById('sPacote').onclick = () => telaPacoteSST([]);
+    } else {
+      const lista = r.pessoas.filter(p => sub === 'kiton' ? ehKiton(p) : !ehKiton(p));
+      sBox.innerHTML = `<p class="suave">${sub === 'kiton' ? 'Sócios, administração e colaboradores CLT.' : 'Prestadores de serviço por contrato.'} O vínculo de cada pessoa é ajustado na tela dela.</p>` +
+        (lista.length ? lista.map(p => `<button type="button" class="linha" data-p="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b><small>${esc(p.funcao)} · ${esc(p.grupo)}</small><span style="display:block;margin-top:6px">${resumoSSTtxt(p.resumo)}</span></span><span class="fim">${ic('seta')}</span></button>`).join('')
+          : msg('info', 'Ninguém neste grupo.'));
+      sBox.querySelectorAll('[data-p]').forEach(b => b.onclick = () => telaPessoaSST(b.dataset.p));
+    }
+  });
+}
+
+const linhaDocSST = i => `<button type="button" class="linha" data-doc="${esc(i.codigo)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(i.doc)}</b>
+  <small>${i.atual ? (i.atual.emissao ? 'Emitido em ' + esc(i.atual.emissao) : 'Anexado em ' + esc(i.atual.em.slice(0, 10))) : i.exigido ? 'Exigido, ainda não anexado' : 'Opcional'}${i.sensivel ? ' · acesso restrito' : ''}${i.bloqueia ? ' · bloqueia OS' : ''}</small>
+  <span style="display:block;margin-top:6px">${seloSST(i.st)}${i.atual && i.atual.obs ? `<span class="suave" style="font-size:13px">${esc(i.atual.obs)}</span>` : ''}</span></span><span class="fim">${ic('seta')}</span></button>`;
+
+async function telaPessoaSST(nome, aviso) {
+  topo('Gestão SST');
+  $app.innerHTML = `<h1>${esc(nome)}</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="pBox"><p class="suave">Carregando…</p></div>`;
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Gestão SST</button></div>`);
+  await executar(async () => {
+    const r = await api('sstDocs', { escopo: 'Colaborador', colaborador: nome });
+    const p = r.pessoa;
+    document.getElementById('ant').onclick = () => telaAdmin('seg', ehKiton(p) ? 'kiton' : 'terc');
+    const g = porCategoria(r.itens.filter(i => i.exigido || i.atual || i.hist.length));
+    const opc = r.itens.filter(i => !i.exigido && !i.atual && !i.hist.length);
+    document.getElementById('pBox').innerHTML = `<p class="suave" style="margin-top:-8px">${esc(p.funcao || '')}</p>
+      <div class="cartao"><div class="t">Vínculo e grupo do PCMSO</div><p class="suave" style="margin:2px 0 8px">Definem quais documentos são exigidos desta pessoa.</p>
+        <label class="rotulo" style="margin-top:0">Vínculo</label>${chips('pVin', est.sst ? est.sst.listas.vinculos : ['Sócio / administração', 'Contrato (prestador)', 'CLT'], p.vinculo)}
+        <label class="rotulo">Grupo (PCMSO)</label>${chips('pGru', est.sst ? est.sst.listas.grupos : ['Operacional e técnico', 'Administrativo'], p.grupo)}
+        <button type="button" class="acao leve oculto" id="pSalvar">${ic('ok')} Salvar vínculo e grupo</button></div>
+      <p style="margin:10px 0">${resumoSSTtxt(r.resumo)}</p>
+      ${Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => linhaDocSST(i)).join('')).join('')}
+      ${opc.length ? `<h2>Outros documentos (opcionais)</h2><div class="pessoas">${opc.map(i => `<button type="button" class="pessoa" data-doc="${esc(i.codigo)}">+ ${esc(i.doc)}</button>`).join('')}</div>` : ''}
+      <div class="grade" style="margin-top:14px"><button type="button" class="acao leve" id="pPacote" style="margin:0">${ic('os')} Pacote deste colaborador</button>
+        <button type="button" class="acao leve" id="pEpi" style="margin:0">${ic('ferr')} EPI e ferramentas</button></div>`;
+    const sel = { vinculo: p.vinculo, grupo: p.grupo };
+    const mostrar = () => document.getElementById('pSalvar').classList.toggle('oculto', sel.vinculo === p.vinculo && sel.grupo === p.grupo);
+    ligarChips('pVin', v => { sel.vinculo = v; mostrar(); }); ligarChips('pGru', v => { sel.grupo = v; mostrar(); });
+    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel }); sujo = false; telaPessoaSST(nome, 'Vínculo e grupo atualizados.'); });
+    document.querySelectorAll('#pBox [data-doc]').forEach(b => b.onclick = () => telaDocSST({ escopo: 'Colaborador', colaborador: nome, codigo: b.dataset.doc }));
+    document.getElementById('pPacote').onclick = () => telaPacoteSST([nome]);
+    document.getElementById('pEpi').onclick = () => telaColabEPI(nome);
+  });
+}
+
+async function telaDocSST(ctx, aviso) {
+  topo('Gestão SST');
+  const voltar = () => ctx.escopo === 'Empresa' ? telaAdmin('seg', 'empresa') : telaPessoaSST(ctx.colaborador);
+  $app.innerHTML = `<div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="dBox"><p class="suave">Carregando…</p></div>`;
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Voltar</button></div>`);
+  document.getElementById('ant').onclick = voltar;
+  await executar(async () => {
+    const r = await api('sstDocs', { escopo: ctx.escopo, colaborador: ctx.colaborador });
+    const i = r.itens.find(x => x.codigo === ctx.codigo);
+    if (!i) throw new Error('Tipo de documento não encontrado.');
+    const tipo = (est.sst && est.sst.tipos.find(t => t.codigo === i.codigo)) || {};
+    const dl = (k, v) => v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : '';
+    const blocoDoc = d => `<dl class="resumo">${dl('Emissão', esc(d.emissao))}${dl('Validade', esc(d.validade || (i.controle === 'Sem validade' ? 'Sem validade' : '')))}
+      ${dl('Situação', d.situacao ? `<span class="selo-txt ${d.situacao === 'Revisão pendente' ? 'laranja' : 'vermelho'}">${esc(d.situacao)}</span>` : '')}${dl('Observação', esc(d.obs))}${dl('Registrado', esc(d.por + ' em ' + d.em))}</dl>`;
+    document.getElementById('dBox').innerHTML = `<h1>${esc(i.doc)}</h1><p class="suave" style="margin-top:-8px">${esc(ctx.escopo === 'Empresa' ? 'Documento da empresa' : ctx.colaborador)} · ${esc(i.categoria)}</p>
+      <p>${seloSST(i.st)}${i.sensivel ? '<span class="selo-txt">Acesso restrito (saúde/pessoal)</span>' : ''}${i.bloqueia ? `<span class="selo-txt">Bloqueia OS (${esc(i.bloqueia)})</span>` : ''}</p>
+      <p class="suave" style="font-size:14px">${i.controle === 'Sem validade' ? 'Documento sem validade: fica em dia enquanto não houver mudança.' : i.controle === 'Sob demanda' ? `Emitido quando um cliente pede${tipo.meses ? ', vale ' + tipo.meses + (tipo.meses === 1 ? ' mês' : ' meses') : ''}. Não gera pendência.` : `Validade${tipo.meses ? ' padrão de ' + tipo.meses + ' meses a partir da emissão' : ' informada no documento'}. Aviso ${30} dias antes.`}</p>
+      ${i.atual ? `<div class="cartao"><div class="t">Documento atual</div>${blocoDoc(i.atual)}
+        <div class="grade"><button type="button" class="acao" data-ver="${esc(i.atual.n)}" style="margin:0">${ic('os')} Ver</button><button type="button" class="acao leve" id="dEditar" style="margin:0">Editar dados</button></div>
+        <button type="button" class="link" id="dExcluir" style="margin-top:10px">Excluir este registro</button></div>` : msg(i.exigido ? 'erro' : 'info', i.exigido ? 'Documento exigido e ainda não anexado.' : 'Nenhum arquivo anexado.')}
+      <h2>${i.atual ? 'Anexar nova versão' : 'Anexar documento'}</h2><div id="dForm"></div>
+      ${i.hist.length ? `<h2>Histórico</h2>` + i.hist.map(d => `<div class="cartao"><div class="t">${esc(d.emissao || d.em.slice(0, 10))}${d.validade ? ' · válido até ' + esc(d.validade) : ''}</div><p class="suave" style="margin:2px 0 6px">${esc(d.por)} em ${esc(d.em)}${d.obs ? ' · ' + esc(d.obs) : ''}</p>
+        <button type="button" class="link" data-ver="${esc(d.n)}">Ver</button> · <button type="button" class="link" data-exc="${esc(d.n)}">Excluir</button></div>`).join('') : ''}`;
+    formDocSST(document.getElementById('dForm'), ctx, i, null, () => telaDocSST(ctx, 'Documento salvo.'));
+    document.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => verArquivoSST(b.dataset.ver));
+    const exc = n => executar(async () => { if (!confirm('Excluir este registro? O arquivo continua guardado no Drive, mas sai do controle do app.')) return; await api('excluirDocSST', { n }); telaDocSST(ctx, 'Registro excluído.'); });
+    document.querySelectorAll('[data-exc]').forEach(b => b.onclick = () => exc(b.dataset.exc));
+    if (i.atual) {
+      document.getElementById('dExcluir').onclick = () => exc(i.atual.n);
+      document.getElementById('dEditar').onclick = () => { const f = document.getElementById('dForm'); f.previousElementSibling.textContent = 'Editar dados do documento atual'; formDocSST(f, ctx, i, i.atual, () => telaDocSST(ctx, 'Dados atualizados.')); f.scrollIntoView({ behavior: 'smooth' }); };
+    }
+  });
+}
+
+/** Formulário de anexo (novo) ou edição de dados (ed = documento atual). */
+function formDocSST(el, ctx, i, ed, depois) {
+  const iso = d => { if (!d) return ''; const [a, b, y] = d.split('/'); return `${y}-${b}-${a}`; };
+  let arq = null;
+  const sits = (est.sst && est.sst.listas.situacoes) || ['Positiva', 'Pendência', 'Revisão pendente'];
+  el.innerHTML = `<label class="rotulo" style="margin-top:0">Arquivo (PDF ou foto)${ed ? ', só se quiser trocar' : ''}</label>
+    <div class="grade"><label class="acao leve" for="fPdf" style="cursor:pointer;margin:0">${ic('os')} PDF ou arquivo</label><label class="acao leve" for="fCam" style="cursor:pointer;margin:0">${ic('camera')} Câmera</label></div>
+    <input id="fPdf" type="file" accept="application/pdf,image/*" class="oculto"><input id="fCam" type="file" accept="image/*" capture="environment" class="oculto">
+    <p class="suave" id="fNome" style="margin:6px 0 0">${ed ? 'Mantém o arquivo atual.' : 'Nenhum arquivo escolhido.'}</p>
+    ${i.controle !== 'Sem validade' ? `<div class="grade"><div><label class="rotulo" for="fEmi">Data de emissão</label><input class="campo-txt" id="fEmi" type="date" value="${ed ? iso(ed.emissao) : ''}"></div>
+      <div><label class="rotulo" for="fVal">Validade</label><input class="campo-txt" id="fVal" type="date" value="${ed ? iso(ed.validadeInformada) : ''}"></div></div>
+      <p class="suave" style="margin-top:6px;font-size:14px">Se a validade não estiver impressa no documento, deixe em branco: o app calcula pela emissão.</p>`
+      : `<label class="rotulo" for="fEmi">Data de emissão (opcional)</label><input class="campo-txt" id="fEmi" type="date" value="${ed ? iso(ed.emissao) : ''}">`}
+    <label class="rotulo">Situação (opcional)</label>${chips('fSit', sits, ed ? ed.situacao : '')}
+    <p class="suave" style="margin-top:6px;font-size:14px">Use para certidão positiva, pendência a resolver ou documento que precisa de revisão (ex.: endereço antigo).</p>
+    <label class="rotulo" for="fObs">Observação</label><input class="campo-txt" id="fObs" value="${ed ? esc(ed.obs) : ''}">
+    <button type="button" class="acao" id="fSalvar">${ic('ok')} ${ed ? 'Salvar alterações' : 'Salvar documento'}</button>`;
+  let sit = ed ? ed.situacao : '';
+  document.querySelectorAll('#fSit [data-v]').forEach(b => b.onclick = () => { const on = !b.classList.contains('sel'); document.querySelectorAll('#fSit [data-v]').forEach(x => x.classList.remove('sel')); if (on) b.classList.add('sel'); sit = on ? b.dataset.v : ''; sujo = true; });
+  const pegar = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 20e6) return erroTela('Arquivo acima de 20 MB. Reduza o PDF antes de anexar.');
+    arq = f.type.startsWith('image/') ? await comprimir(f, 2000, 0.82) : await new Promise((ok, er) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => er(new Error('Não foi possível ler o arquivo.')); r.readAsDataURL(f); });
+    document.getElementById('fNome').textContent = `Escolhido: ${f.name || 'foto da câmera'} (${(f.size / 1e6).toFixed(1).replace('.', ',')} MB)`;
+  };
+  document.getElementById('fPdf').onchange = pegar; document.getElementById('fCam').onchange = pegar;
+  document.getElementById('fSalvar').onclick = () => executar(async () => {
+    const v = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+    if (!ed && !arq) throw new Error('Escolha o arquivo do documento.');
+    await api('salvarDocSST', { n: ed ? ed.n : '', codigo: i.codigo, colaborador: ctx.colaborador || '', emissao: v('fEmi'), validade: v('fVal'), situacao: sit, obs: v('fObs'), arquivo: arq });
+    sujo = false; depois();
+  });
+}
+
+/** Abre o arquivo: administração baixa/abre o original; colaborador só visualiza no app, com marca d'água. */
+async function verArquivoSST(n) {
+  const w = est.usuario.perfil === 'Administrador' ? window.open('', '_blank') : null;
+  if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Abrindo o documento…</p>');
+  await executar(async () => {
+    try {
+      const r = await api('arquivoSST', { n });
+      const bytes = Uint8Array.from(atob(r.base64), c => c.charCodeAt(0));
+      if (r.podeBaixar) {
+        const url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
+        if (w) w.location.href = url; else window.open(url, '_blank');
+        return;
+      }
+      await visualizadorProtegido(r, bytes);
+    } catch (e) { if (w) w.close(); throw e; }
+  });
+}
+
+/** Visualização sem download: páginas desenhadas em canvas com marca d'água (nome, data e hora). */
+async function visualizadorProtegido(r, bytes) {
+  const marca = `${est.usuario.nome} · ${new Date().toLocaleString('pt-BR')} · Uso interno Kiton`;
+  let ov = document.getElementById('visor');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'visor'; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="visor-cab"><b>${esc(r.titulo)}</b><button type="button" class="icone-btn" id="visorX" aria-label="Fechar"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div class="visor-corpo" id="visorCorpo"><p class="suave" style="color:#fff">Carregando…</p></div>`;
+  ov.classList.remove('oculto'); document.body.style.overflow = 'hidden';
+  ov.oncontextmenu = e => e.preventDefault();
+  document.getElementById('visorX').onclick = () => { ov.classList.add('oculto'); ov.innerHTML = ''; document.body.style.overflow = ''; };
+  const corpo = document.getElementById('visorCorpo');
+  const largura = Math.min(window.innerWidth - 16, 900) * (window.devicePixelRatio || 1);
+  const marcar = c => {
+    const g = c.getContext('2d'); g.save(); g.translate(c.width / 2, c.height / 2); g.rotate(-Math.PI / 6);
+    g.font = `${Math.round(c.width / 28)}px sans-serif`; g.fillStyle = 'rgba(200,0,0,.22)'; g.textAlign = 'center';
+    for (let y = -c.height; y < c.height; y += c.width / 5) g.fillText(marca, 0, y);
+    g.restore();
+  };
+  const novoCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.style.width = '100%'; c.style.marginBottom = '10px'; c.style.background = '#fff'; return c; };
+  corpo.innerHTML = '';
+  if (r.mime.startsWith('image/')) {
+    const img = await new Promise((ok, er) => { const im = new Image(); im.onload = () => ok(im); im.onerror = er; im.src = URL.createObjectURL(new Blob([bytes], { type: r.mime })); });
+    const k = largura / img.width, c = novoCanvas(largura, img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src); marcar(c); corpo.appendChild(c); return;
+  }
+  if (!window.pdfjsLib) { await carregarScript('lib/pdf.min.js'); pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js'; }
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const pg = await pdf.getPage(p), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: largura / v1.width });
+    const c = novoCanvas(vp.width, vp.height);
+    await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    marcar(c); corpo.appendChild(c);
+  }
+}
+
+function telaTiposSST(aviso) {
+  topo('Gestão SST');
+  const r = est.sst;
+  $app.innerHTML = `<h1>Tipos de documento</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div>
+    <p class="suave">Defina quais documentos o app controla, a validade e de quem são exigidos.</p>
+    <button type="button" class="acao" id="tNovo" style="margin-top:0">${ic('ok')} Novo tipo de documento</button>
+    ${['Empresa', 'Colaborador'].map(e => `<h2>${e === 'Empresa' ? 'Empresa' : 'Colaboradores'}</h2>` + r.tipos.filter(t => t.escopo === e).map(t => `<button type="button" class="linha" data-t="${esc(t.codigo)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(t.doc)}</b>
+      <small>${esc(t.codigo)} · ${esc(t.categoria)} · ${esc(t.controle)}${t.meses ? ' (' + t.meses + ' meses)' : ''}${e === 'Colaborador' ? ' · ' + esc(t.aplica) : ''}${t.bloqueia ? ' · bloqueia OS' : ''}${t.sensivel ? ' · restrito' : ''}${t.ativo ? '' : ' · inativo'}</small></span><span class="fim">${ic('seta')}</span></button>`).join('')).join('')}`;
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Documentos gerais</button></div>`);
+  document.getElementById('ant').onclick = () => telaAdmin('seg', 'empresa');
+  document.getElementById('tNovo').onclick = () => telaTipoForm(null);
+  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => telaTipoForm(r.tipos.find(t => t.codigo === b.dataset.t)));
+}
+
+function telaTipoForm(t) {
+  topo('Gestão SST');
+  const L = est.sst.listas;
+  t = t || { escopo: 'Colaborador', controle: 'Vencimento', aplica: 'Opcional', pacote: true, ativo: true };
+  const f = { escopo: t.escopo, controle: t.controle, aplica: t.aplica, bloqueia: t.bloqueia || '' };
+  $app.innerHTML = `<h1>${t.codigo ? 'Editar tipo' : 'Novo tipo de documento'}</h1><div id="erro"></div>
+    <label class="rotulo" for="xDoc">Nome do documento</label><input class="campo-txt" id="xDoc" value="${esc(t.doc || '')}">
+    <label class="rotulo" for="xCat">Categoria</label><input class="campo-txt" id="xCat" value="${esc(t.categoria || '')}" list="xCats"><datalist id="xCats">${[...new Set(est.sst.tipos.map(x => x.categoria))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>
+    ${t.codigo ? '' : `<label class="rotulo">De quem é</label>${chips('xEsc', ['Empresa', 'Colaborador'], f.escopo)}`}
+    <label class="rotulo">Controle</label>${chips('xCtl', L.controles, f.controle)}
+    <label class="rotulo" for="xMes">Validade padrão (meses)</label><input class="campo-txt" id="xMes" type="number" min="0" value="${t.meses || ''}" placeholder="Deixe em branco se a validade vem impressa">
+    <div id="xColab"><label class="rotulo">Exigido de</label>${chips('xApl', L.aplica, f.aplica)}
+      <label class="rotulo">Bloqueia OS quando vencido</label>${chips('xBlq', ['Não', ...L.bloqueios], f.bloqueia || 'Não')}</div>
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="xSen" ${t.sensivel ? 'checked' : ''} style="width:22px;height:22px"> Acesso restrito (saúde ou dado pessoal; nunca vai no pacote)</label>
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="xPac" ${t.pacote ? 'checked' : ''} style="width:22px;height:22px"> Vai no pacote para o cliente</label>
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="xAti" ${t.ativo ? 'checked' : ''} style="width:22px;height:22px"> Ativo</label>
+    <label class="rotulo" for="xObs">Observações</label><input class="campo-txt" id="xObs" value="${esc(t.obs || '')}">`;
+  const vis = () => document.getElementById('xColab').classList.toggle('oculto', f.escopo !== 'Colaborador');
+  if (!t.codigo) ligarChips('xEsc', v => { f.escopo = v; vis(); });
+  ligarChips('xCtl', v => f.controle = v); ligarChips('xApl', v => f.aplica = v); ligarChips('xBlq', v => f.bloqueia = v === 'Não' ? '' : v); vis();
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar</button></div>`);
+  document.getElementById('ant').onclick = () => telaTiposSST();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const g = id => document.getElementById(id);
+    await api('salvarTipoSST', { tipo: { codigo: t.codigo || '', doc: g('xDoc').value, categoria: g('xCat').value, escopo: f.escopo, controle: f.controle, meses: g('xMes').value,
+      aplica: f.aplica, bloqueia: f.bloqueia, sensivel: g('xSen').checked, pacote: g('xPac').checked, ativo: g('xAti').checked, obs: g('xObs').value } });
+    sujo = false; est.sst = await api('sstPainel'); telaTiposSST('Tipo salvo.');
+  });
+}
+
+/** Pacote de documentos para o cliente: capa + documentos em um PDF só, montado no celular. */
+function telaPacoteSST(pre) {
+  topo('Gestão SST');
+  const pessoas = (est.sst && est.sst.pessoas) || [];
+  $app.innerHTML = `<h1>Pacote de documentos</h1><div id="erro"></div>
+    <p class="suave">Gera um PDF único com capa e os documentos atuais, na ordem. Exames complementares e documentos pessoais nunca entram.</p>
+    <label class="rotulo" for="kCli">Para quem (opcional)</label><input class="campo-txt" id="kCli" placeholder="Ex.: Integração de segurança - Cliente X">
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="kEmp" checked style="width:22px;height:22px"> Documentos gerais da empresa</label>
+    <label class="rotulo">Colaboradores</label>
+    ${pessoas.map(p => `<label class="linha" style="font-weight:500"><input type="checkbox" data-pp="${esc(p.nome)}" ${pre.includes(p.nome) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(p.nome)}</label>`).join('')}
+    <p class="suave" id="kProg"></p>`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('os')} Gerar PDF</button></div>`);
+  document.getElementById('ant').onclick = () => pre.length === 1 ? telaPessoaSST(pre[0]) : telaAdmin('seg', 'painel');
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const sel = [...document.querySelectorAll('[data-pp]')].filter(c => c.checked).map(c => c.dataset.pp);
+    const emp = document.getElementById('kEmp').checked;
+    if (!emp && !sel.length) throw new Error('Marque a empresa ou pelo menos um colaborador.');
+    const prog = t => { document.getElementById('kProg').textContent = t; };
+    prog('Preparando a capa…');
+    const r = await api('pacoteSST', { empresa: emp, pessoas: sel, cliente: document.getElementById('kCli').value });
+    if (!window.PDFLib) await carregarScript('lib/pdf-lib.min.js');
+    const { PDFDocument } = PDFLib;
+    const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+    const out = await PDFDocument.create();
+    const juntar = async bytes => { const src = await PDFDocument.load(bytes, { ignoreEncryption: true }); (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p)); };
+    await juntar(b64(r.capa));
+    const falhas = [];
+    for (let k = 0; k < r.lista.length; k++) {
+      const d = r.lista[k]; prog(`Juntando ${k + 1} de ${r.lista.length}: ${d.titulo}`);
+      try {
+        const a = await api('arquivoSST', { n: d.n }), bytes = b64(a.base64);
+        if (a.mime === 'application/pdf') await juntar(bytes);
+        else {
+          const img = a.mime === 'image/png' ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+          const pg = out.addPage([595.28, 841.89]), k2 = Math.min(555 / img.width, 800 / img.height);
+          pg.drawImage(img, { x: (595.28 - img.width * k2) / 2, y: (841.89 - img.height * k2) / 2, width: img.width * k2, height: img.height * k2 });
+        }
+      } catch (e) { falhas.push(d.titulo); }
+    }
+    const url = URL.createObjectURL(new Blob([await out.save()], { type: 'application/pdf' }));
+    const a = document.createElement('a'); a.href = url; a.download = `Pacote de documentos Kiton - ${hojeISO()}.pdf`; document.body.appendChild(a); a.click(); a.remove();
+    prog(''); document.getElementById('erro').innerHTML = msg(falhas.length ? 'erro' : 'ok', falhas.length ? `PDF gerado, mas ${falhas.length} documento(s) não puderam ser juntados: ${falhas.join('; ')}.` : `PDF gerado com ${r.lista.length} documento(s) e capa.`);
+  });
+}
+
+/** Aba "Documentos" do colaborador: só consulta, visualização protegida. */
+async function meusDocumentos(box) {
+  await executar(async () => {
+    const r = await api('sstDocs', { escopo: 'Colaborador' });
+    const g = porCategoria(r.itens);
+    box.innerHTML = `<p class="suave">Seus documentos de segurança e saúde, com a validade. Toque em Visualizar para conferir. Algo errado ou vencendo? Fale com a administração.</p>
+      <p>${resumoSSTtxt(r.resumo)}</p>` + Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => `<div class="cartao"><div class="t">${esc(i.doc)}</div>
+        <p style="margin:6px 0">${seloSST(i.st)}</p>${i.atual ? `<button type="button" class="link" data-ver="${esc(i.atual.n)}">Visualizar</button>` : ''}</div>`).join('')).join('');
+    box.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => verArquivoSST(b.dataset.ver));
   });
 }
 
