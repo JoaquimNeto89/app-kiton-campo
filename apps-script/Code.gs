@@ -2269,7 +2269,7 @@ function situacaoSST_(tipo, d, exigido) {
   if (!v) return { cor: 'verde', texto: tipo && tipo.controle === 'Sem validade' ? 'Em dia (sem validade)' : 'Em dia', chave: 'ok', dias: null, validade: '' };
   if (tipo && tipo.controle === 'Sob demanda' && dias < 0) return { cor: 'cinza', texto: 'Emitir de novo quando solicitado', chave: 'demanda', dias, validade: dia_(v) };
   if (dias < 0) return { cor: 'vermelho', texto: 'Vencido em ' + dia_(v), chave: 'vencido', dias, validade: dia_(v) };
-  if (dias <= SST_AVISO_DIAS) return { cor: 'laranja', texto: dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + (dias === 1 ? ' dia' : ' dias'), chave: 'vencendo', dias, validade: dia_(v) };
+  if (dias <= SST_AVISO_DIAS && !(tipo && tipo.controle === 'Sob demanda')) return { cor: 'laranja', texto: dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + (dias === 1 ? ' dia' : ' dias'), chave: 'vencendo', dias, validade: dia_(v) };
   return { cor: 'verde', texto: 'Válido até ' + dia_(v), chave: 'ok', dias, validade: dia_(v) };
 }
 
@@ -2353,7 +2353,7 @@ function salvarDocSST_(u, req) {
     const ext = mime === 'application/pdf' ? '.pdf' : mime === 'image/png' ? '.png' : '.jpg';
     const base = (escopo === 'Empresa' ? '' : nome + ' - ') + tipo.doc + (emissao ? ' - ' + Utilities.formatDate(emissao, TZ, 'yyyy-MM-dd') : '');
     bl.setName(base.replace(/[\\/:*?"<>|]/g, '-') + ext);
-    const pasta = escopo === 'Empresa' ? pasta_(['Kiton Hub', 'Gestão SST', 'Empresa']) : pasta_(['Kiton Hub', 'Gestão SST', 'Colaboradores', nome]);
+    const pasta = pasta_(['Kiton Hub - Gestão SST', escopo === 'Empresa' ? 'Empresa' : nome]);
     arquivo = pasta.createFile(bl).getId();
   }
   if (n) {
