@@ -2289,10 +2289,19 @@ function emprestar_(u, req) {
   try {
     const pdf = docEmprestimo_(n);
     const assunto = 'Termo de empréstimo nº ' + n + ' | ' + parc.nome + ' | Kiton Engenharia Integrada';
+    const brl = v => Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const lin = (k, v) => v ? '<tr><td style="padding:3px 12px 3px 0;color:#5d6670;vertical-align:top">' + k + '</td><td style="padding:3px 0">' + esc_(v) + '</td></tr>' : '';
+    const td = 'padding:5px 8px;border-bottom:1px solid #e3e6ea;font-size:13px';
     const corpo = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1c1f23">' +
       '<p>Olá!</p><p>Eu sou o KAI, o assistente inteligente da Kiton Engenharia Integrada.</p>' +
-      '<p>Esta é uma mensagem automática com a cópia assinada do termo de empréstimo nº ' + n + '. Itens: ' + itens.length + ' · valor de reposição total: R$ ' +
-      total.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' · devolução prevista: <b>' + dia_(prev) + '</b>.</p>' +
+      '<p>Esta é uma mensagem automática com a cópia assinada do termo de empréstimo nº ' + n + '. Abaixo, o resumo; o termo completo segue em anexo.</p>' +
+      '<table style="border-collapse:collapse;font-size:14px;margin:6px 0 10px">' + lin('Parceiro', parc.nome + (parc.empresa && parc.empresa !== parc.nome ? ' · ' + parc.empresa : '')) +
+      (outra ? lin('Retirado por', txt_(req.retiradoPor)) : '') + lin('Responsável pela entrega', resp.nome) + lin('Data', Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm')) +
+      '<tr><td style="padding:3px 12px 3px 0;color:#5d6670">Devolução prevista</td><td style="padding:3px 0"><b>' + dia_(prev) + '</b></td></tr></table>' +
+      '<table style="border-collapse:collapse;width:100%;max-width:620px;margin:4px 0 6px"><tr style="background:#f3f4f6">' +
+      '<th style="' + td + ';text-align:left;border-bottom:2px solid #1c1f23">Código</th><th style="' + td + ';text-align:left;border-bottom:2px solid #1c1f23">Item</th><th style="' + td + ';text-align:right;border-bottom:2px solid #1c1f23;white-space:nowrap">Valor de reposição</th></tr>' +
+      itens.map(i => '<tr><td style="' + td + ';white-space:nowrap">' + esc_(i.pat) + '</td><td style="' + td + '">' + esc_(i.desc) + (i.marca ? '<br><span style="color:#5d6670;font-size:12px">' + esc_(i.marca) + '</span>' : '') + '</td><td style="' + td + ';text-align:right;white-space:nowrap">R$ ' + brl(i.valor) + '</td></tr>').join('') +
+      '<tr><td colspan="2" style="' + td + ';font-weight:bold;border-bottom:none">Total (' + itens.length + (itens.length === 1 ? ' item' : ' itens') + ')</td><td style="' + td + ';text-align:right;font-weight:bold;border-bottom:none;white-space:nowrap">R$ ' + brl(total) + '</td></tr></table>' +
       '<p>Em caso de dúvida, responda este e-mail.</p>' + assinaturaEmail_() + '</div>';
     const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Engenharia Integrada', replyTo: EMAIL_KITON,
       inlineImages: { logoKiton: Utilities.newBlob(Utilities.base64Decode(LOGO_B64), 'image/png', 'logo-kiton.png') } };
