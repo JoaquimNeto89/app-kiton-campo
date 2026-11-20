@@ -55,8 +55,8 @@ const CAB = {
     'Próxima troca', 'Situação', 'Devolvido em', 'Observações'],
   'SST - Tipos de documento': ['Código', 'Documento', 'Categoria', 'Escopo', 'Controle', 'Validade (meses)', 'Aplica a', 'Bloqueia OS', 'Sensível', 'Vai no pacote', 'Ativo', 'Ordem', 'Observações'],
   'SST - Documentos': ['Nº', 'Escopo', 'Colaborador', 'Código do tipo', 'Documento', 'Emissão', 'Validade', 'Situação informada', 'Arquivo', 'Tipo do arquivo', 'Observações', 'Registrado por', 'Registrado em', 'Atual'],
-  'Parceiros': ['Nome', 'Empresa', 'CPF/CNPJ', 'Telefone', 'Ativo', 'Observações'],
-  'Empréstimos': ['Nº', 'Data', 'Parceiro', 'Empresa', 'Documento do parceiro', 'Retirado por', 'Documento de quem retirou', 'Itens', 'Valor total (R$)', 'Previsão de devolução', 'Assinatura', 'Foto da saída', 'Registrado por', 'Situação', 'Devolvido em', 'Resultado da devolução', 'Foto da devolução', 'Recebido por', 'Observações'],
+  'Parceiros': ['Nome', 'Empresa', 'CPF/CNPJ', 'Telefone', 'E-mail', 'Ativo', 'Observações'],
+  'Empréstimos': ['Nº', 'Data', 'Parceiro', 'Empresa', 'Documento do parceiro', 'E-mail do parceiro', 'Retirado por', 'Documento de quem retirou', 'Itens', 'Valor total (R$)', 'Previsão de devolução', 'Assinatura', 'Responsável pela entrega', 'Assinatura do responsável', 'Foto da saída', 'Registrado por', 'Situação', 'Devolvido em', 'Resultado da devolução', 'Foto da devolução', 'Recebido por', 'E-mails enviados', 'Observações'],
   'Termos de ferramentas': ['Nº', 'Data', 'Colaborador', 'Itens', 'Quantidade de itens', 'Valor total (R$)', 'Assinatura', 'Registrado por', 'Lat.', 'Long.'],
   'Despesas': ['Nº', 'Data', 'Colaborador', 'Categoria', 'Valor (R$)', 'Pagamento', 'Cliente / obra', 'Descrição', 'Comprovante',
     'Saída vinculada', 'Lançado em', 'Situação', 'Conferido por', 'Data da conferência', 'Motivo da recusa', 'Reembolsado em']
@@ -131,10 +131,10 @@ function rotear_(req) {
     case 'docPDF': return docPDF_(u, req);
     // gestão SST: documentos
     case 'sstPainel': exigirAdmin_(u); return sstPainel_();
-    case 'emprestimos': exigirAdmin_(u); return emprestimos_();
-    case 'emprestar': exigirAdmin_(u); return comTrava_(() => emprestar_(u, req));
-    case 'devolverEmprestimo': exigirAdmin_(u); return comTrava_(() => devolverEmprestimo_(u, req));
-    case 'salvarParceiro': exigirAdmin_(u); return comTrava_(() => salvarParceiro_(req));
+    case 'emprestimos': exigirEmp_(u); return emprestimos_();
+    case 'emprestar': exigirEmp_(u); return comTrava_(() => emprestar_(u, req));
+    case 'devolverEmprestimo': exigirEmp_(u); return comTrava_(() => devolverEmprestimo_(u, req));
+    case 'salvarParceiro': exigirEmp_(u); return comTrava_(() => salvarParceiro_(req));
     case 'sstDocs': return sstDocs_(u, req);
     case 'salvarDocSST': exigirAdmin_(u); return comTrava_(() => salvarDocSST_(u, req));
     case 'excluirDocSST': exigirAdmin_(u); return comTrava_(() => excluirDocSST_(u, req));
@@ -451,6 +451,7 @@ function inicio_(u) {
     meusTreinos: (() => { const d = treinamentos_()[u.nome] || {}; return TREINOS.map(([k]) => ({ k, venc: d[k] ? dia_(d[k]) : '', dias: diasAte_(d[k]) }))
       .filter(x => x.dias !== null && x.dias <= AVISO_TREINO_DIAS); })(),
     meusDocs: meusDocsSST_(u),
+    podeEmprestar: (() => { try { return responsaveisEmp_().some(r => r.nome === u.nome); } catch (e) { return false; } })(),
     categoriasDespesa: lista_('Categoria de despesa'),
     pagamentosDespesa: lista_('Pagamento de despesa')
   };
@@ -2174,7 +2175,8 @@ function docLista_(tipo) {
 function docPDF_(u, req) {
   const doc = txt_(req.doc), nome = txt_(req.colaborador) || u.nome;
   const admin = u.perfil === 'Administrador';
-  if (!admin && (['termo', 'ficha'].indexOf(doc) < 0 || nome !== u.nome)) throw new Error('Você só pode abrir os seus documentos.');
+  if (doc === 'emprestimo') exigirEmp_(u);
+  else if (!admin && (['termo', 'ficha'].indexOf(doc) < 0 || nome !== u.nome)) throw new Error('Você só pode abrir os seus documentos.');
   const pdf = doc === 'termo' ? docTermo_(nome) : doc === 'ficha' ? docFichaEPI_(nome) : doc === 'epc' ? docLista_('epc') : doc === 'coletivas' ? docLista_('coletivas') : doc === 'emprestimo' ? docEmprestimo_(req.n) : null;
   if (!pdf) throw new Error('Documento desconhecido.');
   const link = pasta_(['Kiton Hub', 'Documentos emitidos', Utilities.formatDate(new Date(), TZ, 'yyyy-MM')]).createFile(pdf).getUrl();
@@ -2192,7 +2194,7 @@ function parceiros_() {
   const t = ler_(ABA_PARC);
   if (!t.linhas.length) { PARCEIROS_PADRAO.forEach(p => anexar_(t, { 'Nome': p[0], 'Empresa': p[1], 'Ativo': 'Sim' })); return parceiros_(); }
   return t.linhas.filter(l => txt_(l.get('Nome')) && txt_(l.get('Ativo')) !== 'Não').map(l => ({
-    nome: txt_(l.get('Nome')), empresa: txt_(l.get('Empresa')), doc: txt_(l.get('CPF/CNPJ')), fone: txt_(l.get('Telefone')), obs: txt_(l.get('Observações'))
+    nome: txt_(l.get('Nome')), empresa: txt_(l.get('Empresa')), doc: txt_(l.get('CPF/CNPJ')), fone: txt_(l.get('Telefone')), email: txt_(l.get('E-mail')), obs: txt_(l.get('Observações'))
   })).sort((a, b) => a.nome.localeCompare(b.nome));
 }
 
@@ -2201,12 +2203,19 @@ function salvarParceiro_(req) {
   const nome = txt_(p.nome);
   if (!nome) throw new Error('Informe o nome do parceiro.');
   const t = ler_(ABA_PARC);
-  const vals = { 'Nome': nome, 'Empresa': txt_(p.empresa), 'CPF/CNPJ': txt_(p.doc), 'Telefone': txt_(p.fone), 'Observações': txt_(p.obs), 'Ativo': p.ativo === false ? 'Não' : 'Sim' };
+  if (txt_(p.email) && !emailValido_(p.email)) throw new Error('E-mail do parceiro inválido.');
+  const vals = { 'Nome': nome, 'Empresa': txt_(p.empresa), 'CPF/CNPJ': txt_(p.doc), 'Telefone': txt_(p.fone), 'E-mail': txt_(p.email), 'Observações': txt_(p.obs), 'Ativo': p.ativo === false ? 'Não' : 'Sim' };
   const l = t.linhas.find(x => txt_(x.get('Nome')).toLowerCase() === txt_(p.original || nome).toLowerCase());
   if (l) Object.keys(vals).forEach(k => set_(t, l._linha, k, vals[k])); else anexar_(t, vals);
   return { ok: true };
 }
 
+/** Quem pode registrar empréstimo e devolução: administradores e quem estiver marcado em Colaboradores. */
+function responsaveisEmp_() {
+  return ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim' && (txt_(l.get('Perfil')) === 'Administrador' || txt_(l.get('Pode emprestar ferramentas')) === 'Sim'))
+    .map(l => ({ nome: txt_(l.get('Nome')), email: txt_(l.get('E-mail')), admin: txt_(l.get('Perfil')) === 'Administrador' }));
+}
+function exigirEmp_(u) { if (!responsaveisEmp_().some(r => r.nome === u.nome)) throw new Error('Você não tem permissão para registrar empréstimos.'); }
 const empItens_ = l => { try { return JSON.parse(txt_(l.get('Itens')) || '[]'); } catch (e) { return []; } };
 function empOut_(l) {
   const prev = data_(l.get('Previsão de devolução')), sit = txt_(l.get('Situação')) || 'Emprestado';
@@ -2215,7 +2224,8 @@ function empOut_(l) {
   return { n: txt_(l.get('Nº')), data: fmt_(l.get('Data')), parceiro: txt_(l.get('Parceiro')), empresa: txt_(l.get('Empresa')), docParceiro: txt_(l.get('Documento do parceiro')),
     retiradoPor: txt_(l.get('Retirado por')), docRetirada: txt_(l.get('Documento de quem retirou')), itens: empItens_(l), total: Number(l.get('Valor total (R$)')) || 0,
     previsao: dia_(prev), dias, atrasado: sit === 'Emprestado' && dias !== null && dias < 0, situacao: sit, devolvidoEm: fmt_(l.get('Devolvido em')),
-    resultado: res, recebidoPor: txt_(l.get('Recebido por')), obs: txt_(l.get('Observações')), por: txt_(l.get('Registrado por')), linha: l._linha };
+    resultado: res, recebidoPor: txt_(l.get('Recebido por')), obs: txt_(l.get('Observações')), por: txt_(l.get('Registrado por')),
+    responsavel: txt_(l.get('Responsável pela entrega')) || txt_(l.get('Registrado por')), emailParceiro: txt_(l.get('E-mail do parceiro')), enviados: txt_(l.get('E-mails enviados')), linha: l._linha };
 }
 
 function emprestimos_() {
@@ -2224,7 +2234,8 @@ function emprestimos_() {
   const disponiveis = ler_(ABA.itens).linhas.filter(l => txt_(l.get('Patrimônio')) && (txt_(l.get('Situação')) || 'Disponível') === 'Disponível' && txt_(l.get('Uso')) !== 'Individual')
     .map(l => ({ pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), tipo: txt_(l.get('Tipo')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
       valor: Number(l.get('Valor de reposição (R$)')) || 0 }));
-  return { ok: true, abertos: lista.filter(e => e.situacao === 'Emprestado'), historico: lista.filter(e => e.situacao !== 'Emprestado').slice(0, 60), parceiros: parceiros_(), disponiveis };
+  return { ok: true, abertos: lista.filter(e => e.situacao === 'Emprestado'), historico: lista.filter(e => e.situacao !== 'Emprestado').slice(0, 60), parceiros: parceiros_(), disponiveis,
+    responsaveis: responsaveisEmp_().map(r => r.nome) };
 }
 
 function pendenciasEmprestimo_() {
@@ -2240,6 +2251,12 @@ function emprestar_(u, req) {
   if (!prev || isNaN(prev)) throw new Error('Informe a previsão de devolução.');
   if (diasAte_(prev) < 0) throw new Error('A previsão de devolução não pode ser no passado.');
   if (!txt_(req.assinatura)) throw new Error('Quem está retirando precisa assinar na tela.');
+  const resp = responsaveisEmp_().find(r => r.nome === txt_(req.responsavel));
+  if (!resp) throw new Error('Escolha o responsável pela entrega.');
+  if (!txt_(req.assResp)) throw new Error('O responsável pela entrega precisa assinar na tela.');
+  const emailP = txt_(req.email);
+  if (emailP && !emailValido_(emailP)) throw new Error('E-mail do parceiro inválido.');
+  if (emailP && emailP !== parc.email) salvarParceiro_({ parceiro: Object.assign({}, parc, { email: emailP, original: parc.nome }) });
   const outra = !!req.outraPessoa;
   if (outra && (!txt_(req.retiradoPor) || !txt_(req.docRetirada))) throw new Error('Informe o nome e o documento de quem está retirando.');
   const ti = ler_(ABA.itens);
@@ -2257,14 +2274,35 @@ function emprestar_(u, req) {
   const n = String(proximoNumero_(t, 'Nº'));
   const pasta = pasta_(['Kiton Hub', 'Empréstimos', n + ' - ' + parc.nome]);
   const ass = salvarImagem_(pasta, req.assinatura, 'image/png', 'Assinatura retirada.png');
+  const assR = salvarImagem_(pasta, req.assResp, 'image/png', 'Assinatura responsavel.png');
   const foto = req.foto ? salvarImagem_(pasta, req.foto, 'image/jpeg', 'Foto saída.jpg') : '';
   const total = itens.reduce((s, i) => s + i.valor, 0);
-  anexar_(t, { 'Nº': n, 'Data': new Date(), 'Parceiro': parc.nome, 'Empresa': parc.empresa, 'Documento do parceiro': parc.doc,
+  anexar_(t, { 'Nº': n, 'Data': new Date(), 'Parceiro': parc.nome, 'Empresa': parc.empresa, 'Documento do parceiro': parc.doc, 'E-mail do parceiro': emailP,
+    'Responsável pela entrega': resp.nome, 'Assinatura do responsável': assR,
     'Retirado por': outra ? txt_(req.retiradoPor) : parc.nome, 'Documento de quem retirou': outra ? txt_(req.docRetirada) : parc.doc,
     'Itens': JSON.stringify(itens.map(i => ({ pat: i.pat, desc: i.desc, marca: i.marca, serie: i.serie, ident: i.ident, marcacao: i.marcacao, valor: i.valor }))),
     'Valor total (R$)': total, 'Previsão de devolução': prev, 'Assinatura': ass, 'Foto da saída': foto, 'Registrado por': u.nome, 'Situação': 'Emprestado', 'Observações': txt_(req.obs) });
   itens.forEach(i => set_(ti, i.l._linha, 'Situação', 'Emprestado'));
-  return { ok: true, n };
+  // cópia assinada: contato@ sempre; parceiro, se tiver e-mail; responsável, se não for administrador (os administradores leem o contato@)
+  const dest = [emailP].concat(!resp.admin && emailValido_(resp.email) ? [resp.email] : []).filter(Boolean);
+  let enviados = '';
+  try {
+    const pdf = docEmprestimo_(n);
+    const assunto = 'Termo de empréstimo nº ' + n + ' | ' + parc.nome + ' | Kiton Engenharia Integrada';
+    const corpo = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1c1f23">' +
+      '<p>Olá!</p><p>Eu sou o KAI, o assistente inteligente da Kiton Engenharia Integrada.</p>' +
+      '<p>Esta é uma mensagem automática com a cópia assinada do termo de empréstimo nº ' + n + '. Itens: ' + itens.length + ' · valor de reposição total: R$ ' +
+      total.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' · devolução prevista: <b>' + dia_(prev) + '</b>.</p>' +
+      '<p>Em caso de dúvida, responda este e-mail.</p>' + assinaturaEmail_() + '</div>';
+    const opc = { htmlBody: corpo, attachments: [pdf], name: 'Kiton Engenharia Integrada', replyTo: EMAIL_KITON,
+      inlineImages: { logoKiton: Utilities.newBlob(Utilities.base64Decode(LOGO_B64), 'image/png', 'logo-kiton.png') } };
+    if (dest.length) { opc.cc = EMAIL_KITON; MailApp.sendEmail(dest.join(','), assunto, assunto, opc); }
+    else MailApp.sendEmail(EMAIL_KITON, assunto, assunto, opc);
+    enviados = [EMAIL_KITON].concat(dest).join(', ');
+  } catch (e) { enviados = 'Falha no envio: ' + e.message; }
+  const t2 = ler_(ABA_EMP), l2 = t2.linhas.find(x => txt_(x.get('Nº')) === n);
+  if (l2) set_(t2, l2._linha, 'E-mails enviados', enviados);
+  return { ok: true, n, enviados };
 }
 
 function devolverEmprestimo_(u, req) {
@@ -2293,12 +2331,14 @@ function docEmprestimo_(n) {
   const l = ler_(ABA_EMP).linhas.find(x => txt_(x.get('Nº')) === txt_(n));
   if (!l) throw new Error('Empréstimo não encontrado.');
   const e = empOut_(l), ass = txt_(l.get('Assinatura')) ? imgDrive_(txt_(l.get('Assinatura'))) : '';
+  const assR = txt_(l.get('Assinatura do responsável')) ? imgDrive_(txt_(l.get('Assinatura do responsável'))) : '';
   const brl = v => Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const outra = e.retiradoPor && e.retiradoPor !== e.parceiro;
   const res = {}; e.resultado.forEach(r => { res[r.pat] = r.resultado; });
   const corpo = cabDoc_('TERMO DE EMPRÉSTIMO Nº ' + e.n, 'Ferramentas e equipamentos') +
     '<table class="d"><tr><td class="r">Parceiro</td><td>' + esc_(e.parceiro) + (e.empresa && e.empresa !== e.parceiro ? ' · ' + esc_(e.empresa) : '') + '</td></tr>' +
     '<tr><td class="r">CPF / CNPJ</td><td>' + (e.docParceiro ? esc_(e.docParceiro) : '______________________________') + '</td></tr>' +
+    (e.emailParceiro ? '<tr><td class="r">E-mail</td><td>' + esc_(e.emailParceiro) + '</td></tr>' : '') +
     (outra ? '<tr><td class="r">Retirado por</td><td>' + esc_(e.retiradoPor) + ' · documento ' + esc_(e.docRetirada) + '</td></tr>' : '') +
     '<tr><td class="r">Data do empréstimo</td><td>' + esc_(e.data) + '</td></tr><tr><td class="r">Devolução prevista</td><td><b>' + esc_(e.previsao) + '</b></td></tr>' +
     '<tr><td class="r">Comodante</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>' +
@@ -2313,7 +2353,8 @@ function docEmprestimo_(n) {
     (outra ? ' A retirada foi feita por ' + esc_(e.retiradoPor) + ', em nome e sob responsabilidade de ' + esc_(e.parceiro) + '.' : '') + '</div>' +
     '<table style="width:100%;margin-top:16px;font-size:8.5pt"><tr><td style="width:48%;vertical-align:bottom">' + (ass ? '<img src="' + ass + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
     '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(e.retiradoPor || e.parceiro) + (e.docRetirada ? ' · ' + esc_(e.docRetirada) : '') + '<br>Assinado digitalmente em ' + esc_(e.data) + '</div></td><td style="width:4%"></td>' +
-    '<td style="width:48%;vertical-align:bottom"><div style="height:46px"></div><div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(e.por) + '<br>' + esc_(EMPRESA.nome) + '</div></td></tr></table></div>' +
+    '<td style="width:48%;vertical-align:bottom">' + (assR ? '<img src="' + assR + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
+    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(e.responsavel) + ' | Responsável pela entrega<br>' + esc_(EMPRESA.nome) + (assR ? ' · assinado digitalmente' : '') + '</div></td></tr></table></div>' +
     (e.situacao !== 'Emprestado' ? '<div class="bt" style="margin-top:12px">Devolução</div><p style="font-size:9pt">Recebido por ' + esc_(e.recebidoPor) + ' em ' + esc_(e.devolvidoEm) + '. Situação: <b>' + esc_(e.situacao) + '</b>.' + (e.obs ? ' ' + esc_(e.obs) : '') + '</p>' : '');
   return pdfDoc_(corpo, 'Termo de empréstimo ' + e.n + ' - ' + e.parceiro + '.pdf');
 }

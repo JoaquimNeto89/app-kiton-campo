@@ -198,6 +198,7 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 .apr-lin{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:15px}.apr-lin:last-child{border-bottom:0}.apr-lin .selo-txt{flex:none;margin:0}
 .pdfs{margin-top:4px}.pdfs .acao{margin:0;min-height:58px;font-size:15px;padding:8px 10px;gap:8px;text-decoration:none;text-align:left;justify-content:flex-start}
 .pdfs .acao small{display:block;font-weight:500;font-size:12.5px;color:var(--cinza)}
+.resumo dd{overflow-wrap:anywhere}
 .abas-rol{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.abas-rol::-webkit-scrollbar{display:none}
 .abas-rol button{flex:none;border:1.5px solid var(--borda,#cfd4da);background:#fff;border-radius:20px;padding:8px 14px;font:inherit;font-size:15px;font-weight:600;color:inherit;cursor:pointer}
 .abas-rol button.sel{background:#1c1f23;color:#fff;border-color:#1c1f23}
@@ -381,18 +382,18 @@ function abrirMenu() {
   const item = (k, icone, t, n) => `<button type="button" class="menu-it" data-menu="${k}">${ic(icone)}<span>${t}</span>${bol(n)}</button>`;
   document.getElementById('menuPainel').innerHTML = `<div class="menu-cab"><b>${esc(est.usuario.nome)}</b><button type="button" class="icone-btn" id="menuX" aria-label="Fechar o menu"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${item('inicio', 'cliente', 'Início')}${item('saidas', 'saida', 'Saídas e retornos')}${item('checkin', 'pino', 'Check-in em obra')}
-    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens e documentos')}
+    ${item('os', 'os', 'Ordem de serviço')}${item('desp', 'recibo', 'Despesas')}${item('meus', 'tabela', 'Meus itens e documentos')}${d.podeEmprestar ? item('emp', 'ferr', 'Empréstimos de ferramentas', admin ? pd.emprestimos : 0) : ''}
     ${admin ? `<div class="menu-sec">Administração</div>
       ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
       ${item('a-aprovar', 'ok', 'OS para aprovar', pd.aprovar)}${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
-      ${item('a-seg', 'admin', 'Gestão SST', (pd.apr || 0) + (pd.sst || 0) + (pd.epi || 0))}${item('a-emp', 'ferr', 'Empréstimos', pd.emprestimos)}${item('a-pres', 'pino', 'Presença em obra')}
+      ${item('a-seg', 'admin', 'Gestão SST', (pd.apr || 0) + (pd.sst || 0) + (pd.epi || 0))}${item('a-pres', 'pino', 'Presença em obra')}
       ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
     <div class="menu-sec"></div>
     <a class="menu-it" href="${esc(linkAjuda())}" target="_blank" rel="noopener" id="menuAjuda"><span class="q" style="background:#25D366">?</span><span>Ajuda e dúvidas</span></a>
     ${item('sair', 'voltar', 'Sair do app')}`;
   document.getElementById('menu').classList.remove('oculto'); document.body.style.overflow = 'hidden';
   document.getElementById('menuX').onclick = fecharMenu;
-  const acoes = { inicio: carregarInicio, saidas: telaSaidas, checkin: telaCheckin, os: telaOS, desp: telaDespesas, meus: () => telaMeusItens(),
+  const acoes = { inicio: carregarInicio, saidas: telaSaidas, checkin: telaCheckin, os: telaOS, desp: telaDespesas, meus: () => telaMeusItens(), emp: () => telaEmprestimos(),
     calib: telaCalibracao, cad: telaCadastros, sair: () => { if (confirm('Sair do app neste celular?')) sair(); } };
   document.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => {
     fecharMenu(); const k = b.dataset.menu;
@@ -969,7 +970,7 @@ async function telaAdmin(aba, sub) {
   } else if (aba === 'epi') {
     await adminEPI(box, sub);
   } else if (aba === 'emp') {
-    await adminEmprestimos(box, sub);
+    return telaEmprestimos(sub);
   } else if (aba === 'aprovar') {
     await adminAprovar(box);
   } else if (aba === 'seg') {
@@ -1607,6 +1608,12 @@ async function meusDocumentos(box) {
 }
 
 // ---------- empréstimo de ferramentas a parceiros ----------
+async function telaEmprestimos(sub, aviso) {
+  topo('Empréstimos'); voltarInicio();
+  $app.innerHTML = '<div id="conteudo"></div>';
+  document.getElementById('ini').onclick = () => carregarInicio();
+  await adminEmprestimos(document.getElementById('conteudo'), sub, aviso);
+}
 async function adminEmprestimos(box, aba, aviso) {
   aba = aba || 'abertos';
   box.innerHTML = `<h1>Empréstimos</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div>
@@ -1627,7 +1634,7 @@ async function adminEmprestimos(box, aba, aviso) {
       pBox.innerHTML = r.historico.length ? r.historico.map(cartao).join('') : msg('info', 'Nenhum empréstimo encerrado ainda.');
     } else {
       pBox.innerHTML = `<button type="button" class="acao" id="pNovoP" style="margin-top:0">${ic('pessoas')} Cadastrar parceiro</button>` +
-        r.parceiros.map(p => `<button type="button" class="linha" data-par="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b><small>${esc([p.empresa, p.doc, p.fone].filter(Boolean).join(' · ') || 'Sem documento e telefone cadastrados')}</small></span><span class="fim">${ic('seta')}</span></button>`).join('');
+        r.parceiros.map(p => `<button type="button" class="linha" data-par="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b><small>${esc([p.empresa, p.doc, p.fone, p.email].filter(Boolean).join(' · ') || 'Sem documento, telefone e e-mail cadastrados')}</small></span><span class="fim">${ic('seta')}</span></button>`).join('');
       document.getElementById('pNovoP').onclick = () => telaParceiro(null);
       pBox.querySelectorAll('[data-par]').forEach(b => b.onclick = () => telaParceiro(r.parceiros.find(p => p.nome === b.dataset.par)));
     }
@@ -1643,14 +1650,15 @@ function telaParceiro(p, depois) {
     <label class="rotulo" for="zEmp">Empresa</label><input class="campo-txt" id="zEmp" value="${esc(p.empresa || '')}">
     <label class="rotulo" for="zDoc">CPF ou CNPJ</label><input class="campo-txt" id="zDoc" value="${esc(p.doc || '')}" inputmode="numeric">
     <label class="rotulo" for="zFone">Telefone</label><input class="campo-txt" id="zFone" value="${esc(p.fone || '')}" inputmode="tel">
+    <label class="rotulo" for="zMail">E-mail (recebe a cópia do termo assinado)</label><input class="campo-txt" id="zMail" type="email" value="${esc(p.email || '')}">
     <label class="rotulo" for="zObs">Observações</label><input class="campo-txt" id="zObs" value="${esc(p.obs || '')}">
     ${ed ? `<label class="linha" style="font-weight:500"><input type="checkbox" id="zAti" checked style="width:22px;height:22px"> Ativo</label>` : ''}`;
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar</button></div>`);
-  const voltar = depois || (() => telaAdmin('emp', 'parc'));
+  const voltar = depois || (() => telaEmprestimos('parc'));
   document.getElementById('ant').onclick = () => voltar();
   document.getElementById('ok').onclick = () => executar(async () => {
     const g = id => document.getElementById(id);
-    await api('salvarParceiro', { parceiro: { original: p.nome || '', nome: g('zNome').value, empresa: g('zEmp').value, doc: g('zDoc').value, fone: g('zFone').value, obs: g('zObs').value, ativo: g('zAti') ? g('zAti').checked : true } });
+    await api('salvarParceiro', { parceiro: { original: p.nome || '', nome: g('zNome').value, empresa: g('zEmp').value, doc: g('zDoc').value, fone: g('zFone').value, email: g('zMail').value, obs: g('zObs').value, ativo: g('zAti') ? g('zAti').checked : true } });
     sujo = false; voltar(g('zNome').value.trim());
   });
 }
@@ -1658,12 +1666,14 @@ function telaParceiro(p, depois) {
 async function telaNovoEmprestimo(parcSel) {
   topo('Empréstimos');
   const r = await executar(() => api('emprestimos')); if (!r) return; est.emp = r;
-  const f = { parceiro: parcSel || '', itens: new Map(), outra: false }; let assinatura = null, tracos = 0, foto = null;
+  const f = { parceiro: parcSel || '', itens: new Map(), outra: false, resp: r.responsaveis.includes(est.usuario.nome) ? est.usuario.nome : '' };
+  let assinatura = null, tracos = 0, foto = null, assResp = null, tracosR = 0;
   const amanha = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
   $app.innerHTML = `<h1>Novo empréstimo</h1><div id="erro"></div>
     <label class="rotulo">Para quem</label>${chips('eParc', r.parceiros.map(p => p.nome), f.parceiro)}
     <button type="button" class="link" id="eNovoP" style="margin-top:6px">+ Cadastrar outro parceiro</button>
     <div id="eDadosP"></div>
+    <label class="rotulo" for="eMail">E-mail do parceiro (recebe a cópia assinada)</label><input class="campo-txt" id="eMail" type="email" placeholder="nome@empresa.com.br">
     <label class="linha" style="font-weight:500;margin-top:10px"><input type="checkbox" id="eOutra" style="width:22px;height:22px"> Quem está retirando é outra pessoa</label>
     <div id="eOutraBox" class="oculto"><div class="grade"><div><label class="rotulo" for="eRet">Nome de quem retira</label><input class="campo-txt" id="eRet"></div>
       <div><label class="rotulo" for="eRetDoc">Documento (CPF ou RG)</label><input class="campo-txt" id="eRetDoc"></div></div></div>
@@ -1673,7 +1683,10 @@ async function telaNovoEmprestimo(parcSel) {
     <label class="rotulo">Foto dos itens na saída (opcional)</label>${botoesFoto('eFoto', false)}<p class="suave" id="eFotoTxt"></p>
     <label class="rotulo" for="eObs">Observação (opcional)</label><input class="campo-txt" id="eObs" placeholder="Ex.: uso na obra X">
     <div class="decl-app" id="eDecl"></div>
-    <label class="rotulo">Assinatura de quem retira</label><div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>`;
+    <label class="rotulo">Assinatura de quem retira</label><div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>
+    <label class="rotulo">Responsável pela entrega (Kiton)</label>${chips('eResp', r.responsaveis, f.resp)}
+    <label class="rotulo">Assinatura do responsável pela entrega</label><div class="assin"><canvas id="cv2"></canvas><button type="button" class="link" id="limpar2">Limpar</button></div>
+    <p class="suave" style="font-size:14px">Depois das duas assinaturas, o termo vai por e-mail para o contato@ da Kiton, para o parceiro e para o responsável pela entrega (exceto Joaquim e Héllen, que já leem o contato@).</p>`;
   const pintarItens = () => {
     const q = document.getElementById('eBusca').value.toLowerCase();
     const lista = r.disponiveis.filter(i => !q || (i.pat + ' ' + i.desc + ' ' + i.marca).toLowerCase().includes(q));
@@ -1690,23 +1703,31 @@ async function telaNovoEmprestimo(parcSel) {
     document.getElementById('eDecl').textContent = `Declaro ter recebido em empréstimo os itens marcados, em bom estado, e me comprometo a devolvê-los até ${document.getElementById('ePrev').value.split('-').reverse().join('/')}. Em caso de perda, extravio, furto, roubo, dano ou não devolução, ressarcirei o valor de reposição de cada item.`;
     document.getElementById('eDadosP').innerHTML = p ? `<p class="suave" style="margin:6px 0 0">${esc([p.empresa, p.doc ? 'doc. ' + p.doc : 'sem documento cadastrado', p.fone].filter(Boolean).join(' · '))}${p.doc ? '' : ` · <button type="button" class="link" id="eEditP">completar cadastro</button>`}</p>` : '';
     const ep = document.getElementById('eEditP'); if (ep) ep.onclick = () => telaParceiro(p, n => telaNovoEmprestimo(n || f.parceiro)); };
-  ligarChips('eParc', v => { f.parceiro = v; decl(); });
+  ligarChips('eParc', v => { f.parceiro = v; const p = r.parceiros.find(x => x.nome === v); document.getElementById('eMail').value = (p && p.email) || ''; decl(); });
+  ligarChips('eResp', v => f.resp = v);
+  if (f.parceiro) { const p0 = r.parceiros.find(x => x.nome === f.parceiro); if (p0) document.getElementById('eMail').value = p0.email || ''; }
   document.getElementById('eNovoP').onclick = () => telaParceiro(null, n => telaNovoEmprestimo(n));
   document.getElementById('eOutra').onchange = e => { f.outra = e.target.checked; document.getElementById('eOutraBox').classList.toggle('oculto', !f.outra); };
   document.getElementById('eBusca').oninput = pintarItens; document.getElementById('ePrev').onchange = decl;
   ligarFoto('eFoto', async e => { const a = e.target.files[0]; if (!a) return; foto = await comprimir(a); document.getElementById('eFotoTxt').textContent = 'Foto anexada.'; });
   const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
   montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+  const montar2 = () => montarAssinatura(document.getElementById('cv2'), (url, n) => { assResp = url; tracosR = n; });
+  montar2(); document.getElementById('limpar2').onclick = () => { assResp = null; tracosR = 0; montar2(); };
   pintarItens();
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Registrar empréstimo</button></div>`);
-  document.getElementById('ant').onclick = () => telaAdmin('emp');
+  document.getElementById('ant').onclick = () => telaEmprestimos();
   document.getElementById('ok').onclick = () => executar(async () => {
     if (!f.parceiro) throw new Error('Escolha para quem é o empréstimo.');
     if (!f.itens.size) throw new Error('Marque pelo menos um item.');
     if (!assinatura || tracos < 1) throw new Error('Peça para quem está retirando assinar no quadro.');
-    const x = await api('emprestar', { parceiro: f.parceiro, itens: [...f.itens.values()], previsao: document.getElementById('ePrev').value, outraPessoa: f.outra,
+    if (!f.resp) throw new Error('Escolha o responsável pela entrega.');
+    if (!assResp || tracosR < 1) throw new Error('O responsável pela entrega precisa assinar no segundo quadro.');
+    const email = document.getElementById('eMail').value.trim();
+    if (!email && !confirm('Sem e-mail, o parceiro não recebe a cópia assinada. Registrar mesmo assim?')) return;
+    const x = await api('emprestar', { parceiro: f.parceiro, email, responsavel: f.resp, assResp, itens: [...f.itens.values()], previsao: document.getElementById('ePrev').value, outraPessoa: f.outra,
       retiradoPor: document.getElementById('eRet').value, docRetirada: document.getElementById('eRetDoc').value, obs: document.getElementById('eObs').value, foto, assinatura });
-    sujo = false; telaEmprestimo(x.n, `Empréstimo nº ${x.n} registrado. Os itens ficam como "Emprestado" até a devolução.`);
+    sujo = false; telaEmprestimo(x.n, `Empréstimo nº ${x.n} registrado. Os itens ficam como "Emprestado" até a devolução. ${/Falha/.test(x.enviados) ? 'Atenção: ' + x.enviados : 'Termo enviado para: ' + x.enviados + '.'}`);
   });
 }
 
@@ -1714,7 +1735,7 @@ async function telaEmprestimo(n, aviso) {
   topo('Empréstimos');
   $app.innerHTML = `<div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="xBox"><p class="suave">Carregando…</p></div>`;
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Empréstimos</button></div>`);
-  document.getElementById('ant').onclick = () => telaAdmin('emp');
+  document.getElementById('ant').onclick = () => telaEmprestimos();
   await executar(async () => {
     const r = await api('emprestimos'); est.emp = r;
     const e = r.abertos.concat(r.historico).find(x => x.n === String(n));
@@ -1725,7 +1746,7 @@ async function telaEmprestimo(n, aviso) {
       <p>${e.situacao === 'Emprestado' ? (e.atrasado ? `<span class="selo-txt vermelho">Atrasado: devolução era ${esc(e.previsao)}</span>` : `<span class="selo-txt laranja">Devolver até ${esc(e.previsao)}</span>`) : `<span class="selo-txt ${e.situacao === 'Devolvido' ? 'verde' : 'vermelho'}">${esc(e.situacao)}</span>`}</p>
       <dl class="resumo">${dl('Parceiro', esc(e.parceiro + (e.empresa && e.empresa !== e.parceiro ? ' · ' + e.empresa : '')))}${dl('Documento', esc(e.docParceiro))}
         ${e.retiradoPor && e.retiradoPor !== e.parceiro ? dl('Retirado por', esc(e.retiradoPor + ' · ' + e.docRetirada)) : ''}${dl('Saída', esc(e.data))}${dl('Devolução prevista', esc(e.previsao))}
-        ${dl('Registrado por', esc(e.por))}${dl('Observação', esc(e.obs))}${e.devolvidoEm ? dl('Devolvido', esc(e.devolvidoEm + ' · recebido por ' + e.recebidoPor)) : ''}</dl>
+        ${dl('Responsável pela entrega', esc(e.responsavel))}${dl('E-mail do parceiro', esc(e.emailParceiro))}${dl('Termo enviado para', esc(e.enviados))}${dl('Observação', esc(e.obs))}${e.devolvidoEm ? dl('Devolvido', esc(e.devolvidoEm + ' · recebido por ' + e.recebidoPor)) : ''}</dl>
       <h2>Itens (${reais(e.total)})</h2>
       ${e.itens.map(i => `<div class="cartao" data-dv="${esc(i.pat)}"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
         <p class="suave" style="margin:2px 0 6px">${[i.marca ? esc(i.marca) : '', 'valor de reposição ' + reais(i.valor)].filter(Boolean).join(' · ')}</p>
