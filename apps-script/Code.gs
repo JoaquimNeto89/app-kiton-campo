@@ -1934,8 +1934,14 @@ function itensIndividuais_(nome) {
     txt_(l.get('Responsável (uso individual)')).toLowerCase() === nome.toLowerCase()).map(l => ({
     pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), grupo: txt_(l.get('Grupo')), tipo: txt_(l.get('Tipo')),
     ident: txt_(l.get('Nº pintado / gravado')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
-    estado: txt_(l.get('Estado')), valor: Number(l.get('Valor de reposição (R$)')) || 0
+    estado: txt_(l.get('Estado')), valor: Number(l.get('Valor de reposição (R$)')) || 0, marcacao: txt_(l.get('Identificação física'))
   }));
+}
+/** Como o item está marcado fisicamente: etiqueta com o código, número pintado ou sem marcação. */
+function identTxt_(i) {
+  if (i.marcacao === 'Etiqueta') return 'Etiqueta ' + i.pat;
+  if (i.marcacao === 'Sem marcação') return 'Sem marcação';
+  return i.ident ? 'Pintado nº ' + i.ident : 'Sem marcação';
 }
 
 function catalogoEPI_() {
@@ -2100,10 +2106,15 @@ function pdfDoc_(corpo, nomeArq) {
   return Utilities.newBlob(html, 'text/html', 'doc.html').getAs('application/pdf').setName(nomeArq);
 }
 function dadosColab_(nome) {
-  return '<table class="d"><tr><td class="r">Colaborador</td><td>' + esc_(nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
-    '<tr><td class="r">Empresa</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>';
+  const p = (function () { try { return pessoasSST_().find(x => x.nome === nome); } catch (e) { return null; } })() || {};
+  const ck = v => '<span style="font-family:DejaVu Sans,Arial,sans-serif;font-size:11pt">' + (p.vinculo === v ? '&#9746;' : '&#9744;') + '</span> ';
+  const prest = p.vinculo === 'Contrato (prestador)';
+  return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
+    '<tr><td class="r">Vínculo</td><td>' + ck('CLT') + 'CLT &nbsp;&nbsp; ' + ck('Contrato (prestador)') + 'Prestador de serviço (contrato) &nbsp;&nbsp; ' + ck('Sócio / administração') + 'Sócio</td></tr>' +
+    (prest || p.cnpj ? '<tr><td class="r">CNPJ / MEI</td><td>' + (p.cnpj ? esc_(p.cnpj) : '______________________________') + '</td></tr>' : '') +
+    '<tr><td class="r">' + (prest ? 'Início da prestação de serviços' : 'Início') + '</td><td>' + (p.inicio ? esc_(dia_(p.inicio)) : '____/____/______') + '</td></tr>' +
+    '<tr><td class="r">Contratante</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>';
 }
-
 function docTermo_(nome) {
   const itens = itensIndividuais_(nome), t = termoAtual_(nome);
   const valido = t && t.itens === chaveItens_(itens);
@@ -2114,15 +2125,15 @@ function docTermo_(nome) {
   const base = p && p.vinculo === 'Contrato (prestador)' ? 'conforme o contrato de prestação de serviço vigente' : 'conforme a legislação aplicável e o acordo vigente';
   const corpo = cabDoc_('TERMO DE RESPONSABILIDADE', 'Ferramentas de uso individual') + dadosColab_(nome) +
     '<div class="bt" style="margin-top:8px">Ferramentas e equipamentos sob responsabilidade do colaborador</div>' +
-    '<table class="lst"><thead><tr><th style="width:17%">Código</th><th>Descrição</th><th style="width:19%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:7%">Nº pint.</th><th style="width:7%">Estado</th><th style="width:10%;text-align:right">Valor (R$)</th></tr></thead><tbody>' +
-    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(i.ident) + '</td><td>' + esc_(i.estado) + '</td><td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('')
+    '<table class="lst"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:17%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:13%">Identificação</th><th style="width:7%">Estado</th><th style="width:10%;text-align:right">Valor (R$)</th></tr></thead><tbody>' +
+    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td><td>' + esc_(i.estado) + '</td><td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('')
       : '<tr><td colspan="7">Nenhum item cadastrado.</td></tr>') +
     '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th style="text-align:right">' + brl(total) + '</th></tr></tbody></table>' +
     '<div style="page-break-inside:avoid"><div class="decl">Declaro ter recebido da ' + esc_(EMPRESA.nome) + ' as ferramentas e equipamentos relacionados acima, em bom estado de conservação e funcionamento, para uso exclusivo nas atividades executadas para a empresa. ' +
     'Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar imediatamente qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no encerramento da prestação de serviços. ' +
     'Estou ciente de que danos causados por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, ' + base + '.</div>' +
     '<table style="width:100%;margin-top:16px;font-size:8.5pt"><tr><td style="width:48%;vertical-align:bottom">' + (ass ? '<img src="' + ass + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
-    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nome) + ' | Colaborador<br>' + (valido ? 'Assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : 'Data: ____/____/______') + '</div></td><td style="width:4%"></td>' +
+    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nome) + ' | ' + (p && p.vinculo === 'Contrato (prestador)' ? 'Prestador de serviço' : 'Colaborador') + '<br>' + (valido ? 'Assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : 'Data: ____/____/______') + '</div></td><td style="width:4%"></td>' +
     '<td style="width:48%;vertical-align:bottom"><div style="height:46px"></div><div style="border-top:1px solid #1c1f23;padding-top:3px">Responsável pela entrega e conferência<br>' + esc_(EMPRESA.nome) + '</div></td></tr></table></div>';
   return pdfDoc_(corpo, 'Termo de ferramentas - ' + nome + '.pdf');
 }
@@ -2240,7 +2251,7 @@ function docsSST_() {
 function pessoasSST_() {
   return ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => {
     const funcao = txt_(l.get('Função'));
-    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)',
+    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)', cnpj: txt_(l.get('CNPJ/MEI')), inicio: data_(l.get('Início da prestação')),
       grupo: txt_(l.get('Grupo PCMSO')) || (funcao === 'Administrativo' ? 'Administrativo' : 'Operacional e técnico') };
   });
 }
@@ -2337,7 +2348,8 @@ function sstDocs_(u, req) {
   const p = escopo === 'Empresa' ? null : pessoasSST_().find(x => x.nome === nome) || { nome, vinculo: '', grupo: '' };
   const tipos = tiposSST_();
   const it = itensSST_(tipos, docsSST_(), escopo, p).filter(i => admin || i.atual || i.exigido);
-  return { ok: true, escopo, pessoa: p, itens: it.filter(i => i.tipo.ativo || i.atual || i.hist.length).map(i => itemOut_(i, true)), resumo: resumoSST_(it) };
+  const pOut = p ? Object.assign({}, p, { inicio: p.inicio ? dia_(p.inicio) : '', inicioIso: p.inicio ? Utilities.formatDate(p.inicio, TZ, 'yyyy-MM-dd') : '' }) : null;
+  return { ok: true, escopo, pessoa: pOut, itens: it.filter(i => i.tipo.ativo || i.atual || i.hist.length).map(i => itemOut_(i, true)), resumo: resumoSST_(it) };
 }
 
 function salvarDocSST_(u, req) {
@@ -2444,13 +2456,17 @@ function salvarTipoSST_(u, req) {
 }
 
 function salvarPessoaSST_(u, req) {
+  if (SST_VINCULOS.indexOf(req.vinculo) < 0 || SST_GRUPOS.indexOf(req.grupo) < 0) throw new Error('Escolha o vínculo e o grupo.');
+  ['Vínculo', 'Grupo PCMSO', 'CNPJ/MEI', 'Início da prestação'].forEach(c => {
+    const t0 = ler_(ABA.colab);
+    if (t0.cab[c] === undefined) t0.sh.getRange(1, t0.sh.getLastColumn() + 1).setValue(c);
+  });
   const t = ler_(ABA.colab);
   const l = t.linhas.find(x => txt_(x.get('Nome')) === txt_(req.colaborador));
   if (!l) throw new Error('Colaborador não encontrado.');
-  if (SST_VINCULOS.indexOf(req.vinculo) < 0 || SST_GRUPOS.indexOf(req.grupo) < 0) throw new Error('Escolha o vínculo e o grupo.');
-  ['Vínculo', 'Grupo PCMSO'].forEach(c => { if (t.cab[c] === undefined) { t.sh.getRange(1, t.sh.getLastColumn() + 1).setValue(c); } });
-  const t2 = ler_(ABA.colab);
-  set_(t2, l._linha, 'Vínculo', req.vinculo); set_(t2, l._linha, 'Grupo PCMSO', req.grupo);
+  const ini = txt_(req.inicio) ? Utilities.parseDate(txt_(req.inicio).slice(0, 10), TZ, 'yyyy-MM-dd') : '';
+  set_(t, l._linha, 'Vínculo', req.vinculo); set_(t, l._linha, 'Grupo PCMSO', req.grupo);
+  set_(t, l._linha, 'CNPJ/MEI', txt_(req.cnpj)); set_(t, l._linha, 'Início da prestação', ini);
   return { ok: true };
 }
 

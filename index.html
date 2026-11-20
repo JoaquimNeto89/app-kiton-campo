@@ -1363,16 +1363,20 @@ async function telaPessoaSST(nome, aviso) {
       <div class="cartao"><div class="t">Vínculo e grupo do PCMSO</div><p class="suave" style="margin:2px 0 8px">Definem quais documentos são exigidos desta pessoa.</p>
         <label class="rotulo" style="margin-top:0">Vínculo</label>${chips('pVin', est.sst ? est.sst.listas.vinculos : ['Sócio / administração', 'Contrato (prestador)', 'CLT'], p.vinculo)}
         <label class="rotulo">Grupo (PCMSO)</label>${chips('pGru', est.sst ? est.sst.listas.grupos : ['Operacional e técnico', 'Administrativo'], p.grupo)}
-        <button type="button" class="acao leve oculto" id="pSalvar">${ic('ok')} Salvar vínculo e grupo</button></div>
+        <div class="grade"><div><label class="rotulo" for="pCnpj">CNPJ / MEI</label><input class="campo-txt" id="pCnpj" value="${esc(p.cnpj || '')}" inputmode="numeric" placeholder="00.000.000/0001-00"></div>
+          <div><label class="rotulo" for="pIni">Início da prestação</label><input class="campo-txt" id="pIni" type="date" value="${esc(p.inicioIso || '')}"></div></div>
+        <p class="suave" style="margin-top:6px;font-size:14px">Saem no cabeçalho do termo de ferramentas e da ficha de EPI. Use a data do primeiro contrato.</p>
+        <button type="button" class="acao leve oculto" id="pSalvar">${ic('ok')} Salvar dados</button></div>
       <p style="margin:10px 0">${resumoSSTtxt(r.resumo)}</p>
       ${Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => linhaDocSST(i)).join('')).join('')}
       ${opc.length ? `<h2>Outros documentos (opcionais)</h2><div class="pessoas">${opc.map(i => `<button type="button" class="pessoa" data-doc="${esc(i.codigo)}">+ ${esc(i.doc)}</button>`).join('')}</div>` : ''}
       <div class="grade" style="margin-top:14px"><button type="button" class="acao leve" id="pPacote" style="margin:0">${ic('os')} Pacote deste colaborador</button>
         <button type="button" class="acao leve" id="pEpi" style="margin:0">${ic('ferr')} EPI e ferramentas</button></div>`;
     const sel = { vinculo: p.vinculo, grupo: p.grupo };
-    const mostrar = () => document.getElementById('pSalvar').classList.toggle('oculto', sel.vinculo === p.vinculo && sel.grupo === p.grupo);
+    const mostrar = () => document.getElementById('pSalvar').classList.remove('oculto');
     ligarChips('pVin', v => { sel.vinculo = v; mostrar(); }); ligarChips('pGru', v => { sel.grupo = v; mostrar(); });
-    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel }); sujo = false; telaPessoaSST(nome, 'Vínculo e grupo atualizados.'); });
+    ['pCnpj', 'pIni'].forEach(id => document.getElementById(id).addEventListener('input', mostrar));
+    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel, cnpj: document.getElementById('pCnpj').value, inicio: document.getElementById('pIni').value }); sujo = false; telaPessoaSST(nome, 'Dados atualizados.'); });
     document.querySelectorAll('#pBox [data-doc]').forEach(b => b.onclick = () => telaDocSST({ escopo: 'Colaborador', colaborador: nome, codigo: b.dataset.doc }));
     document.getElementById('pPacote').onclick = () => telaPacoteSST([nome]);
     document.getElementById('pEpi').onclick = () => telaColabEPI(nome);
