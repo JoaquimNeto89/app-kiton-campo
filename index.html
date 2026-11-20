@@ -385,7 +385,7 @@ function abrirMenu() {
     ${admin ? `<div class="menu-sec">Administração</div>
       ${item('a-aberto', 'admin', 'Itens para conferir', pd.itens)}${item('a-desp', 'recibo', 'Despesas para conferir', pd.despesas)}
       ${item('a-aprovar', 'ok', 'OS para aprovar', pd.aprovar)}${item('a-cli', 'pessoas', 'Novos clientes cadastrados', pd.clientes)}${item('a-os', 'os', 'Painel de OS', pd.os)}
-      ${item('a-seg', 'admin', 'Gestão SST', (pd.apr || 0) + (pd.sst || 0) + (pd.epi || 0))}${item('a-pres', 'pino', 'Presença em obra')}
+      ${item('a-seg', 'admin', 'Gestão SST', (pd.apr || 0) + (pd.sst || 0) + (pd.epi || 0))}${item('a-emp', 'ferr', 'Empréstimos', pd.emprestimos)}${item('a-pres', 'pino', 'Presença em obra')}
       ${item('a-fech', 'calib', 'Fechamento do mês')}${item('calib', 'calib', 'Calibração')}${item('cad', 'tabela', 'Cadastros')}${item('a-acessos', 'pessoas', 'Acessos')}` : ''}
     <div class="menu-sec"></div>
     <a class="menu-it" href="${esc(linkAjuda())}" target="_blank" rel="noopener" id="menuAjuda"><span class="q" style="background:#25D366">?</span><span>Ajuda e dúvidas</span></a>
@@ -564,8 +564,8 @@ function telaInicio() {
     </div>
     ${(() => { const me = d.meusEpis || { emUso: [], avisos: [] }; return `<button type="button" class="linha-meus" id="mMeus"><span class="q">${nMeus}</span><span style="flex:1"><b>Meus itens e documentos</b><span class="suave" style="display:block">${nMeus} ferramenta(s), ${me.emUso.length} EPI e seus documentos de SST</span>${me.avisos.length ? `<span class="selo-txt laranja" style="margin-top:4px">${me.avisos.length} EPI para trocar</span>` : ''}${d.meusDocs && (d.meusDocs.vencidos || d.meusDocs.faltando) ? `<span class="selo-txt vermelho" style="margin-top:4px">${d.meusDocs.vencidos + d.meusDocs.faltando} documento(s) vencido(s) ou faltando</span>` : d.meusDocs && d.meusDocs.vencendo ? `<span class="selo-txt laranja" style="margin-top:4px">${d.meusDocs.vencendo} documento(s) vencendo</span>` : ''}</span>${ic('seta')}</button>`; })()}
     ${admin ? `<div class="secao-titulo">Administração</div><div class="modulos">
-      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.sst || 0) + (pd.aprovar || 0) + (pd.epi || 0);
-        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.sst ? pd.sst + ' documento(s) de SST vencido(s) ou faltando' : '', pd.epi ? pd.epi + ' pendência(s) de EPI ou termo' : ''].filter(Boolean).join(', ');
+      ${(() => { const pd = d.pendencias || {}, tot = (pd.itens || 0) + (pd.despesas || 0) + (pd.clientes || 0) + (pd.os || 0) + (pd.apr || 0) + (pd.sst || 0) + (pd.aprovar || 0) + (pd.epi || 0) + (pd.emprestimos || 0);
+        const det = [pd.aprovar ? pd.aprovar + ' OS para aprovar' : '', pd.itens ? pd.itens + ' item(ns)' : '', pd.despesas ? pd.despesas + ' despesa(s)' : '', pd.clientes ? pd.clientes + ' cliente(s) novo(s)' : '', pd.os ? pd.os + ' OS atrasada(s) ou parada(s)' : '', pd.apr ? pd.apr + ' APR bloqueada(s)' : '', pd.sst ? pd.sst + ' documento(s) de SST vencido(s) ou faltando' : '', pd.emprestimos ? pd.emprestimos + ' empréstimo(s) atrasado(s)' : '', pd.epi ? pd.epi + ' pendência(s) de EPI ou termo' : ''].filter(Boolean).join(', ');
         return mod('mAdmin', 'admin', 'Conferir e fechar', tot ? 'Para conferir: ' + det : 'Itens, despesas, clientes novos, OS, presença e mês', tot ? `<span class="status campo">${tot}</span>` : ''); })()}
       ${mod('mCalib', 'calib', 'Calibração', 'Validade e registro de calibração dos instrumentos')}
       ${mod('mAcessos', 'pessoas', 'Acessos', 'Redefinir o PIN de alguém')}
@@ -579,7 +579,7 @@ function telaInicio() {
   document.getElementById('mOS').onclick = telaOS;
   document.getElementById('mDesp').onclick = telaDespesas;
   document.getElementById('mMeus').onclick = () => telaMeusItens();
-  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.aprovar ? 'aprovar' : pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.sst || pd.epi ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
+  if (admin) { document.getElementById('mAdmin').onclick = () => { const pd = d.pendencias || {}; telaAdmin(pd.aprovar ? 'aprovar' : pd.apr ? 'seg' : pd.itens ? 'aberto' : pd.despesas ? 'desp' : pd.clientes ? 'cli' : pd.os ? 'os' : pd.emprestimos ? 'emp' : pd.sst || pd.epi ? 'seg' : 'aberto'); }; document.getElementById('mAcessos').onclick = () => telaAdmin('acessos'); document.getElementById('mCalib').onclick = () => telaCalibracao(); document.getElementById('mCad').onclick = telaCadastros; }
 }
 
 // ---------- cadastros (abre a planilha) ----------
@@ -968,6 +968,8 @@ async function telaAdmin(aba, sub) {
     await adminOS(box);
   } else if (aba === 'epi') {
     await adminEPI(box, sub);
+  } else if (aba === 'emp') {
+    await adminEmprestimos(box, sub);
   } else if (aba === 'aprovar') {
     await adminAprovar(box);
   } else if (aba === 'seg') {
@@ -1094,11 +1096,11 @@ function parecidos(digitado, lista) {
 // ---------- meus itens ----------
 // ---------- ferramentas individuais e EPI ----------
 /** Abre um documento PDF gerado no servidor (termo, ficha de EPI ou listas). */
-function abrirDoc(doc, colaborador) {
+function abrirDoc(doc, colaborador, extra) {
   const w = window.open('', '_blank');
   if (w) w.document.write('<p style="font:16px sans-serif;padding:20px">Gerando o documento…</p>');
   executar(async () => {
-    try { const x = await api('docPDF', { doc, colaborador }); if (w) w.location.href = x.link; else window.location.href = x.link; }
+    try { const x = await api('docPDF', { doc, colaborador, ...(extra || {}) }); if (w) w.location.href = x.link; else window.location.href = x.link; }
     catch (e) { if (w) w.close(); throw e; }
   });
 }
@@ -1601,6 +1603,149 @@ async function meusDocumentos(box) {
       <p>${resumoSSTtxt(r.resumo)}</p>` + Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => `<div class="cartao"><div class="t">${esc(i.doc)}</div>
         <p style="margin:6px 0">${seloSST(i.st)}</p>${i.atual ? `<button type="button" class="link" data-ver="${esc(i.atual.n)}">Visualizar</button>` : ''}</div>`).join('')).join('');
     box.querySelectorAll('[data-ver]').forEach(b => b.onclick = () => verArquivoSST(b.dataset.ver));
+  });
+}
+
+// ---------- empréstimo de ferramentas a parceiros ----------
+async function adminEmprestimos(box, aba, aviso) {
+  aba = aba || 'abertos';
+  box.innerHTML = `<h1>Empréstimos</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div>
+    <div class="segmento nao-suja" id="pAba"><button type="button" data-v="abertos" class="${aba === 'abertos' ? 'sel' : ''}">Em aberto</button><button type="button" data-v="hist" class="${aba === 'hist' ? 'sel' : ''}">Histórico</button><button type="button" data-v="parc" class="${aba === 'parc' ? 'sel' : ''}">Parceiros</button></div>
+    <div id="pBox" style="margin-top:12px"><p class="suave">Carregando…</p></div>`;
+  document.querySelectorAll('#pAba button').forEach(b => b.onclick = () => adminEmprestimos(box, b.dataset.v));
+  await executar(async () => {
+    const r = await api('emprestimos'); est.emp = r;
+    const pBox = document.getElementById('pBox');
+    const cartao = e => `<button type="button" class="linha" data-emp="${esc(e.n)}" style="align-items:flex-start"><span style="flex:1"><b>Nº ${esc(e.n)} · ${esc(e.parceiro)}</b>
+      <small>${e.itens.length} item(ns) · ${reais(e.total)} · saiu ${esc(e.data.slice(0, 10))}${e.retiradoPor && e.retiradoPor !== e.parceiro ? ' · retirado por ' + esc(e.retiradoPor) : ''}</small>
+      <span style="display:block;margin-top:6px">${e.situacao === 'Emprestado' ? (e.atrasado ? `<span class="selo-txt vermelho">Atrasado: devolução era ${esc(e.previsao)}</span>` : `<span class="selo-txt laranja">Devolver até ${esc(e.previsao)}</span>`)
+        : `<span class="selo-txt ${e.situacao === 'Devolvido' ? 'verde' : 'vermelho'}">${esc(e.situacao)} em ${esc(e.devolvidoEm.slice(0, 10))}</span>`}</span></span><span class="fim">${ic('seta')}</span></button>`;
+    if (aba === 'abertos') {
+      pBox.innerHTML = `<button type="button" class="acao" id="pNovo" style="margin-top:0">${ic('ferr')} Novo empréstimo</button>` + (r.abertos.length ? r.abertos.map(cartao).join('') : msg('info', 'Nenhum item emprestado agora.'));
+      document.getElementById('pNovo').onclick = () => telaNovoEmprestimo();
+    } else if (aba === 'hist') {
+      pBox.innerHTML = r.historico.length ? r.historico.map(cartao).join('') : msg('info', 'Nenhum empréstimo encerrado ainda.');
+    } else {
+      pBox.innerHTML = `<button type="button" class="acao" id="pNovoP" style="margin-top:0">${ic('pessoas')} Cadastrar parceiro</button>` +
+        r.parceiros.map(p => `<button type="button" class="linha" data-par="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b><small>${esc([p.empresa, p.doc, p.fone].filter(Boolean).join(' · ') || 'Sem documento e telefone cadastrados')}</small></span><span class="fim">${ic('seta')}</span></button>`).join('');
+      document.getElementById('pNovoP').onclick = () => telaParceiro(null);
+      pBox.querySelectorAll('[data-par]').forEach(b => b.onclick = () => telaParceiro(r.parceiros.find(p => p.nome === b.dataset.par)));
+    }
+    pBox.querySelectorAll('[data-emp]').forEach(b => b.onclick = () => telaEmprestimo(b.dataset.emp));
+  });
+}
+
+function telaParceiro(p, depois) {
+  topo('Empréstimos');
+  const ed = !!p; p = p || {};
+  $app.innerHTML = `<h1>${ed ? 'Editar parceiro' : 'Cadastrar parceiro'}</h1><div id="erro"></div>
+    <label class="rotulo" for="zNome">Nome do responsável</label><input class="campo-txt" id="zNome" value="${esc(p.nome || '')}">
+    <label class="rotulo" for="zEmp">Empresa</label><input class="campo-txt" id="zEmp" value="${esc(p.empresa || '')}">
+    <label class="rotulo" for="zDoc">CPF ou CNPJ</label><input class="campo-txt" id="zDoc" value="${esc(p.doc || '')}" inputmode="numeric">
+    <label class="rotulo" for="zFone">Telefone</label><input class="campo-txt" id="zFone" value="${esc(p.fone || '')}" inputmode="tel">
+    <label class="rotulo" for="zObs">Observações</label><input class="campo-txt" id="zObs" value="${esc(p.obs || '')}">
+    ${ed ? `<label class="linha" style="font-weight:500"><input type="checkbox" id="zAti" checked style="width:22px;height:22px"> Ativo</label>` : ''}`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar</button></div>`);
+  const voltar = depois || (() => telaAdmin('emp', 'parc'));
+  document.getElementById('ant').onclick = () => voltar();
+  document.getElementById('ok').onclick = () => executar(async () => {
+    const g = id => document.getElementById(id);
+    await api('salvarParceiro', { parceiro: { original: p.nome || '', nome: g('zNome').value, empresa: g('zEmp').value, doc: g('zDoc').value, fone: g('zFone').value, obs: g('zObs').value, ativo: g('zAti') ? g('zAti').checked : true } });
+    sujo = false; voltar(g('zNome').value.trim());
+  });
+}
+
+async function telaNovoEmprestimo(parcSel) {
+  topo('Empréstimos');
+  const r = await executar(() => api('emprestimos')); if (!r) return; est.emp = r;
+  const f = { parceiro: parcSel || '', itens: new Map(), outra: false }; let assinatura = null, tracos = 0, foto = null;
+  const amanha = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  $app.innerHTML = `<h1>Novo empréstimo</h1><div id="erro"></div>
+    <label class="rotulo">Para quem</label>${chips('eParc', r.parceiros.map(p => p.nome), f.parceiro)}
+    <button type="button" class="link" id="eNovoP" style="margin-top:6px">+ Cadastrar outro parceiro</button>
+    <div id="eDadosP"></div>
+    <label class="linha" style="font-weight:500;margin-top:10px"><input type="checkbox" id="eOutra" style="width:22px;height:22px"> Quem está retirando é outra pessoa</label>
+    <div id="eOutraBox" class="oculto"><div class="grade"><div><label class="rotulo" for="eRet">Nome de quem retira</label><input class="campo-txt" id="eRet"></div>
+      <div><label class="rotulo" for="eRetDoc">Documento (CPF ou RG)</label><input class="campo-txt" id="eRetDoc"></div></div></div>
+    <label class="rotulo" for="eBusca">Itens</label><input class="campo-txt nao-suja" id="eBusca" placeholder="Buscar por nome ou código">
+    <div id="eItens" style="max-height:340px;overflow:auto;margin-top:8px"></div><p class="suave" id="eTotal"></p>
+    <label class="rotulo" for="ePrev">Devolução prevista</label><input class="campo-txt" id="ePrev" type="date" value="${amanha}" min="${hojeISO()}">
+    <label class="rotulo">Foto dos itens na saída (opcional)</label>${botoesFoto('eFoto', false)}<p class="suave" id="eFotoTxt"></p>
+    <label class="rotulo" for="eObs">Observação (opcional)</label><input class="campo-txt" id="eObs" placeholder="Ex.: uso na obra X">
+    <div class="decl-app" id="eDecl"></div>
+    <label class="rotulo">Assinatura de quem retira</label><div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>`;
+  const pintarItens = () => {
+    const q = document.getElementById('eBusca').value.toLowerCase();
+    const lista = r.disponiveis.filter(i => !q || (i.pat + ' ' + i.desc + ' ' + i.marca).toLowerCase().includes(q));
+    document.getElementById('eItens').innerHTML = lista.length ? lista.map(i => { const s = f.itens.get(i.pat); return `<div class="apr-it" data-it="${esc(i.pat)}"><label style="display:flex;gap:10px;align-items:flex-start;font-weight:500">
+      <input type="checkbox" ${s ? 'checked' : ''} style="width:22px;height:22px;flex:none;margin-top:2px"><span style="flex:1">${esc(i.desc)}<small class="suave" style="display:block">${esc(i.pat)}${i.marca ? ' · ' + esc(i.marca) : ''} · ${i.valor ? reais(i.valor) : '<b style="color:var(--vermelho-esc)">sem valor cadastrado</b>'}</small></span></label>
+      ${s && !i.valor ? `<input class="campo-txt" data-val="${esc(i.pat)}" inputmode="decimal" placeholder="Valor de reposição (R$)" value="${esc(s.valor || '')}" style="margin-top:6px">` : ''}</div>`; }).join('') : msg('info', 'Nenhum item disponível com esse filtro.');
+    document.querySelectorAll('#eItens [data-it] input[type=checkbox]').forEach(ch => ch.onchange = () => { const pat = ch.closest('[data-it]').dataset.it; ch.checked ? f.itens.set(pat, { pat }) : f.itens.delete(pat); pintarItens(); });
+    document.querySelectorAll('#eItens [data-val]').forEach(x => x.oninput = () => { f.itens.get(x.dataset.val).valor = x.value; total(); });
+    total();
+  };
+  const total = () => { const t = [...f.itens.values()].reduce((s, x) => s + ((r.disponiveis.find(i => i.pat === x.pat) || {}).valor || numBR(x.valor)), 0);
+    document.getElementById('eTotal').textContent = f.itens.size ? `${f.itens.size} item(ns) · valor de reposição ${reais(t)}` : ''; decl(); };
+  const decl = () => { const p = r.parceiros.find(x => x.nome === f.parceiro);
+    document.getElementById('eDecl').textContent = `Declaro ter recebido em empréstimo os itens marcados, em bom estado, e me comprometo a devolvê-los até ${document.getElementById('ePrev').value.split('-').reverse().join('/')}. Em caso de perda, extravio, furto, roubo, dano ou não devolução, ressarcirei o valor de reposição de cada item.`;
+    document.getElementById('eDadosP').innerHTML = p ? `<p class="suave" style="margin:6px 0 0">${esc([p.empresa, p.doc ? 'doc. ' + p.doc : 'sem documento cadastrado', p.fone].filter(Boolean).join(' · '))}${p.doc ? '' : ` · <button type="button" class="link" id="eEditP">completar cadastro</button>`}</p>` : '';
+    const ep = document.getElementById('eEditP'); if (ep) ep.onclick = () => telaParceiro(p, n => telaNovoEmprestimo(n || f.parceiro)); };
+  ligarChips('eParc', v => { f.parceiro = v; decl(); });
+  document.getElementById('eNovoP').onclick = () => telaParceiro(null, n => telaNovoEmprestimo(n));
+  document.getElementById('eOutra').onchange = e => { f.outra = e.target.checked; document.getElementById('eOutraBox').classList.toggle('oculto', !f.outra); };
+  document.getElementById('eBusca').oninput = pintarItens; document.getElementById('ePrev').onchange = decl;
+  ligarFoto('eFoto', async e => { const a = e.target.files[0]; if (!a) return; foto = await comprimir(a); document.getElementById('eFotoTxt').textContent = 'Foto anexada.'; });
+  const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+  montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+  pintarItens();
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Registrar empréstimo</button></div>`);
+  document.getElementById('ant').onclick = () => telaAdmin('emp');
+  document.getElementById('ok').onclick = () => executar(async () => {
+    if (!f.parceiro) throw new Error('Escolha para quem é o empréstimo.');
+    if (!f.itens.size) throw new Error('Marque pelo menos um item.');
+    if (!assinatura || tracos < 1) throw new Error('Peça para quem está retirando assinar no quadro.');
+    const x = await api('emprestar', { parceiro: f.parceiro, itens: [...f.itens.values()], previsao: document.getElementById('ePrev').value, outraPessoa: f.outra,
+      retiradoPor: document.getElementById('eRet').value, docRetirada: document.getElementById('eRetDoc').value, obs: document.getElementById('eObs').value, foto, assinatura });
+    sujo = false; telaEmprestimo(x.n, `Empréstimo nº ${x.n} registrado. Os itens ficam como "Emprestado" até a devolução.`);
+  });
+}
+
+async function telaEmprestimo(n, aviso) {
+  topo('Empréstimos');
+  $app.innerHTML = `<div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="xBox"><p class="suave">Carregando…</p></div>`;
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Empréstimos</button></div>`);
+  document.getElementById('ant').onclick = () => telaAdmin('emp');
+  await executar(async () => {
+    const r = await api('emprestimos'); est.emp = r;
+    const e = r.abertos.concat(r.historico).find(x => x.n === String(n));
+    if (!e) throw new Error('Empréstimo não encontrado.');
+    const dl = (k, v) => v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : '';
+    const res = {}; e.resultado.forEach(x => { res[x.pat] = x.resultado; });
+    document.getElementById('xBox').innerHTML = `<h1>Empréstimo nº ${esc(e.n)}</h1>
+      <p>${e.situacao === 'Emprestado' ? (e.atrasado ? `<span class="selo-txt vermelho">Atrasado: devolução era ${esc(e.previsao)}</span>` : `<span class="selo-txt laranja">Devolver até ${esc(e.previsao)}</span>`) : `<span class="selo-txt ${e.situacao === 'Devolvido' ? 'verde' : 'vermelho'}">${esc(e.situacao)}</span>`}</p>
+      <dl class="resumo">${dl('Parceiro', esc(e.parceiro + (e.empresa && e.empresa !== e.parceiro ? ' · ' + e.empresa : '')))}${dl('Documento', esc(e.docParceiro))}
+        ${e.retiradoPor && e.retiradoPor !== e.parceiro ? dl('Retirado por', esc(e.retiradoPor + ' · ' + e.docRetirada)) : ''}${dl('Saída', esc(e.data))}${dl('Devolução prevista', esc(e.previsao))}
+        ${dl('Registrado por', esc(e.por))}${dl('Observação', esc(e.obs))}${e.devolvidoEm ? dl('Devolvido', esc(e.devolvidoEm + ' · recebido por ' + e.recebidoPor)) : ''}</dl>
+      <h2>Itens (${reais(e.total)})</h2>
+      ${e.itens.map(i => `<div class="cartao" data-dv="${esc(i.pat)}"><div class="t">${esc(i.desc)}<span class="pat">${esc(i.pat)}</span></div>
+        <p class="suave" style="margin:2px 0 6px">${[i.marca ? esc(i.marca) : '', 'valor de reposição ' + reais(i.valor)].filter(Boolean).join(' · ')}</p>
+        ${e.situacao === 'Emprestado' ? `<div class="segmento"><button type="button" data-v="Devolvido OK">Voltou OK</button><button type="button" data-v="Avariado">Avariado</button><button type="button" data-v="Não devolvido">Não voltou</button></div>`
+          : `<span class="selo-txt ${res[i.pat] === 'Devolvido OK' ? 'verde' : 'vermelho'}">${esc(res[i.pat] || '')}</span>`}</div>`).join('')}
+      ${e.situacao === 'Emprestado' ? `<label class="rotulo">Foto na devolução (opcional)</label>${botoesFoto('dFoto', false)}<p class="suave" id="dFotoTxt"></p>
+        <label class="rotulo" for="dObs">Observação da devolução</label><input class="campo-txt" id="dObs">
+        <button type="button" class="acao" id="dOk">${ic('ok')} Registrar devolução</button>` : ''}
+      <button type="button" class="acao leve" id="xDoc">${ic('os')} Imprimir termo de empréstimo</button>`;
+    document.getElementById('xDoc').onclick = () => abrirDoc('emprestimo', '', { n: e.n });
+    if (e.situacao !== 'Emprestado') return;
+    const sel = {}; let foto = null;
+    document.querySelectorAll('[data-dv] .segmento button').forEach(b => b.onclick = () => { const c = b.closest('[data-dv]'); c.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b)); sel[c.dataset.dv] = b.dataset.v; });
+    ligarFoto('dFoto', async ev => { const a = ev.target.files[0]; if (!a) return; foto = await comprimir(a); document.getElementById('dFotoTxt').textContent = 'Foto anexada.'; });
+    document.getElementById('dOk').onclick = () => executar(async () => {
+      if (e.itens.some(i => !sel[i.pat])) throw new Error('Marque como voltou cada item.');
+      if (Object.values(sel).some(v => v !== 'Devolvido OK') && !confirm('Há item avariado ou não devolvido. Isso gera pendência de ressarcimento pelo valor de reposição. Confirmar?')) return;
+      const x = await api('devolverEmprestimo', { n: e.n, resultado: sel, foto, obs: document.getElementById('dObs').value });
+      sujo = false; telaEmprestimo(e.n, x.itensPendentes ? `Devolução registrada com ${x.itensPendentes} item(ns) pendente(s): ${reais(x.pendencia)} a ressarcir.` : 'Devolução registrada. Itens disponíveis de novo.');
+    });
   });
 }
 

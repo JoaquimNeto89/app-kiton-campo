@@ -55,6 +55,8 @@ const CAB = {
     'Próxima troca', 'Situação', 'Devolvido em', 'Observações'],
   'SST - Tipos de documento': ['Código', 'Documento', 'Categoria', 'Escopo', 'Controle', 'Validade (meses)', 'Aplica a', 'Bloqueia OS', 'Sensível', 'Vai no pacote', 'Ativo', 'Ordem', 'Observações'],
   'SST - Documentos': ['Nº', 'Escopo', 'Colaborador', 'Código do tipo', 'Documento', 'Emissão', 'Validade', 'Situação informada', 'Arquivo', 'Tipo do arquivo', 'Observações', 'Registrado por', 'Registrado em', 'Atual'],
+  'Parceiros': ['Nome', 'Empresa', 'CPF/CNPJ', 'Telefone', 'Ativo', 'Observações'],
+  'Empréstimos': ['Nº', 'Data', 'Parceiro', 'Empresa', 'Documento do parceiro', 'Retirado por', 'Documento de quem retirou', 'Itens', 'Valor total (R$)', 'Previsão de devolução', 'Assinatura', 'Foto da saída', 'Registrado por', 'Situação', 'Devolvido em', 'Resultado da devolução', 'Foto da devolução', 'Recebido por', 'Observações'],
   'Termos de ferramentas': ['Nº', 'Data', 'Colaborador', 'Itens', 'Quantidade de itens', 'Valor total (R$)', 'Assinatura', 'Registrado por', 'Lat.', 'Long.'],
   'Despesas': ['Nº', 'Data', 'Colaborador', 'Categoria', 'Valor (R$)', 'Pagamento', 'Cliente / obra', 'Descrição', 'Comprovante',
     'Saída vinculada', 'Lançado em', 'Situação', 'Conferido por', 'Data da conferência', 'Motivo da recusa', 'Reembolsado em']
@@ -129,6 +131,10 @@ function rotear_(req) {
     case 'docPDF': return docPDF_(u, req);
     // gestão SST: documentos
     case 'sstPainel': exigirAdmin_(u); return sstPainel_();
+    case 'emprestimos': exigirAdmin_(u); return emprestimos_();
+    case 'emprestar': exigirAdmin_(u); return comTrava_(() => emprestar_(u, req));
+    case 'devolverEmprestimo': exigirAdmin_(u); return comTrava_(() => devolverEmprestimo_(u, req));
+    case 'salvarParceiro': exigirAdmin_(u); return comTrava_(() => salvarParceiro_(req));
     case 'sstDocs': return sstDocs_(u, req);
     case 'salvarDocSST': exigirAdmin_(u); return comTrava_(() => salvarDocSST_(u, req));
     case 'excluirDocSST': exigirAdmin_(u); return comTrava_(() => excluirDocSST_(u, req));
@@ -460,6 +466,7 @@ function pendenciasAdmin_() {
     aprovar: ler_(ABA.os).linhas.filter(l => txt_(l.get('Status')) === ST_APROVACAO).length,
     epi: pendenciasEPI_(),
     sst: pendenciasSST_(),
+    emprestimos: pendenciasEmprestimo_(),
     treinos: situacaoTreinos_().filter(p => p.itens.some(i => i.dias !== null && i.dias <= AVISO_TREINO_DIAS)).length
   };
 }
@@ -2168,10 +2175,147 @@ function docPDF_(u, req) {
   const doc = txt_(req.doc), nome = txt_(req.colaborador) || u.nome;
   const admin = u.perfil === 'Administrador';
   if (!admin && (['termo', 'ficha'].indexOf(doc) < 0 || nome !== u.nome)) throw new Error('Você só pode abrir os seus documentos.');
-  const pdf = doc === 'termo' ? docTermo_(nome) : doc === 'ficha' ? docFichaEPI_(nome) : doc === 'epc' ? docLista_('epc') : doc === 'coletivas' ? docLista_('coletivas') : null;
+  const pdf = doc === 'termo' ? docTermo_(nome) : doc === 'ficha' ? docFichaEPI_(nome) : doc === 'epc' ? docLista_('epc') : doc === 'coletivas' ? docLista_('coletivas') : doc === 'emprestimo' ? docEmprestimo_(req.n) : null;
   if (!pdf) throw new Error('Documento desconhecido.');
   const link = pasta_(['Kiton Hub', 'Documentos emitidos', Utilities.formatDate(new Date(), TZ, 'yyyy-MM')]).createFile(pdf).getUrl();
   return { ok: true, link };
+}
+
+// ----- Empréstimo de ferramentas e equipamentos a parceiros -----
+const ABA_PARC = 'Parceiros', ABA_EMP = 'Empréstimos';
+const PARCEIROS_PADRAO = [
+  ['JL Garcia', 'JL Garcia'], ['Luciano Santos', 'Inovaman'], ['Otávio Camurra', 'CM Ar-condicionado'], ['Getúlio Barros', 'Eletromek'],
+  ['Armando da Silva', ''], ['Tiago Muratore', 'MB Limp'], ['Emanuel', 'Vipclean'], ['Henrique Barrocal Schalanski', 'HBS']
+];
+
+function parceiros_() {
+  const t = ler_(ABA_PARC);
+  if (!t.linhas.length) { PARCEIROS_PADRAO.forEach(p => anexar_(t, { 'Nome': p[0], 'Empresa': p[1], 'Ativo': 'Sim' })); return parceiros_(); }
+  return t.linhas.filter(l => txt_(l.get('Nome')) && txt_(l.get('Ativo')) !== 'Não').map(l => ({
+    nome: txt_(l.get('Nome')), empresa: txt_(l.get('Empresa')), doc: txt_(l.get('CPF/CNPJ')), fone: txt_(l.get('Telefone')), obs: txt_(l.get('Observações'))
+  })).sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+function salvarParceiro_(req) {
+  const p = req.parceiro || {};
+  const nome = txt_(p.nome);
+  if (!nome) throw new Error('Informe o nome do parceiro.');
+  const t = ler_(ABA_PARC);
+  const vals = { 'Nome': nome, 'Empresa': txt_(p.empresa), 'CPF/CNPJ': txt_(p.doc), 'Telefone': txt_(p.fone), 'Observações': txt_(p.obs), 'Ativo': p.ativo === false ? 'Não' : 'Sim' };
+  const l = t.linhas.find(x => txt_(x.get('Nome')).toLowerCase() === txt_(p.original || nome).toLowerCase());
+  if (l) Object.keys(vals).forEach(k => set_(t, l._linha, k, vals[k])); else anexar_(t, vals);
+  return { ok: true };
+}
+
+const empItens_ = l => { try { return JSON.parse(txt_(l.get('Itens')) || '[]'); } catch (e) { return []; } };
+function empOut_(l) {
+  const prev = data_(l.get('Previsão de devolução')), sit = txt_(l.get('Situação')) || 'Emprestado';
+  const dias = diasAte_(prev);
+  let res = []; try { res = JSON.parse(txt_(l.get('Resultado da devolução')) || '[]'); } catch (e) {}
+  return { n: txt_(l.get('Nº')), data: fmt_(l.get('Data')), parceiro: txt_(l.get('Parceiro')), empresa: txt_(l.get('Empresa')), docParceiro: txt_(l.get('Documento do parceiro')),
+    retiradoPor: txt_(l.get('Retirado por')), docRetirada: txt_(l.get('Documento de quem retirou')), itens: empItens_(l), total: Number(l.get('Valor total (R$)')) || 0,
+    previsao: dia_(prev), dias, atrasado: sit === 'Emprestado' && dias !== null && dias < 0, situacao: sit, devolvidoEm: fmt_(l.get('Devolvido em')),
+    resultado: res, recebidoPor: txt_(l.get('Recebido por')), obs: txt_(l.get('Observações')), por: txt_(l.get('Registrado por')), linha: l._linha };
+}
+
+function emprestimos_() {
+  const t = ler_(ABA_EMP);
+  const lista = t.linhas.filter(l => txt_(l.get('Nº'))).map(empOut_).reverse();
+  const disponiveis = ler_(ABA.itens).linhas.filter(l => txt_(l.get('Patrimônio')) && (txt_(l.get('Situação')) || 'Disponível') === 'Disponível' && txt_(l.get('Uso')) !== 'Individual')
+    .map(l => ({ pat: txt_(l.get('Patrimônio')), desc: txt_(l.get('Descrição')), tipo: txt_(l.get('Tipo')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')),
+      valor: Number(l.get('Valor de reposição (R$)')) || 0 }));
+  return { ok: true, abertos: lista.filter(e => e.situacao === 'Emprestado'), historico: lista.filter(e => e.situacao !== 'Emprestado').slice(0, 60), parceiros: parceiros_(), disponiveis };
+}
+
+function pendenciasEmprestimo_() {
+  try { return ler_(ABA_EMP).linhas.filter(l => txt_(l.get('Situação')) === 'Emprestado' && diasAte_(data_(l.get('Previsão de devolução'))) < 0).length; } catch (e) { return 0; }
+}
+
+function emprestar_(u, req) {
+  const parc = parceiros_().find(p => p.nome === txt_(req.parceiro));
+  if (!parc) throw new Error('Escolha o parceiro.');
+  const pats = (req.itens || []).map(i => txt_(i.pat)).filter(Boolean);
+  if (!pats.length) throw new Error('Escolha pelo menos um item.');
+  const prev = txt_(req.previsao) ? Utilities.parseDate(txt_(req.previsao).slice(0, 10), TZ, 'yyyy-MM-dd') : null;
+  if (!prev || isNaN(prev)) throw new Error('Informe a previsão de devolução.');
+  if (diasAte_(prev) < 0) throw new Error('A previsão de devolução não pode ser no passado.');
+  if (!txt_(req.assinatura)) throw new Error('Quem está retirando precisa assinar na tela.');
+  const outra = !!req.outraPessoa;
+  if (outra && (!txt_(req.retiradoPor) || !txt_(req.docRetirada))) throw new Error('Informe o nome e o documento de quem está retirando.');
+  const ti = ler_(ABA.itens);
+  const itens = pats.map(p => {
+    const l = ti.linhas.find(x => txt_(x.get('Patrimônio')) === p);
+    if (!l) throw new Error('Item ' + p + ' não encontrado.');
+    if ((txt_(l.get('Situação')) || 'Disponível') !== 'Disponível') throw new Error(p + ' não está disponível (' + txt_(l.get('Situação')) + ').');
+    const inf = (req.itens || []).find(i => txt_(i.pat) === p) || {};
+    const valor = Number(l.get('Valor de reposição (R$)')) || Number(String(inf.valor || '').replace(/\./g, '').replace(',', '.')) || 0;
+    if (!valor) throw new Error('Informe o valor de reposição de ' + p + '.');
+    return { l, pat: p, desc: txt_(l.get('Descrição')), marca: txt_(l.get('Marca / modelo')), serie: txt_(l.get('Nº de série')), ident: txt_(l.get('Nº pintado / gravado')),
+      marcacao: txt_(l.get('Identificação física')), valor };
+  });
+  const t = ler_(ABA_EMP);
+  const n = String(proximoNumero_(t, 'Nº'));
+  const pasta = pasta_(['Kiton Hub', 'Empréstimos', n + ' - ' + parc.nome]);
+  const ass = salvarImagem_(pasta, req.assinatura, 'image/png', 'Assinatura retirada.png');
+  const foto = req.foto ? salvarImagem_(pasta, req.foto, 'image/jpeg', 'Foto saída.jpg') : '';
+  const total = itens.reduce((s, i) => s + i.valor, 0);
+  anexar_(t, { 'Nº': n, 'Data': new Date(), 'Parceiro': parc.nome, 'Empresa': parc.empresa, 'Documento do parceiro': parc.doc,
+    'Retirado por': outra ? txt_(req.retiradoPor) : parc.nome, 'Documento de quem retirou': outra ? txt_(req.docRetirada) : parc.doc,
+    'Itens': JSON.stringify(itens.map(i => ({ pat: i.pat, desc: i.desc, marca: i.marca, serie: i.serie, ident: i.ident, marcacao: i.marcacao, valor: i.valor }))),
+    'Valor total (R$)': total, 'Previsão de devolução': prev, 'Assinatura': ass, 'Foto da saída': foto, 'Registrado por': u.nome, 'Situação': 'Emprestado', 'Observações': txt_(req.obs) });
+  itens.forEach(i => set_(ti, i.l._linha, 'Situação', 'Emprestado'));
+  return { ok: true, n };
+}
+
+function devolverEmprestimo_(u, req) {
+  const t = ler_(ABA_EMP);
+  const l = t.linhas.find(x => txt_(x.get('Nº')) === txt_(req.n));
+  if (!l) throw new Error('Empréstimo não encontrado.');
+  if (txt_(l.get('Situação')) !== 'Emprestado') throw new Error('Este empréstimo já foi encerrado.');
+  const itens = empItens_(l), res = req.resultado || {};
+  const OPC = ['Devolvido OK', 'Avariado', 'Não devolvido'];
+  if (itens.some(i => OPC.indexOf(res[i.pat]) < 0)) throw new Error('Marque a condição de todos os itens.');
+  const ti = ler_(ABA.itens);
+  itens.forEach(i => {
+    const li = ti.linhas.find(x => txt_(x.get('Patrimônio')) === i.pat);
+    if (li) set_(ti, li._linha, 'Situação', res[i.pat] === 'Devolvido OK' ? 'Disponível' : res[i.pat] === 'Avariado' ? 'Avariado' : 'Extraviado');
+  });
+  const foto = req.foto ? salvarImagem_(pasta_(['Kiton Hub', 'Empréstimos', txt_(l.get('Nº')) + ' - ' + txt_(l.get('Parceiro'))]), req.foto, 'image/jpeg', 'Foto devolução.jpg') : '';
+  const pend = itens.filter(i => res[i.pat] !== 'Devolvido OK');
+  set_(t, l._linha, 'Resultado da devolução', JSON.stringify(itens.map(i => ({ pat: i.pat, resultado: res[i.pat] }))));
+  set_(t, l._linha, 'Situação', pend.length ? 'Devolvido com pendência' : 'Devolvido');
+  set_(t, l._linha, 'Devolvido em', new Date()); set_(t, l._linha, 'Recebido por', u.nome); set_(t, l._linha, 'Foto da devolução', foto);
+  if (txt_(req.obs)) set_(t, l._linha, 'Observações', [txt_(l.get('Observações')), 'Devolução: ' + txt_(req.obs)].filter(Boolean).join(' | '));
+  return { ok: true, pendencia: pend.reduce((s, i) => s + (Number(i.valor) || 0), 0), itensPendentes: pend.length };
+}
+
+function docEmprestimo_(n) {
+  const l = ler_(ABA_EMP).linhas.find(x => txt_(x.get('Nº')) === txt_(n));
+  if (!l) throw new Error('Empréstimo não encontrado.');
+  const e = empOut_(l), ass = txt_(l.get('Assinatura')) ? imgDrive_(txt_(l.get('Assinatura'))) : '';
+  const brl = v => Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const outra = e.retiradoPor && e.retiradoPor !== e.parceiro;
+  const res = {}; e.resultado.forEach(r => { res[r.pat] = r.resultado; });
+  const corpo = cabDoc_('TERMO DE EMPRÉSTIMO Nº ' + e.n, 'Ferramentas e equipamentos') +
+    '<table class="d"><tr><td class="r">Parceiro</td><td>' + esc_(e.parceiro) + (e.empresa && e.empresa !== e.parceiro ? ' · ' + esc_(e.empresa) : '') + '</td></tr>' +
+    '<tr><td class="r">CPF / CNPJ</td><td>' + (e.docParceiro ? esc_(e.docParceiro) : '______________________________') + '</td></tr>' +
+    (outra ? '<tr><td class="r">Retirado por</td><td>' + esc_(e.retiradoPor) + ' · documento ' + esc_(e.docRetirada) + '</td></tr>' : '') +
+    '<tr><td class="r">Data do empréstimo</td><td>' + esc_(e.data) + '</td></tr><tr><td class="r">Devolução prevista</td><td><b>' + esc_(e.previsao) + '</b></td></tr>' +
+    '<tr><td class="r">Comodante</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>' +
+    '<div class="bt" style="margin-top:8px">Itens emprestados</div><table class="lst"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:18%">Marca / modelo</th><th style="width:12%">Nº de série</th><th style="width:14%">Identificação</th>' +
+    (e.resultado.length ? '<th style="width:12%">Devolução</th>' : '') + '<th style="width:11%;text-align:right">Valor de reposição (R$)</th></tr></thead><tbody>' +
+    e.itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td>' +
+      (e.resultado.length ? '<td>' + esc_(res[i.pat] || '') + '</td>' : '') + '<td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('') +
+    '<tr><th colspan="' + (e.resultado.length ? 6 : 5) + '">Total (' + e.itens.length + ' itens)</th><th style="text-align:right">' + brl(e.total) + '</th></tr></tbody></table>' +
+    '<div style="page-break-inside:avoid"><div class="decl">Declaro ter recebido em empréstimo, a título gratuito, os itens relacionados acima, em bom estado de conservação e funcionamento, ' +
+    'comprometendo-me a utilizá-los exclusivamente para a finalidade combinada, zelar pela sua guarda e devolvê-los à ' + esc_(EMPRESA.nome) + ' até ' + esc_(e.previsao) + ', no mesmo estado em que os recebi, ressalvado o desgaste natural de uso. ' +
+    'Em caso de perda, extravio, furto, roubo, dano ou não devolução, comprometo-me a ressarcir o valor de reposição indicado para cada item, em até 30 dias da comunicação.' +
+    (outra ? ' A retirada foi feita por ' + esc_(e.retiradoPor) + ', em nome e sob responsabilidade de ' + esc_(e.parceiro) + '.' : '') + '</div>' +
+    '<table style="width:100%;margin-top:16px;font-size:8.5pt"><tr><td style="width:48%;vertical-align:bottom">' + (ass ? '<img src="' + ass + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
+    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(e.retiradoPor || e.parceiro) + (e.docRetirada ? ' · ' + esc_(e.docRetirada) : '') + '<br>Assinado digitalmente em ' + esc_(e.data) + '</div></td><td style="width:4%"></td>' +
+    '<td style="width:48%;vertical-align:bottom"><div style="height:46px"></div><div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(e.por) + '<br>' + esc_(EMPRESA.nome) + '</div></td></tr></table></div>' +
+    (e.situacao !== 'Emprestado' ? '<div class="bt" style="margin-top:12px">Devolução</div><p style="font-size:9pt">Recebido por ' + esc_(e.recebidoPor) + ' em ' + esc_(e.devolvidoEm) + '. Situação: <b>' + esc_(e.situacao) + '</b>.' + (e.obs ? ' ' + esc_(e.obs) : '') + '</p>' : '');
+  return pdfDoc_(corpo, 'Termo de empréstimo ' + e.n + ' - ' + e.parceiro + '.pdf');
 }
 
 // ----- Gestão SST: documentos da empresa e dos colaboradores, com anexo e validade -----
