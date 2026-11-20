@@ -2110,7 +2110,7 @@ function dadosColab_(nome) {
   const ck = v => '<span style="font-family:DejaVu Sans,Arial,sans-serif;font-size:11pt">' + (p.vinculo === v ? '&#9746;' : '&#9744;') + '</span> ';
   const prest = p.vinculo === 'Contrato (prestador)';
   return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
-    '<tr><td class="r">Vínculo</td><td>' + ck('CLT') + 'CLT &nbsp;&nbsp; ' + ck('Contrato (prestador)') + 'Prestador de serviço (contrato) &nbsp;&nbsp; ' + ck('Sócio / administração') + 'Sócio</td></tr>' +
+    '<tr><td class="r">Vínculo</td><td>' + ck('CLT') + 'CLT &nbsp;&nbsp; ' + ck('Contrato (prestador)') + 'Prestador de serviço &nbsp;&nbsp; ' + ck('Sócio / administração') + 'Sócio</td></tr>' +
     (prest || p.cnpj ? '<tr><td class="r">CNPJ / MEI</td><td>' + (p.cnpj ? esc_(p.cnpj) : '______________________________') + '</td></tr>' : '') +
     '<tr><td class="r">' + (prest ? 'Início da prestação de serviços' : 'Início') + '</td><td>' + (p.inicio ? esc_(dia_(p.inicio)) : '____/____/______') + '</td></tr>' +
     '<tr><td class="r">Contratante</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>';
@@ -2124,7 +2124,7 @@ function docTermo_(nome) {
   const p = (function () { try { return pessoasSST_().find(x => x.nome === nome); } catch (e) { return null; } })();
   const base = p && p.vinculo === 'Contrato (prestador)' ? 'conforme o contrato de prestação de serviço vigente' : 'conforme a legislação aplicável e o acordo vigente';
   const corpo = cabDoc_('TERMO DE RESPONSABILIDADE', 'Ferramentas de uso individual') + dadosColab_(nome) +
-    '<div class="bt" style="margin-top:8px">Ferramentas e equipamentos sob responsabilidade do colaborador</div>' +
+    '<div class="bt" style="margin-top:8px">Ferramentas e equipamentos sob responsabilidade do ' + (p && p.vinculo === 'Contrato (prestador)' ? 'prestador de serviço' : 'colaborador') + '</div>' +
     '<table class="lst"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:17%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:13%">Identificação</th><th style="width:7%">Estado</th><th style="width:10%;text-align:right">Valor (R$)</th></tr></thead><tbody>' +
     (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td><td>' + esc_(i.estado) + '</td><td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('')
       : '<tr><td colspan="7">Nenhum item cadastrado.</td></tr>') +
