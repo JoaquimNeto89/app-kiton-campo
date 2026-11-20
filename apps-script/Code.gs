@@ -2109,16 +2109,21 @@ function docTermo_(nome) {
   const valido = t && t.itens === chaveItens_(itens);
   const ass = valido && t.assinatura ? imgDrive_(t.assinatura) : '';
   const total = itens.reduce((s, i) => s + i.valor, 0);
+  const brl = v => Number(v || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const p = (function () { try { return pessoasSST_().find(x => x.nome === nome); } catch (e) { return null; } })();
+  const base = p && p.vinculo === 'Contrato (prestador)' ? 'conforme o contrato de prestação de serviço vigente' : 'conforme a legislação aplicável e o acordo vigente';
   const corpo = cabDoc_('TERMO DE RESPONSABILIDADE', 'Ferramentas de uso individual') + dadosColab_(nome) +
-    '<div class="b"><div class="bt">Ferramentas e equipamentos sob responsabilidade do colaborador</div>' +
-    '<table class="lst"><tr><th>Patrimônio</th><th>Descrição</th><th>Marca / modelo</th><th>Nº de série</th><th>Nº pintado</th><th>Estado</th><th>Valor (R$)</th></tr>' +
-    (itens.length ? itens.map(i => '<tr><td>' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(i.ident) + '</td><td>' + esc_(i.estado) + '</td><td>' + i.valor.toFixed(2).replace('.', ',') + '</td></tr>').join('')
+    '<div class="bt" style="margin-top:8px">Ferramentas e equipamentos sob responsabilidade do colaborador</div>' +
+    '<table class="lst"><thead><tr><th style="width:17%">Código</th><th>Descrição</th><th style="width:19%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:7%">Nº pint.</th><th style="width:7%">Estado</th><th style="width:10%;text-align:right">Valor (R$)</th></tr></thead><tbody>' +
+    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(i.ident) + '</td><td>' + esc_(i.estado) + '</td><td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('')
       : '<tr><td colspan="7">Nenhum item cadastrado.</td></tr>') +
-    '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th>' + total.toFixed(2).replace('.', ',') + '</th></tr></table></div>' +
-    '<div class="decl">Declaro ter recebido da ' + esc_(EMPRESA.nome) + ' as ferramentas e equipamentos relacionados acima, em bom estado de conservação e funcionamento, para uso exclusivo nas atividades da empresa. ' +
-    'Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar imediatamente qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no desligamento. ' +
-    'Estou ciente de que danos causados por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, conforme a legislação trabalhista e o acordo vigente.</div>' +
-    '<div class="assbox">' + (ass ? '<img src="' + ass + '">' : '<div style="height:50px"></div>') + esc_(nome) + (valido ? ' · assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : ' · data: ____/____/______') + '</div>';
+    '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th style="text-align:right">' + brl(total) + '</th></tr></tbody></table>' +
+    '<div style="page-break-inside:avoid"><div class="decl">Declaro ter recebido da ' + esc_(EMPRESA.nome) + ' as ferramentas e equipamentos relacionados acima, em bom estado de conservação e funcionamento, para uso exclusivo nas atividades executadas para a empresa. ' +
+    'Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar imediatamente qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no encerramento da prestação de serviços. ' +
+    'Estou ciente de que danos causados por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, ' + base + '.</div>' +
+    '<table style="width:100%;margin-top:16px;font-size:8.5pt"><tr><td style="width:48%;vertical-align:bottom">' + (ass ? '<img src="' + ass + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
+    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nome) + ' | Colaborador<br>' + (valido ? 'Assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : 'Data: ____/____/______') + '</div></td><td style="width:4%"></td>' +
+    '<td style="width:48%;vertical-align:bottom"><div style="height:46px"></div><div style="border-top:1px solid #1c1f23;padding-top:3px">Responsável pela entrega e conferência<br>' + esc_(EMPRESA.nome) + '</div></td></tr></table></div>';
   return pdfDoc_(corpo, 'Termo de ferramentas - ' + nome + '.pdf');
 }
 
