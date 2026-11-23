@@ -126,6 +126,7 @@ function rotear_(req) {
     case 'colabEPI': return colabEPI_(u, req);
     case 'salvarEpi': exigirAdmin_(u); return comTrava_(() => salvarEpi_(u, req));
     case 'entregarEpi': exigirAdmin_(u); return comTrava_(() => entregarEpi_(u, req));
+    case 'assinarFichaEpi': exigirAdmin_(u); return comTrava_(() => assinarFichaEpi_(u, req));
     case 'devolverEpi': exigirAdmin_(u); return comTrava_(() => devolverEpi_(u, req));
     case 'assinarTermo': exigirAdmin_(u); return comTrava_(() => assinarTermo_(u, req));
     case 'docPDF': return docPDF_(u, req);
@@ -1929,7 +1930,7 @@ function devolverOS_(u, req) {
 
 // ---------- ferramentas individuais e EPI (NR-6) ----------
 const ABA_EPI_CAT = 'EPI - Catálogo', ABA_EPI_ENT = 'EPI - Entregas', ABA_TERMOS = 'Termos de ferramentas';
-const MOTIVOS_EPI = ['Admissão', 'Troca por desgaste', 'Troca periódica', 'Perda', 'Dano', 'Outro'];
+const MOTIVOS_EPI = ['Admissão', 'Troca por desgaste', 'Troca periódica', 'Perda', 'Dano', 'Regularização', 'Outro'];
 
 function funcaoDe_(nome) {
   const l = ler_(ABA.colab).linhas.find(x => txt_(x.get('Nome')) === nome);
@@ -1955,7 +1956,7 @@ function identTxt_(i) {
 function catalogoEPI_() {
   return ler_(ABA_EPI_CAT).linhas.filter(l => txt_(l.get('Descrição'))).map(l => {
     const v = data_(l.get('Validade do CA'));
-    return { codigo: txt_(l.get('Código')), desc: txt_(l.get('Descrição')), ca: txt_(l.get('CA')), validadeCA: v ? dia_(v) : '', diasCA: diasAte_(v),
+    return { codigo: txt_(l.get('Código')), desc: txt_(l.get('Descrição')), ca: txt_(l.get('CA')), validadeCA: v ? dia_(v) : '', validadeD: v || null, diasCA: diasAte_(v),
       fabricante: txt_(l.get('Fabricante')), tamanhos: txt_(l.get('Tamanhos')), trocaDias: Number(l.get('Troca a cada (dias)')) || 0,
       ativo: txt_(l.get('Ativo')) !== 'Não', obs: txt_(l.get('Observações')), linha: l._linha };
   });
@@ -1965,20 +1966,26 @@ function entregasEPI_(nome) {
   const cat = {}; catalogoEPI_().forEach(c => cat[c.codigo] = c);
   return ler_(ABA_EPI_ENT).linhas.filter(l => !nome || txt_(l.get('Colaborador')) === nome).map(l => {
     const prox = data_(l.get('Próxima troca')), c = cat[txt_(l.get('Código EPI'))] || {};
+    const compra = data_(l.get('Data de compra')), vida = data_(l.get('Vida útil até'));
     return { n: txt_(l.get('Nº')), data: dia_(l.get('Data')), dataD: data_(l.get('Data')), colaborador: txt_(l.get('Colaborador')), codigo: txt_(l.get('Código EPI')),
       desc: txt_(l.get('Descrição')), ca: txt_(l.get('CA')), tamanho: txt_(l.get('Tamanho')), qtd: txt_(l.get('Quantidade')), motivo: txt_(l.get('Motivo')),
       entreguePor: txt_(l.get('Entregue por')), assinatura: txt_(l.get('Assinatura')), proxTroca: prox ? dia_(prox) : '', diasTroca: diasAte_(prox),
-      situacao: txt_(l.get('Situação')) || 'Em uso', diasCA: c.diasCA === undefined ? null : c.diasCA, validadeCA: c.validadeCA || '' };
+      situacao: txt_(l.get('Situação')) || 'Em uso', diasCA: c.diasCA === undefined ? null : c.diasCA, validadeCA: c.validadeCA || '',
+      // CA vencido só é problema se o EPI foi comprado depois do vencimento (comprado com CA válido pode ser usado)
+      caIrregular: !!(c.validadeD && (compra || data_(l.get('Data')) || new Date()) > c.validadeD),
+      dataCompra: compra ? dia_(compra) : '', serie: txt_(l.get('Nº de série / lote')), vidaUtil: vida ? dia_(vida) : '', diasVida: diasAte_(vida), obs: txt_(l.get('Observações')) };
   });
 }
 
 /** Avisos de EPI em uso: troca vencida ou próxima e CA vencido. */
 function avisosEPI_(lista) {
-  return lista.filter(e => e.situacao === 'Em uso').map(e => {
+  return lista.filter(e => e.situacao === 'Em uso' || e.situacao === 'Aguardando assinatura').map(e => {
     const a = [];
     if (e.diasTroca !== null && e.diasTroca < 0) a.push('troca vencida em ' + e.proxTroca);
     else if (e.diasTroca !== null && e.diasTroca <= 15) a.push('troca prevista em ' + e.proxTroca);
-    if (e.diasCA !== null && e.diasCA < 0) a.push('CA vencido em ' + e.validadeCA);
+    if (e.caIrregular) a.push('comprado com o CA vencido (' + e.validadeCA + ')');
+    if (e.diasVida !== null && e.diasVida < 0) a.push('vida útil encerrada em ' + e.vidaUtil);
+    else if (e.diasVida !== null && e.diasVida <= 60) a.push('vida útil termina em ' + e.vidaUtil);
     return a.length ? { colaborador: e.colaborador, desc: e.desc, ca: e.ca, texto: a.join(' e ') } : null;
   }).filter(Boolean);
 }
@@ -2005,7 +2012,8 @@ function epiPainel_() {
   const pessoas = campo.map(l => {
     const nome = txt_(l.get('Nome')), itens = itensIndividuais_(nome), eps = todas.filter(e => e.colaborador === nome);
     return { nome, funcao: txt_(l.get('Função')), itens: itens.length, termo: situacaoTermo_(nome, itens),
-      episEmUso: eps.filter(e => e.situacao === 'Em uso').length, avisos: avisosEPI_(eps).map(a => a.desc + ': ' + a.texto) };
+      episEmUso: eps.filter(e => e.situacao === 'Em uso').length, aguardando: eps.filter(e => e.situacao === 'Aguardando assinatura').length,
+      avisos: avisosEPI_(eps).map(a => a.desc + ': ' + a.texto) };
   });
   const cat = catalogoEPI_();
   return { ok: true, pessoas, catalogo: cat, motivos: MOTIVOS_EPI,
@@ -2015,7 +2023,7 @@ function epiPainel_() {
 function pendenciasEPI_() {
   try {
     const p = epiPainel_();
-    return p.pessoas.filter(x => x.avisos.length || /Pendente|Desatualizado/.test(x.termo)).length + p.caVencendo.length;
+    return p.pessoas.filter(x => x.avisos.length || x.aguardando || /Pendente|Desatualizado/.test(x.termo)).length + p.caVencendo.length;
   } catch (e) { return 0; }
 }
 
@@ -2025,7 +2033,8 @@ function colabEPI_(u, req) {
   const itens = itensIndividuais_(nome), eps = entregasEPI_(nome);
   eps.forEach(e => delete e.dataD);
   return { ok: true, nome, funcao: funcaoDe_(nome), itens, termo: situacaoTermo_(nome, itens), termoAtual: termoAtual_(nome),
-    episEmUso: eps.filter(e => e.situacao === 'Em uso'), historico: eps.slice().reverse(), avisos: avisosEPI_(eps) };
+    episEmUso: eps.filter(e => e.situacao === 'Em uso'), aguardando: eps.filter(e => e.situacao === 'Aguardando assinatura'),
+    historico: eps.filter(e => e.situacao !== 'Aguardando assinatura').reverse(), avisos: avisosEPI_(eps) };
 }
 
 function salvarEpi_(u, req) {
@@ -2074,6 +2083,24 @@ function entregarEpi_(u, req) {
     nums.push(n); n++;
   });
   return { ok: true, numeros: nums };
+}
+
+/** Ficha pré-lançada pela administração: o colaborador assina uma vez todos os EPI que estão aguardando assinatura. */
+function assinarFichaEpi_(u, req) {
+  const nome = txt_(req.colaborador);
+  if (!txt_(req.assinatura)) throw new Error('O colaborador precisa assinar a ficha.');
+  const t = ler_(ABA_EPI_ENT);
+  const linhas = t.linhas.filter(l => txt_(l.get('Colaborador')) === nome && txt_(l.get('Situação')) === 'Aguardando assinatura');
+  if (!linhas.length) throw new Error('Não há EPI aguardando assinatura para ' + nome + '.');
+  const cat = {}; catalogoEPI_().forEach(c => cat[c.codigo] = c);
+  const agora = new Date();
+  const ass = salvarImagem_(pasta_(['Kiton Hub', 'EPI', nome]), req.assinatura, 'image/png', 'Ficha EPI ' + Utilities.formatDate(agora, TZ, 'yyyy-MM-dd HHmm') + '.png');
+  linhas.forEach(l => {
+    const c = cat[txt_(l.get('Código EPI'))] || {};
+    set_(t, l._linha, 'Data', agora); set_(t, l._linha, 'Assinatura', ass); set_(t, l._linha, 'Situação', 'Em uso'); set_(t, l._linha, 'Entregue por', u.nome);
+    if (c.trocaDias) set_(t, l._linha, 'Próxima troca', new Date(agora.getTime() + c.trocaDias * 864e5));
+  });
+  return { ok: true, itens: linhas.length };
 }
 
 function devolverEpi_(u, req) {
@@ -2152,7 +2179,7 @@ function docFichaEPI_(nome) {
     '<div class="decl">Declaro ter recebido gratuitamente os Equipamentos de Proteção Individual (EPI) relacionados abaixo, com Certificado de Aprovação (CA) válido, e ter sido orientado e treinado quanto ao uso adequado, guarda e conservação. ' +
     'Comprometo-me a usá-los apenas para a finalidade a que se destinam, responsabilizar-me pela guarda e conservação, comunicar qualquer alteração que os torne impróprios para uso e cumprir as determinações da empresa sobre o uso adequado, ciente de que a recusa injustificada ao uso constitui ato faltoso.</div>' +
     '<div class="b"><div class="bt">Registro de entregas</div><table class="lst"><tr><th>Data</th><th>EPI</th><th>CA</th><th>Tam.</th><th>Qtd.</th><th>Motivo</th><th>Situação</th><th>Assinatura</th></tr>' +
-    (eps.length ? eps.map(e => '<tr><td>' + esc_(e.data) + '</td><td>' + esc_(e.desc) + '</td><td>' + esc_(e.ca) + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
+    (eps.length ? eps.map(e => '<tr><td>' + (e.situacao === 'Aguardando assinatura' ? '' : esc_(e.data)) + '</td><td>' + esc_(e.desc) + (e.serie ? '<br><span style="color:#5d6670">Série/lote: ' + esc_(e.serie) + '</span>' : '') + '</td><td>' + esc_(e.ca || 'Uniforme') + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
       (e.assinatura ? '<img src="' + imgDrive_(e.assinatura) + '">' : '') + '</td></tr>').join('') : '<tr><td colspan="8">Nenhuma entrega registrada.</td></tr>') + '</table></div>' +
     '<p style="font-size:8pt;color:#5d6670">As assinaturas foram coletadas na tela do aparelho no momento de cada entrega, pelo app Kiton Hub.</p>';
   return pdfDoc_(corpo, 'Ficha de EPI - ' + nome + '.pdf');

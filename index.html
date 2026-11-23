@@ -1167,7 +1167,7 @@ async function adminEPI(box, aba) {
       eBox.innerHTML = (r.caVencendo.length ? msg('erro', 'CA vencido ou vencendo: ' + r.caVencendo.map(c => `${c.desc} (CA ${c.ca}, ${c.dias < 0 ? 'vencido em' : 'vence em'} ${c.validadeCA})`).join('; ') + '. Atualize no catálogo.') : '') +
         r.pessoas.map(p => `<button type="button" class="linha" data-col="${esc(p.nome)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(p.nome)}</b>
           <small>${esc(p.funcao)} · ${p.itens} ferramenta(s) individual(is) · ${p.episEmUso} EPI em uso</small>
-          <span style="display:block;margin-top:6px">${seloTermo(p.termo)}${p.avisos.map(a => `<span class="selo-txt laranja">${esc(a)}</span>`).join('')}</span></span><span class="fim">${ic('seta')}</span></button>`).join('');
+          <span style="display:block;margin-top:6px">${seloTermo(p.termo)}${p.aguardando ? `<span class="selo-txt laranja">Ficha de EPI aguardando assinatura (${p.aguardando})</span>` : ''}${p.avisos.map(a => `<span class="selo-txt laranja">${esc(a)}</span>`).join('')}</span></span><span class="fim">${ic('seta')}</span></button>`).join('');
       eBox.querySelectorAll('[data-col]').forEach(b => b.onclick = () => telaColabEPI(b.dataset.col));
     } else {
       eBox.innerHTML = `<button type="button" class="acao" id="eNovoEpi" style="margin-top:0">${ic('ok')} Cadastrar EPI</button>` +
@@ -1221,6 +1221,9 @@ async function telaColabEPI(nome, aviso) {
       <div class="grade"><button type="button" class="acao leve" id="cNovoItem" style="margin:0">${ic('ferr')} Cadastrar ferramenta</button>
         <button type="button" class="acao leve" id="cTermo" style="margin:0" ${r.itens.length ? '' : 'disabled'}>${ic('os')} Imprimir termo</button></div>
       ${r.itens.length ? `<button type="button" class="acao" id="cAssTermo">${ic('ok')} Colher assinatura do termo</button>` : ''}
+      ${r.aguardando.length ? `<h2>Ficha de EPI aguardando assinatura</h2>
+        <div class="cartao">${r.aguardando.map(e => `<div class="apr-lin"><span>${esc(e.desc)}<small class="suave" style="display:block">${e.ca ? 'CA ' + esc(e.ca) : 'Uniforme'}${e.tamanho ? ' · tam. ' + esc(e.tamanho) : ''}${e.serie ? ' · série/lote ' + esc(e.serie) : ''}</small></span><span>${esc(e.qtd)}</span></div>`).join('')}</div>
+        <button type="button" class="acao" id="cAssFicha">${ic('ok')} Colher assinatura da ficha (${r.aguardando.length} itens)</button>` : ''}
       <h2>EPI em uso</h2>
       ${r.avisos.length ? msg('erro', r.avisos.map(a => a.desc + ': ' + a.texto).join('. ')) : ''}
       ${r.episEmUso.length ? r.episEmUso.map(e => `<div class="cartao"><div class="t">${esc(e.desc)}<span class="pat">CA ${esc(e.ca)}</span></div>
@@ -1235,6 +1238,7 @@ async function telaColabEPI(nome, aviso) {
     document.getElementById('cFicha').onclick = () => abrirDoc('ficha', nome);
     document.getElementById('cEntregar').onclick = () => telaEntregarEpi(nome);
     const at = document.getElementById('cAssTermo'); if (at) at.onclick = () => telaAssinarTermo(nome, r.itens);
+    const af = document.getElementById('cAssFicha'); if (af) af.onclick = () => telaAssinarFichaEpi(nome, r.aguardando);
     document.querySelectorAll('[data-dev]').forEach(b => b.onclick = () => executar(async () => {
       const obs = prompt('Devolução do EPI. Observação (opcional):');
       if (obs === null) return;
@@ -1274,6 +1278,25 @@ function telaEntregarEpi(nome) {
     if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');
     await api('entregarEpi', { colaborador: nome, itens, motivo: f.motivo, obs: document.getElementById('eObs').value, assinatura });
     sujo = false; await recarregarDados(); telaColabEPI(nome, `Entrega de ${itens.length} EPI registrada com assinatura.`);
+  });
+}
+
+function telaAssinarFichaEpi(nome, itens) {
+  topo('Ficha de EPI');
+  let assinatura = null, tracos = 0;
+  $app.innerHTML = `<h1>Ficha de EPI</h1><p class="suave">${esc(nome)} · ${itens.length} itens</p><div id="erro"></div>
+    <div class="cartao">${itens.map(e => `<div class="apr-lin"><span>${esc(e.desc)}<small class="suave" style="display:block">${e.ca ? 'CA ' + esc(e.ca) : 'Uniforme'}${e.tamanho ? ' · tam. ' + esc(e.tamanho) : ''}${e.serie ? ' · série/lote ' + esc(e.serie) : ''}</small></span><span>${esc(e.qtd)}</span></div>`).join('')}</div>
+    <div class="decl-app">Declaro ter recebido gratuitamente os EPI relacionados acima, com CA válido, e ter sido orientado quanto ao uso, guarda e conservação, conforme a NR-6. Comprometo-me a usá-los apenas para a finalidade a que se destinam e a comunicar qualquer alteração que os torne impróprios para uso.</div>
+    <label class="rotulo">Assinatura de ${esc(nome)}</label>
+    <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>`;
+  const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+  montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Registrar assinatura</button></div>`);
+  document.getElementById('ant').onclick = () => telaColabEPI(nome);
+  document.getElementById('ok').onclick = () => executar(async () => {
+    if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');
+    const r = await api('assinarFichaEpi', { colaborador: nome, assinatura });
+    sujo = false; await recarregarDados(); telaColabEPI(nome, `Ficha assinada (${r.itens} itens). Toque em "Imprimir ficha de EPI" para gerar o PDF.`);
   });
 }
 
