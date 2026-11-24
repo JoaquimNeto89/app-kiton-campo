@@ -2024,7 +2024,8 @@ function epiPainel_() {
   });
   const cat = catalogoEPI_();
   return { ok: true, pessoas, catalogo: cat, motivos: MOTIVOS_EPI,
-    caVencendo: cat.filter(c => c.ativo && c.diasCA !== null && c.diasCA <= 30).map(c => ({ desc: c.desc, ca: c.ca, validadeCA: c.validadeCA, dias: c.diasCA })) };
+    // CA já vencido não é pendência: o que está em uso foi comprado antes (avisos por entrega tratam o resto)
+    caVencendo: cat.filter(c => c.ativo && c.diasCA !== null && c.diasCA >= 0 && c.diasCA <= 30).map(c => ({ desc: c.desc, ca: c.ca, validadeCA: c.validadeCA, dias: c.diasCA })) };
 }
 
 function pendenciasEPI_() {
