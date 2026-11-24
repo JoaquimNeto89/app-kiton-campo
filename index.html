@@ -1172,8 +1172,8 @@ async function adminEPI(box, aba) {
     } else {
       eBox.innerHTML = `<button type="button" class="acao" id="eNovoEpi" style="margin-top:0">${ic('ok')} Cadastrar EPI</button>` +
         (r.catalogo.length ? r.catalogo.map(c => `<button type="button" class="linha" data-epi="${esc(c.codigo)}" style="align-items:flex-start"><span style="flex:1"><b>${esc(c.desc)}</b>
-          <small>${esc(c.codigo)} · CA ${esc(c.ca)}${c.validadeCA ? ' · válido até ' + esc(c.validadeCA) : ''}${c.fabricante ? ' · ' + esc(c.fabricante) : ''}${c.trocaDias ? ' · troca a cada ' + c.trocaDias + ' dias' : ''}</small>
-          <span style="display:block;margin-top:6px">${!c.ativo ? '<span class="selo-txt">Inativo</span>' : c.diasCA !== null && c.diasCA < 0 ? '<span class="selo-txt vermelho">CA vencido</span>' : c.diasCA !== null && c.diasCA <= 30 ? '<span class="selo-txt laranja">CA vence em ' + c.diasCA + ' dias</span>' : '<span class="selo-txt verde">CA válido</span>'}</span></span><span class="fim">${ic('seta')}</span></button>`).join('')
+          <small>${esc(c.codigo)}${c.uniforme ? '' : ' · CA ' + esc(c.ca)}${c.rastreavel ? ' · rastreável' + (c.vidaAnos ? ', vida útil ' + c.vidaAnos + ' anos' : '') : ''}${c.validadeCA ? ' · válido até ' + esc(c.validadeCA) : ''}${c.fabricante ? ' · ' + esc(c.fabricante) : ''}${c.trocaDias ? ' · troca a cada ' + c.trocaDias + ' dias' : ''}</small>
+          <span style="display:block;margin-top:6px">${!c.ativo ? '<span class="selo-txt">Inativo</span>' : c.uniforme ? '<span class="selo-txt">Uniforme (sem CA)</span>' : c.diasCA !== null && c.diasCA < 0 ? '<span class="selo-txt vermelho">CA vencido</span>' : c.diasCA !== null && c.diasCA <= 30 ? '<span class="selo-txt laranja">CA vence em ' + c.diasCA + ' dias</span>' : '<span class="selo-txt verde">CA válido</span>'}</span></span><span class="fim">${ic('seta')}</span></button>`).join('')
           : msg('info', 'Nenhum EPI cadastrado. Comece pelo botão acima.'));
       document.getElementById('eNovoEpi').onclick = () => telaEpiForm(null);
       eBox.querySelectorAll('[data-epi]').forEach(b => b.onclick = () => telaEpiForm(r.catalogo.find(c => c.codigo === b.dataset.epi)));
@@ -1187,9 +1187,14 @@ function telaEpiForm(c) {
   const iso = d => { if (!d) return ''; const [a, b, y] = d.split('/'); return `${y}-${b}-${a}`; };
   $app.innerHTML = `<h1>${c.codigo ? 'Editar EPI' : 'Cadastrar EPI'}</h1><div id="erro"></div>
     <label class="rotulo" for="fDesc">Descrição</label><input class="campo-txt" id="fDesc" value="${esc(c.desc || '')}" placeholder="Ex.: Luva isolante classe 0">
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="fUni" ${c.codigo && c.uniforme ? 'checked' : ''} style="width:22px;height:22px"> Uniforme ou item sem CA (camiseta, polo etc.)</label>
+    <div id="fCaBox">
     <label class="rotulo" for="fCa">Número do CA</label><input class="campo-txt" id="fCa" value="${esc(c.ca || '')}" inputmode="numeric">
     <label class="rotulo" for="fVal">Validade do CA</label><input class="campo-txt" id="fVal" type="date" value="${esc(iso(c.validadeCA))}">
-    <p class="suave" style="margin-top:6px">Consulte a validade no site de CA do Ministério do Trabalho. Com o CA vencido o app não deixa entregar o EPI.</p>
+    <p class="suave" style="margin-top:6px">Consulte a validade no site de CA do Ministério do Trabalho. Com o CA vencido, a entrega só é aceita se a compra foi feita antes do vencimento.</p>
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="fRas" ${c.rastreavel ? 'checked' : ''} style="width:22px;height:22px"> Rastreável: pedir nº de série/lote e data de compra na entrega (cinturão, talabarte, luva isolante)</label>
+    <div id="fVidaBox"><label class="rotulo" for="fVida">Vida útil pelo fabricante (anos, contados da compra)</label><input class="campo-txt" id="fVida" type="number" min="0" value="${c.vidaAnos || ''}" placeholder="Ex.: 5"></div>
+    </div>
     <label class="rotulo" for="fFab">Fabricante</label><input class="campo-txt" id="fFab" value="${esc(c.fabricante || '')}">
     <label class="rotulo" for="fTam">Tamanhos (opcional)</label><input class="campo-txt" id="fTam" value="${esc(c.tamanhos || '')}" placeholder="Ex.: P, M, G ou 38 a 44">
     <label class="rotulo" for="fTroca">Troca a cada (dias, opcional)</label><input class="campo-txt" id="fTroca" type="number" min="0" value="${c.trocaDias || ''}" placeholder="Ex.: 180">
@@ -1197,10 +1202,14 @@ function telaEpiForm(c) {
     ${c.codigo ? `<label class="linha" style="font-weight:500"><input type="checkbox" id="fAtivo" ${c.ativo ? 'checked' : ''} style="width:22px;height:22px"> Ativo (aparece para entrega)</label>` : ''}`;
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('ok')} Salvar</button></div>`);
   document.getElementById('ant').onclick = () => telaAdmin('epi', 'cat');
+  const ajusta = () => { document.getElementById('fCaBox').classList.toggle('oculto', document.getElementById('fUni').checked); document.getElementById('fVidaBox').classList.toggle('oculto', !document.getElementById('fRas').checked); };
+  document.getElementById('fUni').onchange = ajusta; document.getElementById('fRas').onchange = ajusta; ajusta();
   document.getElementById('ok').onclick = () => executar(async () => {
     const at = document.getElementById('fAtivo');
+    const uni = document.getElementById('fUni').checked, ras = !uni && document.getElementById('fRas').checked;
     await api('salvarEpi', { epi: { codigo: c.codigo || '', desc: document.getElementById('fDesc').value, ca: document.getElementById('fCa').value, validadeCA: document.getElementById('fVal').value,
-      fabricante: document.getElementById('fFab').value, tamanhos: document.getElementById('fTam').value, trocaDias: document.getElementById('fTroca').value, obs: document.getElementById('fObs').value, ativo: at ? at.checked : true } });
+      fabricante: document.getElementById('fFab').value, tamanhos: document.getElementById('fTam').value, trocaDias: document.getElementById('fTroca').value, obs: document.getElementById('fObs').value, ativo: at ? at.checked : true,
+      uniforme: uni, rastreavel: ras, vidaAnos: document.getElementById('fVida').value } });
     sujo = false; telaAdmin('epi', 'cat');
   });
 }
@@ -1256,16 +1265,18 @@ function telaEntregarEpi(nome) {
   $app.innerHTML = `<h1>Entregar EPI</h1><p class="suave">${esc(nome)}</p><div id="erro"></div>
     ${cat.length ? '' : msg('erro', 'Cadastre os EPI no catálogo antes de entregar.')}
     <label class="rotulo">EPI entregues</label>
-    ${cat.map(c => `<div class="apr-it" data-c="${esc(c.codigo)}"><label style="display:flex;gap:10px;align-items:flex-start;font-weight:500"><input type="checkbox" style="width:22px;height:22px;flex:none;margin-top:2px" ${c.diasCA !== null && c.diasCA < 0 ? 'disabled' : ''}>
-      <span>${esc(c.desc)}<small class="suave" style="display:block">CA ${esc(c.ca)}${c.diasCA !== null && c.diasCA < 0 ? ' · <b style="color:var(--vermelho-esc)">CA vencido</b>' : ''}</small></span></label>
-      <div class="grade oculto" style="margin-top:8px"><input class="campo-txt" data-tam placeholder="Tamanho" ${c.tamanhos ? `list="dl${esc(c.codigo)}"` : ''}><input class="campo-txt" data-qtd type="number" min="1" value="1" placeholder="Qtd."></div>
-      ${c.tamanhos ? `<datalist id="dl${esc(c.codigo)}">${c.tamanhos.split(/[,;]/).map(t => `<option value="${esc(t.trim())}">`).join('')}</datalist>` : ''}</div>`).join('')}
+    ${cat.map(c => { const venc = c.diasCA !== null && c.diasCA < 0, pedeCompra = venc || c.rastreavel; return `<div class="apr-it" data-c="${esc(c.codigo)}"><label style="display:flex;gap:10px;align-items:flex-start;font-weight:500"><input type="checkbox" style="width:22px;height:22px;flex:none;margin-top:2px">
+      <span>${esc(c.desc)}<small class="suave" style="display:block">${c.uniforme ? 'Uniforme (sem CA)' : 'CA ' + esc(c.ca)}${venc ? ' · <b style="color:var(--vermelho-esc)">CA vencido em ' + esc(c.validadeCA) + ': só se comprado até essa data</b>' : ''}</small></span></label>
+      <div class="oculto" data-extra style="margin-top:8px"><div class="grade"><input class="campo-txt" data-tam placeholder="Tamanho" ${c.tamanhos ? `list="dl${esc(c.codigo)}"` : ''}><input class="campo-txt" data-qtd type="number" min="1" value="1" placeholder="Qtd."></div>
+      ${c.rastreavel ? `<input class="campo-txt" data-serie placeholder="Nº de série / lote" style="margin-top:8px">` : ''}
+      ${pedeCompra ? `<label class="rotulo" style="margin-top:8px">Data de compra${c.rastreavel && c.vidaAnos ? ' (vida útil de ' + c.vidaAnos + ' anos a partir dela)' : ''}</label><input class="campo-txt" data-compra type="date">` : ''}</div>
+      ${c.tamanhos ? `<datalist id="dl${esc(c.codigo)}">${c.tamanhos.split(/[,;]/).map(t => `<option value="${esc(t.trim())}">`).join('')}</datalist>` : ''}</div>`; }).join('')}
     <label class="rotulo">Motivo</label>${chips('eMot', motivos, '')}
     <label class="rotulo" for="eObs">Observação (opcional)</label><input class="campo-txt" id="eObs">
     <div class="decl-app">Declaro ter recebido gratuitamente os EPI marcados acima, com CA válido, e ter sido orientado quanto ao uso, guarda e conservação, conforme a NR-6.</div>
     <label class="rotulo">Assinatura de ${esc(nome)}</label>
     <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>`;
-  document.querySelectorAll('[data-c] input[type=checkbox]').forEach(ch => ch.onchange = () => ch.closest('[data-c]').querySelector('.grade').classList.toggle('oculto', !ch.checked));
+  document.querySelectorAll('[data-c] input[type=checkbox]').forEach(ch => ch.onchange = () => ch.closest('[data-c]').querySelector('[data-extra]').classList.toggle('oculto', !ch.checked));
   ligarChips('eMot', v => f.motivo = v);
   const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
   montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
@@ -1273,7 +1284,8 @@ function telaEntregarEpi(nome) {
   document.getElementById('ant').onclick = () => telaColabEPI(nome);
   document.getElementById('ok').onclick = () => executar(async () => {
     const itens = [...document.querySelectorAll('[data-c]')].filter(d => d.querySelector('input[type=checkbox]').checked)
-      .map(d => ({ codigo: d.dataset.c, tamanho: d.querySelector('[data-tam]').value.trim(), qtd: d.querySelector('[data-qtd]').value || 1 }));
+      .map(d => ({ codigo: d.dataset.c, tamanho: d.querySelector('[data-tam]').value.trim(), qtd: d.querySelector('[data-qtd]').value || 1,
+        serie: (d.querySelector('[data-serie]') || {}).value || '', dataCompra: (d.querySelector('[data-compra]') || {}).value || '' }));
     if (!itens.length) throw new Error('Marque pelo menos um EPI.');
     if (!f.motivo) throw new Error('Escolha o motivo da entrega.');
     if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');

@@ -1071,6 +1071,12 @@ function dataIso_(s) {
   if (isNaN(d)) throw new Error('Data e hora inválidas.');
   return d;
 }
+/** Data só com dia (campo date do app, yyyy-mm-dd, ou dd/mm/aaaa). */
+function diaEntrada_(s) {
+  const t = txt_(s); if (!t) return null;
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  return data_(t);
+}
 function lista2_(v) { return txt_(v).split(',').map(txt_).filter(Boolean); }
 
 function proximaOS_() {
@@ -1958,7 +1964,8 @@ function catalogoEPI_() {
     const v = data_(l.get('Validade do CA'));
     return { codigo: txt_(l.get('Código')), desc: txt_(l.get('Descrição')), ca: txt_(l.get('CA')), validadeCA: v ? dia_(v) : '', validadeD: v || null, diasCA: diasAte_(v),
       fabricante: txt_(l.get('Fabricante')), tamanhos: txt_(l.get('Tamanhos')), trocaDias: Number(l.get('Troca a cada (dias)')) || 0,
-      ativo: txt_(l.get('Ativo')) !== 'Não', obs: txt_(l.get('Observações')), linha: l._linha };
+      ativo: txt_(l.get('Ativo')) !== 'Não', obs: txt_(l.get('Observações')), linha: l._linha,
+      uniforme: !txt_(l.get('CA')), rastreavel: txt_(l.get('Rastreável')) === 'Sim', vidaAnos: Number(l.get('Vida útil (anos)')) || 0 };
   });
 }
 
@@ -2041,17 +2048,21 @@ function salvarEpi_(u, req) {
   const t = ler_(ABA_EPI_CAT);
   const d = req.epi || {};
   if (!txt_(d.desc)) throw new Error('Informe a descrição do EPI.');
-  if (!txt_(d.ca)) throw new Error('Informe o número do CA (Certificado de Aprovação).');
-  const valCA = d.validadeCA ? dataIso_(d.validadeCA) : null;
+  if (!txt_(d.ca) && !d.uniforme) throw new Error('Informe o número do CA (Certificado de Aprovação) ou marque que é uniforme sem CA.');
+  if (d.uniforme) { d.ca = ''; d.validadeCA = ''; }
+  const valCA = d.validadeCA ? diaEntrada_(d.validadeCA) : null;
   const campos = { 'Descrição': txt_(d.desc), 'CA': txt_(d.ca), 'Validade do CA': valCA || '', 'Fabricante': txt_(d.fabricante), 'Tamanhos': txt_(d.tamanhos),
-    'Troca a cada (dias)': Number(d.trocaDias) || '', 'Ativo': d.ativo === false ? 'Não' : 'Sim', 'Observações': txt_(d.obs) };
+    'Troca a cada (dias)': Number(d.trocaDias) || '', 'Ativo': d.ativo === false ? 'Não' : 'Sim', 'Observações': txt_(d.obs),
+    'Rastreável': d.rastreavel ? 'Sim' : 'Não', 'Vida útil (anos)': d.rastreavel ? (Number(d.vidaAnos) || '') : '' };
   if (txt_(d.codigo)) {
     const l = t.linhas.find(x => txt_(x.get('Código')) === txt_(d.codigo));
     if (!l) throw new Error('EPI não encontrado.');
     Object.keys(campos).forEach(k => set_(t, l._linha, k, campos[k]));
     return { ok: true, codigo: txt_(d.codigo) };
   }
-  const codigo = 'EPI-' + ('00' + (t.linhas.length + 1)).slice(-3);
+  const pref = d.uniforme ? 'UNI-' : 'EPI-';
+  let k = t.linhas.length + 1, codigo;
+  do { codigo = pref + ('00' + k).slice(-3); k++; } while (t.linhas.some(x => txt_(x.get('Código')) === codigo));
   anexar_(t, Object.assign({ 'Código': codigo }, campos));
   return { ok: true, codigo };
 }
@@ -2066,7 +2077,14 @@ function entregarEpi_(u, req) {
   if (!motivo) throw new Error('Informe o motivo da entrega.');
   if (!txt_(req.assinatura)) throw new Error('O colaborador precisa assinar o recebimento.');
   const cat = {}; catalogoEPI_().forEach(c => cat[c.codigo] = c);
-  itens.forEach(i => { const c = cat[txt_(i.codigo)]; if (!c) throw new Error('EPI não cadastrado: ' + i.codigo); if (c.diasCA !== null && c.diasCA < 0) throw new Error('O CA de ' + c.desc + ' está vencido (' + c.validadeCA + '). Atualize o catálogo antes de entregar.'); });
+  itens.forEach(i => {
+    const c = cat[txt_(i.codigo)]; if (!c) throw new Error('EPI não cadastrado: ' + i.codigo);
+    i.compraD = diaEntrada_(i.dataCompra);
+    // CA vencido: só pode entregar se o item foi comprado enquanto o CA era válido
+    if (c.diasCA !== null && c.diasCA < 0 && !(i.compraD && c.validadeD && i.compraD <= c.validadeD))
+      throw new Error('O CA de ' + c.desc + ' venceu em ' + c.validadeCA + '. Só é possível entregar se a compra foi feita até essa data: informe a data de compra.');
+    if (c.rastreavel && (!txt_(i.serie) || !i.compraD)) throw new Error('Informe o nº de série/lote e a data de compra de ' + c.desc + '.');
+  });
   const agora = new Date();
   const ass = salvarImagem_(pasta_(['Kiton Hub', 'EPI', nome]), req.assinatura, 'image/png', 'Entrega EPI ' + Utilities.formatDate(agora, TZ, 'yyyy-MM-dd HHmm') + '.png');
   const t = ler_(ABA_EPI_ENT);
@@ -2079,7 +2097,9 @@ function entregarEpi_(u, req) {
     const c = cat[txt_(i.codigo)];
     const prox = c.trocaDias ? new Date(agora.getTime() + c.trocaDias * 864e5) : '';
     anexar_(t, { 'Nº': n, 'Data': agora, 'Colaborador': nome, 'Código EPI': c.codigo, 'Descrição': c.desc, 'CA': c.ca, 'Tamanho': txt_(i.tamanho),
-      'Quantidade': Number(i.qtd) || 1, 'Motivo': motivo, 'Entregue por': u.nome, 'Assinatura': ass, 'Próxima troca': prox, 'Situação': 'Em uso', 'Observações': txt_(req.obs) });
+      'Quantidade': Number(i.qtd) || 1, 'Motivo': motivo, 'Entregue por': u.nome, 'Assinatura': ass, 'Próxima troca': prox, 'Situação': 'Em uso', 'Observações': txt_(req.obs),
+      'Data de compra': i.compraD || '', 'Nº de série / lote': txt_(i.serie),
+      'Vida útil até': i.compraD && c.vidaAnos ? new Date(i.compraD.getFullYear() + c.vidaAnos, i.compraD.getMonth(), i.compraD.getDate()) : '' });
     nums.push(n); n++;
   });
   return { ok: true, numeros: nums };
