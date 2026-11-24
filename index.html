@@ -1212,6 +1212,7 @@ async function telaColabEPI(nome, aviso) {
   document.getElementById('ant').onclick = () => telaAdmin('epi');
   await executar(async () => {
     const r = await api('colabEPI', { colaborador: nome });
+    r.aguardando = r.aguardando || [];
     const total = r.itens.reduce((s, i) => s + (i.valor || 0), 0);
     document.getElementById('cBox').innerHTML = `<p class="suave" style="margin-top:-8px">${esc(r.funcao)}</p>
       <h2>Ferramentas de uso individual</h2><p style="margin:0 0 8px">${seloTermo(r.termo)}</p>
