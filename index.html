@@ -225,6 +225,12 @@ td.n{text-align:right}
 .msg.erro{background:#FCE4E4;color:#7E0000}
 .msg.ok{background:var(--verde-claro);color:#105A30}
 .msg.info{background:#fff;color:var(--cinza)}
+.bv-fundo{position:fixed;inset:0;z-index:40;background:rgba(15,17,20,.55);display:grid;place-items:center;padding:20px;animation:bvf .2s ease-out}
+.bv{background:#fff;border-radius:16px;width:100%;max-width:340px;overflow:hidden;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3);animation:pop .3s ease-out}
+.bv .faixa{height:6px;background:#CD0000}.bv .corpo{padding:24px 22px 18px}.bv img{width:84px;height:84px;display:block;margin:0 auto 14px}
+.bv h2{font-size:22px;margin:0 0 12px;color:#111}.bv p{font-size:15.5px;line-height:1.5;color:#3a3f45;margin:0 0 12px}.bv p b{color:#111}.bv .kai{color:#CD0000;font-weight:600}
+.bv .acao{width:100%;margin:6px 0 0}.bv .rod{border-top:1px solid #e6e9ed;padding:10px;font-size:12px;color:#6b7280}
+@keyframes bvf{from{opacity:0}to{opacity:1}}@media (prefers-reduced-motion:reduce){.bv,.bv-fundo{animation:none}}
 .carregando{position:fixed;inset:0;z-index:30;background:rgba(230,233,237,.72);display:grid;place-items:center}
 .carregando>div{background:#000;color:#fff;font-weight:600;padding:16px 22px;border-radius:14px;display:flex;align-items:center;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 .carregando .gira{width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#CD0000;animation:gira .8s linear infinite;flex:none}
@@ -532,7 +538,7 @@ async function telaLogin() {
     if (!escolhido) throw new Error('Selecione o seu nome.');
     if (pin.length !== 6) throw new Error('O PIN tem 6 números.');
     const r = await api('login', { nome: escolhido, pin });
-    est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token); guardar('kc_ultimo_nome', escolhido);
+    est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token); guardar('kc_ultimo_nome', escolhido); mostrarBoasVindas = true;
     r.usuario.trocaPendente ? telaTrocarPin() : carregarInicio();
   });
   document.getElementById('entrar').onclick = entrar;
@@ -554,8 +560,28 @@ function telaTrocarPin() {
 }
 
 // ---------- início ----------
+/** Boas-vindas do KAI: aparece só logo após o login (não ao reabrir o app). */
+let mostrarBoasVindas = false;
+function boasVindas() {
+  const primeiro = semTituloNome(est.usuario.nome).split(' ')[0];
+  const f = document.createElement('div'); f.className = 'bv-fundo'; f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true'); f.setAttribute('aria-labelledby', 'bvTit');
+  f.innerHTML = `<div class="bv"><div class="faixa"></div><div class="corpo"><img src="kai.png?v=1" alt="KAI">
+    <h2 id="bvTit">Olá, ${esc(primeiro)}!</h2>
+    <p>Eu sou o <span class="kai">KAI</span>, o assistente inteligente da Kiton Engenharia Integrada.</p>
+    <p>Boas-vindas ao <b>Kiton Hub</b>, o app de gestão integrada da Kiton.</p>
+    <button type="button" class="acao" id="bvOk">Começar</button></div>
+    <div class="rod">Kiton Hub · versão ${VERSAO} · by Eng. Joaquim Neto</div></div>`;
+  document.body.appendChild(f);
+  const fechar = () => { f.remove(); document.removeEventListener('keydown', esc1); };
+  const esc1 = e => { if (e.key === 'Escape') fechar(); };
+  document.getElementById('bvOk').onclick = fechar; document.addEventListener('keydown', esc1);
+  f.addEventListener('click', e => { if (e.target === f) fechar(); });
+  document.getElementById('bvOk').focus();
+}
+const semTituloNome = n => String(n || '').replace(/^(eng|enga|dr|dra|sr|sra)\.?\s+/i, '');
 async function carregarInicio() {
   await executar(async () => { const r = await api('inicio'); est.dados = r; est.usuario = r.usuario; telaInicio(); });
+  if (mostrarBoasVindas && est.usuario) { mostrarBoasVindas = false; boasVindas(); }
 }
 function telaInicio() {
   document.getElementById('btnMenu').classList.remove('oculto');
