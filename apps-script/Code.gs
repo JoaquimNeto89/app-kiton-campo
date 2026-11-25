@@ -2259,7 +2259,7 @@ function docOSSST_(nome, ass) {
     '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nomeL) + '<br>' + esc_(papel) + '<br><span style="color:#5d6670">' + esc_(sub) + '</span></div></td>';
   const quando = ass.data ? 'Assinado digitalmente em ' + ass.data : 'Data: ____/____/______';
   const corpo = cabDoc_('ORDEM DE SERVIÇO DE SST', 'NR-1, item 1.4.1' + (ass.n ? ' · Registro nº ' + ass.n : '')) +
-    (d.terceirizado ? '<div style="border:2px solid #CD0000;padding:4px 8px;margin:0 0 6px;font-weight:bold;font-size:9.5pt">PRESTADOR DE SERVIÇO TERCEIRIZADO' + (d.razao ? ' · ' + esc_(d.razao) : '') + (d.cnpj ? ' · CNPJ ' + esc_(d.cnpj) : '') + '</div>' : '') +
+    (d.terceirizado ? '<div style="border:2px solid #CD0000;padding:4px 8px;margin:0 0 6px;font-weight:bold;font-size:9.5pt">PRESTADOR DE SERVIÇO TERCEIRIZADO</div>' : '') +
     '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(d.nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(d.funcao) + '</td></tr>' +
     '<tr><td class="r">Setor / cargo no PGR</td><td>' + esc_(d.setor) + ' · ' + esc_(d.cargoPGR) + ' (CBO ' + esc_(d.cbo) + ')</td></tr>' +
     '<tr><td class="r">Vínculo</td><td>' + esc_(d.vincTxt) + '</td></tr>' +
@@ -2298,7 +2298,7 @@ function assinarOSSST_(u, req) {
   const n = String(proximoNumero_(t, 'Nº'));
   const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   const pdf = docOSSST_(nome, { n, img: imgDrive_(idAss), imgResp: imgDrive_(idResp), resp: u.nome, data: Utilities.formatDate(agora, TZ, 'dd/MM/yyyy HH:mm'),
-    dataIso: Utilities.formatDate(agora, TZ, 'yyyy-MM-dd'), dataExt: Number(Utilities.formatDate(agora, TZ, 'd')) + ' de ' + meses[agora.getMonth()] + ' de ' + agora.getFullYear() });
+    dataIso: Utilities.formatDate(agora, TZ, 'yyyy-MM-dd'), dataExt: Number(Utilities.formatDate(agora, TZ, 'dd')) + ' de ' + meses[agora.getMonth()] + ' de ' + agora.getFullYear() });
   const arq = pasta_(['Kiton Hub - Gestão SST', nome]).createFile(pdf);
   t.linhas.filter(l => txt_(l.get('Escopo')) === 'Colaborador' && txt_(l.get('Colaborador')) === nome && txt_(l.get('Código do tipo')) === 'C14' && txt_(l.get('Atual')) === 'Sim')
     .forEach(l => set_(t, l._linha, 'Atual', 'Não'));
