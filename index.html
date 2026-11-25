@@ -225,8 +225,11 @@ td.n{text-align:right}
 .msg.erro{background:#FCE4E4;color:#7E0000}
 .msg.ok{background:var(--verde-claro);color:#105A30}
 .msg.info{background:#fff;color:var(--cinza)}
-.carregando{position:fixed;inset:0;z-index:30;background:rgba(230,233,237,.75);display:grid;place-items:center}
-.carregando div{background:#000;color:#fff;font-weight:600;padding:14px 20px;border-radius:12px}
+.carregando{position:fixed;inset:0;z-index:30;background:rgba(230,233,237,.72);display:grid;place-items:center}
+.carregando>div{background:#000;color:#fff;font-weight:600;padding:16px 22px;border-radius:14px;display:flex;align-items:center;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.carregando .gira{width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#CD0000;animation:gira .8s linear infinite;flex:none}
+@keyframes gira{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.carregando .gira{animation-duration:2.4s}}
 .oculto{display:none!important}
 .fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
 .foto{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#fff}
@@ -256,7 +259,7 @@ select.campo-txt{appearance:auto}
 <div id="barra"></div>
 <div id="folha" class="menu oculto" role="dialog" aria-modal="true" aria-labelledby="folhaTit"><div class="menu-fundo" id="folhaFundo"></div><div class="folha-painel"><div class="menu-cab"><b id="folhaTit"></b><button type="button" class="icone-btn" id="folhaX" aria-label="Fechar"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div id="folhaCorpo" class="folha-corpo"></div></div></div>
 <div id="menu" class="menu oculto" role="dialog" aria-modal="true" aria-label="Menu"><div class="menu-fundo" id="menuFundo"></div><nav class="menu-painel" id="menuPainel"></nav></div>
-<div id="carregando" class="carregando oculto"><div>Aguarde…</div></div>
+<div id="carregando" class="carregando oculto" role="status" aria-live="polite"><div><span class="gira" aria-hidden="true"></span><span id="carregandoTxt">Carregando…</span></div></div>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -310,7 +313,15 @@ const icAbast = a => /não|nao/i.test(a) ? 'sem' : 'comb';
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
 const lerLocal = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const carregando = on => document.getElementById('carregando').classList.toggle('oculto', !on);
+// indicador de carregamento: aparece em qualquer espera pelo servidor (após 250 ms, para não piscar em respostas rápidas)
+let pendentes = 0, timerCarga = null, textoCarga = 'Carregando…';
+const mostrarCarga = () => { document.getElementById('carregandoTxt').textContent = textoCarga; document.getElementById('carregando').classList.remove('oculto'); };
+const carregando = (on, texto) => {
+  if (on) { pendentes++; if (texto) textoCarga = texto; if (!timerCarga) timerCarga = setTimeout(mostrarCarga, 250); }
+  else if (--pendentes <= 0) { pendentes = 0; clearTimeout(timerCarga); timerCarga = null; textoCarga = 'Carregando…'; document.getElementById('carregando').classList.add('oculto'); }
+  else if (!document.getElementById('carregando').classList.contains('oculto')) document.getElementById('carregandoTxt').textContent = textoCarga;
+};
+const ACOES_GRAVAM = /^(salvar|assinar|entregar|devolver|registrar|trocar|emitir|aprovar|decidir|corrigir|reabrir|cancelar|excluir|editar|programar|iniciar|apontar|encerrar|checkin|checkout|emprestar|novo|conferir|marcar|aceitar|juntar|definir|reenviar)/i;
 const msg = (tipo, t) => `<div class="msg ${tipo}" role="status">${esc(t)}</div>`;
 const hora = s => String(s || '').slice(-5);
 const primeiroNome = n => String(n || '').replace(/^Eng\.\s*/, '').split(' ')[0];
@@ -320,10 +331,12 @@ const topo = (sub) => { telaAtual = sub || 'Entrar'; sujo = false; document.getE
 async function api(acao, dados = {}) {
   if (!window.API_URL || API_URL.indexOf('http') !== 0) throw new Error('O endereço do Apps Script ainda não foi configurado (config.js).');
   let r;
+  carregando(true, ACOES_GRAVAM.test(acao) ? 'Salvando…' : /^(doc|pdf|pacote)/i.test(acao) ? 'Gerando documento…' : acao === 'login' ? 'Entrando…' : 'Carregando…');
   try {
     r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: est.token, ...dados }) });
-  } catch (e) { throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'); }
-  const j = await r.json();
+  } catch (e) { carregando(false); throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'); }
+  let j;
+  try { j = await r.json(); } finally { carregando(false); }
   if (!j.ok) {
     if (j.erro === 'SESSAO_INVALIDA') { sair(); throw new Error('Sua sessão expirou. Entre de novo.'); }
     if (j.erro === 'TROCAR_PIN') { telaTrocarPin(); throw new Error('Crie o seu PIN para continuar.'); }
