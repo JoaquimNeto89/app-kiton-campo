@@ -306,7 +306,7 @@ function login_(req) {
   if (!l || txt_(l.get('Ativo')) !== 'Sim') throw new Error('Nome ou PIN incorreto.');
   const campo = txt_(l.get('PIN (cifrado, preenchido pelo app)'));
   let certo;
-  if (!campo) certo = txt_(req.pin) === PIN_PADRAO;
+  if (!campo) throw new Error('Você ainda não tem PIN. Peça um PIN provisório à administração.');
   else { const [sal, h] = campo.split('$'); certo = hashPin_(txt_(req.pin), sal) === h; }
   if (!certo) throw new Error('Nome ou PIN incorreto.');
   const nome = txt_(l.get('Nome'));
@@ -354,12 +354,21 @@ function trocarPin_(u, req) {
   });
 }
 
+/** Gera um PIN provisório aleatório (nunca o padrão nem sequências fracas). */
+function pinProvisorio_() {
+  let p;
+  do { p = String(Math.floor(Math.random() * 1e6)).padStart(6, '0'); } while (pinFraco_(p) || '0123456789'.indexOf(p) >= 0 || '9876543210'.indexOf(p) >= 0);
+  return p;
+}
+
+/** Redefinição pela administração: grava um PIN provisório aleatório; a pessoa cria o próprio no próximo acesso. */
 function resetarPin_(req) {
   const { t, l } = colaborador_(req.nome);
   if (!l) throw new Error('Colaborador não encontrado.');
-  set_(t, l._linha, 'PIN (cifrado, preenchido pelo app)', '');
+  const pin = pinProvisorio_(), sal = Utilities.getUuid().slice(0, 8);
+  set_(t, l._linha, 'PIN (cifrado, preenchido pelo app)', sal + '$' + hashPin_(pin, sal));
   set_(t, l._linha, 'Troca de PIN pendente', 'Sim');
-  return { ok: true };
+  return { ok: true, pin };
 }
 
 // ---------- tela inicial ----------

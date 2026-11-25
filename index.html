@@ -519,7 +519,7 @@ async function telaLogin() {
     <div id="nomes"><p class="suave">Carregando nomes…</p></div>
     <label class="rotulo" for="pin">PIN</label>
     <input class="campo-txt pin" id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••••">
-    <p class="suave" style="margin-top:8px">No primeiro acesso o PIN é 123456. Depois o app pede para você criar o seu.</p>
+    <p class="suave" style="margin-top:8px">No primeiro acesso, use o PIN provisório que você recebeu da administração. Depois o app pede para você criar o seu.</p>
     <p class="suave" style="margin-top:14px">Esqueceu o PIN ou travou? Toque no ícone verde do WhatsApp no alto da tela.</p>${rodape()}`;
   barra(`<div class="dentro"><button class="acao" id="entrar" type="button">Entrar</button></div>`);
   let escolhido = lerLocal('kc_ultimo_nome') || '';
@@ -547,7 +547,7 @@ async function telaLogin() {
 function telaTrocarPin() {
   topo(); barra('');
   $app.innerHTML = `<h1>Crie o seu PIN</h1><div id="erro"></div>
-    <p class="suave">São 6 números que só você sabe. Não vale 123456 nem sequências como 111111 ou 123123.</p>
+    <p class="suave">São 6 números que só você sabe. Não vale 123456 nem repetições como 111111 ou 123123.</p>
     <label class="rotulo" for="p1">Novo PIN</label><input class="campo-txt pin" id="p1" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
     <label class="rotulo" for="p2">Repita o PIN</label><input class="campo-txt pin" id="p2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">`;
   barra(`<div class="dentro"><button class="acao" id="ok" type="button">Salvar PIN</button></div>`);
@@ -1050,13 +1050,13 @@ async function telaAdmin(aba, sub) {
   } else {
     let quem = '';
     const pintar = () => {
-      box.innerHTML = `<h1>Redefinir PIN</h1><p class="suave">O PIN volta para 123456 e a pessoa cria um novo no próximo acesso. Os celulares dela saem da conta.</p>
+      box.innerHTML = `<h1>Redefinir PIN</h1><p class="suave">O app gera um PIN provisório para você passar à pessoa. Ela cria o próprio PIN no próximo acesso. Os celulares dela saem da conta.</p>
         ${est.dados.colaboradores.map(n => `<button type="button" class="linha ${n === quem ? 'sel' : ''}" data-n="${esc(n)}">${ic('pessoas')}${esc(n)}${n === quem ? `<span class="fim">${ic('ok')}</span>` : ''}</button>`).join('')}
         <button class="acao" id="reset" type="button" ${quem ? '' : 'disabled'}>Redefinir PIN${quem ? ' de ' + esc(primeiroNome(quem)) : ''}</button>`;
       box.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { quem = b.dataset.n; pintar(); });
       document.getElementById('reset').onclick = () => executar(async () => {
         if (!confirm(`Redefinir o PIN de ${quem}?`)) return;
-        await api('resetarPin', { nome: quem }); document.getElementById('erro').innerHTML = msg('ok', `PIN de ${quem} redefinido para 123456.`);
+        const x = await api('resetarPin', { nome: quem }); document.getElementById('erro').innerHTML = msg('ok', `PIN provisório de ${quem}: ${x.pin}. Passe esse número só para a pessoa. Ele não aparece de novo.`);
       });
     };
     pintar();
