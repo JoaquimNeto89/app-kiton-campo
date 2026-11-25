@@ -130,6 +130,8 @@ function rotear_(req) {
     case 'devolverEpi': exigirAdmin_(u); return comTrava_(() => devolverEpi_(u, req));
     case 'assinarTermo': exigirAdmin_(u); return comTrava_(() => assinarTermo_(u, req));
     case 'docPDF': return docPDF_(u, req);
+    case 'prevOSSST': exigirAdmin_(u); return prevOSSST_(u, req);
+    case 'assinarOSSST': exigirAdmin_(u); return comTrava_(() => assinarOSSST_(u, req));
     // gestão SST: documentos
     case 'sstPainel': exigirAdmin_(u); return sstPainel_();
     case 'emprestimos': exigirEmp_(u); return emprestimos_();
@@ -2148,6 +2150,166 @@ function assinarTermo_(u, req) {
   return { ok: true, n };
 }
 
+// ----- Ordem de serviço de SST (NR-1, item 1.4.1 "c"), emitida em nome da Kiton e assinada no app -----
+/** Modelos por grupo de função, com base no inventário de riscos do PGR (Essencial, fev/2026). */
+const OSSST_MODELOS = {
+  TEC: {
+    setor: 'Técnica (engenharia de campo)', cargoPGR: 'Engenheiro eletricista', cbo: '2143-05',
+    atividades: 'Planejamento, especificação, montagem assistida, comissionamento, inspeção, medições, testes e ensaios em instalações elétricas, painéis, sistemas de automação e acionamentos industriais, na sede da Kiton e nas instalações dos clientes. Levantamentos de campo e engenharia reversa de máquinas e equipamentos. Acompanhamento técnico e coordenação de equipes. Elaboração de projetos, relatórios e documentação técnica. Deslocamento em veículo para atendimento aos clientes.',
+    riscos: [
+      ['Acidente', 'Choque elétrico e arco elétrico', 'Contato com partes energizadas em medições, testes, comissionamento e intervenções em painéis', 'Queimaduras, lesões, parada cardiorrespiratória, morte'],
+      ['Acidente', 'Trabalho em altura (acima de 2 m)', 'Acesso a painéis, calhas, coberturas e estruturas elevadas', 'Lesões, fraturas, morte'],
+      ['Acidente', 'Queda de objetos', 'Ferramentas e materiais em níveis superiores', 'Escoriações, fraturas, lesões'],
+      ['Acidente', 'Condução de veículos em vias públicas', 'Deslocamento para atendimento aos clientes', 'Lesões por acidente de trânsito'],
+      ['Ergonômico', 'Postura sentada e digitação', 'Projetos, programação e relatórios', 'Dores musculares, fadiga, LER/DORT'],
+      ['Físico', 'Ruído abaixo do limite de tolerância', 'Ambientes industriais dos clientes', 'Fadiga e desconforto auditivo']
+    ],
+    epis: ['Capacete de segurança com jugular', 'Óculos de proteção', 'Calçado de segurança para eletricista (sem partes metálicas)', 'Vestimenta de proteção contra arco elétrico (ATPV), em intervenções elétricas',
+      'Luvas isolantes de borracha, com luva de cobertura em vaqueta, compatíveis com a tensão', 'Luvas de proteção contra agentes mecânicos', 'Protetor auditivo, em ambientes ruidosos',
+      'Cinturão tipo paraquedista com talabarte e trava-quedas, em trabalho em altura', 'Protetor facial contra arco elétrico, quando a análise de risco indicar'],
+    treinos: ['NR-10 básico, com reciclagem a cada 2 anos', 'NR-10 SEP, quando atuar no Sistema Elétrico de Potência', 'NR-35, com reciclagem a cada 2 anos, quando houver trabalho em altura',
+      'NR-33, quando houver entrada em espaço confinado', 'ASO com aptidão para trabalho em eletricidade e em altura', 'Integração de segurança do cliente, antes do primeiro acesso']
+  },
+  OPE: {
+    setor: 'Operacional', cargoPGR: 'Auxiliar técnico', cbo: '3003-05',
+    atividades: 'Apoio técnico na montagem, instalação e manutenção de painéis, instalações elétricas e sistemas fotovoltaicos, sempre sob supervisão de profissional habilitado e autorizado da Kiton. Passagem e conexão de cabos, fixação de eletrodutos, calhas e suportes. Transporte de materiais e ferramentas, organização e limpeza do local de trabalho. Deslocamento em veículo para atendimento aos clientes.',
+    riscos: [
+      ['Acidente', 'Choque elétrico', 'Exposição a fontes energizadas', 'Queimaduras, lesões, cegueira, morte'],
+      ['Acidente', 'Trabalho em altura (acima de 2 m)', 'Instalações em coberturas, estruturas e escadas', 'Lesões, fraturas, torções, morte'],
+      ['Acidente', 'Cortes e perfurações', 'Uso de ferramentas manuais e manuseio de materiais', 'Cortes, perfurações, escoriações'],
+      ['Acidente', 'Queda de objetos', 'Ferramentas e materiais em níveis superiores', 'Escoriações, fraturas, lesões'],
+      ['Acidente', 'Condução de veículos em vias públicas', 'Deslocamento para atendimento aos clientes', 'Lesões por acidente de trânsito'],
+      ['Ergonômico', 'Levantamento e transporte manual de cargas', 'Movimentação de materiais, painéis e módulos', 'Lesões na coluna'],
+      ['Ergonômico', 'Postura em pé por longos períodos', 'Montagens e instalações', 'Fadiga, dores na coluna'],
+      ['Físico', 'Radiação não ionizante (ultravioleta solar)', 'Trabalho a céu aberto', 'Queimaduras na pele, lesões oculares'],
+      ['Físico', 'Ruído abaixo do limite de tolerância', 'Ambientes industriais e uso de ferramentas', 'Fadiga e desconforto auditivo']
+    ],
+    epis: ['Capacete de segurança com jugular', 'Óculos de proteção', 'Calçado de segurança para eletricista (sem partes metálicas)', 'Luvas isolantes de borracha, com luva de cobertura em vaqueta, compatíveis com a tensão',
+      'Luvas de proteção contra agentes mecânicos', 'Protetor auditivo, em ambientes ruidosos', 'Cinturão tipo paraquedista com talabarte e trava-quedas, em trabalho em altura',
+      'Uniforme com proteção UV e protetor solar, em trabalho a céu aberto'],
+    treinos: ['NR-10 básico, com reciclagem a cada 2 anos', 'NR-35, com reciclagem a cada 2 anos, quando houver trabalho em altura', 'ASO com aptidão para trabalho em eletricidade e em altura',
+      'Integração de segurança do cliente, antes do primeiro acesso']
+  }
+};
+
+const OSSST_MEDIDAS = [
+  'Executar somente as atividades para as quais esteja capacitado, autorizado e com ASO apto, respeitando a integração, as normas internas e a permissão de trabalho do cliente.',
+  'Participar da Análise Preliminar de Risco (APR) antes de iniciar cada atividade e não iniciar o serviço enquanto os riscos identificados não estiverem controlados.',
+  'Em intervenções elétricas, adotar a desenergização conforme a NR-10 (item 10.5): seccionamento, impedimento de reenergização com bloqueio e etiquetagem, constatação da ausência de tensão, instalação de aterramento temporário quando aplicável, proteção dos elementos energizados próximos e sinalização. Serviço em circuito energizado só com autorização expressa, procedimento específico, EPI e ferramentas isoladas.',
+  'Realizar medições e testes com instrumentos de categoria de medição adequada à instalação, com pontas de prova e cabos em bom estado.',
+  'Em máquinas e equipamentos, não intervir com partes em movimento; bloquear todas as fontes de energia (elétrica, pneumática, hidráulica e térmica) conforme a NR-12 e aguardar o resfriamento de superfícies quentes, como estufas e fornos.',
+  'Em trabalho em altura, seguir a NR-35: análise de risco, ponto de ancoragem adequado, inspeção do cinturão e do talabarte antes do uso e nunca trabalhar sozinho.',
+  'Inspecionar EPI, ferramentas e instrumentos antes do uso, usá-los somente para a finalidade a que se destinam e comunicar qualquer defeito. Não usar adornos (anéis, pulseiras, correntes, relógio) em serviços com eletricidade.',
+  'Isolar e sinalizar a área de trabalho e mantê-la organizada e limpa durante e ao final do serviço.',
+  'Na condução de veículos, possuir CNH válida, usar cinto de segurança, respeitar a legislação de trânsito e não usar o celular ao dirigir.',
+  'Fazer pausas e adotar postura adequada em atividades prolongadas, em pé, sentado ou com levantamento de cargas.'
+];
+const OSSST_PROIBICOES = [
+  'Trabalhar sob efeito de álcool, drogas ou medicamentos que reduzam a atenção.',
+  'Improvisar ferramentas, instalações ou dispositivos de segurança, ou anular proteções de máquinas e painéis.',
+  'Operar máquinas, equipamentos ou manobrar circuitos do cliente sem autorização.',
+  'Executar atividade para a qual não foi treinado, autorizado ou considerado apto.',
+  'Fumar ou usar chama aberta fora das áreas permitidas.'
+];
+
+function modeloOSSST_(funcao) {
+  const f = txt_(funcao).toLowerCase();
+  if (!f || f === 'administrativo') return null;
+  return /engenheir|analista|projetista/.test(f) ? 'TEC' : 'OPE';
+}
+
+/** Dados da OS de SST de um colaborador (usados na tela de assinatura e no PDF). */
+function dadosOSSST_(nome) {
+  const p = pessoasSST_().find(x => x.nome === nome);
+  if (!p) throw new Error('Colaborador não encontrado.');
+  const cod = modeloOSSST_(p.funcao);
+  if (!cod) throw new Error('A função de ' + nome + ' (' + (p.funcao || 'não informada') + ') não tem modelo de OS de SST.');
+  const m = OSSST_MODELOS[cod];
+  const terc = p.vinculo === 'Contrato (prestador)';
+  const clt = p.vinculo === 'CLT';
+  const vincTxt = terc ? 'Prestador de serviço terceirizado' : clt ? 'Empregado (CLT)' : 'Sócio / administração';
+  const intro = 'Esta Ordem de Serviço é emitida pela ' + EMPRESA.nome + ', conforme a NR-1 (item 1.4.1, alínea "c"), para informar ' + (terc ? 'o prestador de serviço' : 'o trabalhador') +
+    ' sobre os riscos ocupacionais das atividades executadas para a empresa, as medidas de prevenção adotadas, os EPI necessários e os procedimentos a cumprir, com base no Programa de Gerenciamento de Riscos (PGR) da Kiton.';
+  const tercTxt = terc ? 'O prestador atua como terceirizado, vinculado à Kiton por contrato de prestação de serviços' + (p.razao ? ' firmado com ' + p.razao : '') + (p.cnpj ? ' (CNPJ ' + p.cnpj + ')' : '') +
+    '. Esta OS é emitida pela Kiton na condição de contratante, que coordena as atividades e informa os riscos sob sua gestão (NR-1, item 1.5.8), e não gera vínculo empregatício. ' +
+    'Os riscos específicos de cada instalação de cliente são complementados pela integração de segurança do cliente e pela APR de cada serviço.' :
+    'Os riscos específicos de cada instalação de cliente são complementados pela integração de segurança do cliente e pela APR de cada serviço.';
+  const consequencia = terc ? 'Estou ciente de que o descumprimento desta Ordem de Serviço implica a suspensão imediata da atividade, o impedimento de acesso às frentes de serviço e as medidas previstas no contrato de prestação de serviços, inclusive a sua rescisão.'
+    : clt ? 'Estou ciente de que o descumprimento desta Ordem de Serviço constitui ato faltoso (CLT, art. 158), sujeito a advertência, suspensão e dispensa por justa causa.'
+    : 'Como sócio, comprometo-me a cumprir e fazer cumprir esta Ordem de Serviço nas atividades sob minha coordenação.';
+  const direitos = 'É direito ' + (terc ? 'do prestador' : 'do trabalhador') + ' interromper a atividade diante de situação de risco grave e iminente para a sua segurança ou de terceiros, comunicando imediatamente o responsável da Kiton (NR-1, item 1.4.3). ' +
+    'Acidentes, incidentes e quase-acidentes devem ser comunicados imediatamente ao responsável da Kiton e ao responsável do cliente.';
+  const decl = 'Declaro ter recebido, lido e compreendido esta Ordem de Serviço, ter sido informado sobre os riscos das minhas atividades e as medidas de prevenção, e ter recebido os EPI necessários, registrados na minha ficha de EPI. ' +
+    'Comprometo-me a cumprir as orientações aqui descritas, as normas regulamentadoras aplicáveis e os procedimentos dos clientes. ' + consequencia;
+  return { nome, funcao: p.funcao, vinculo: p.vinculo, vincTxt, terceirizado: terc, razao: p.razao, cnpj: p.cnpj, inicio: p.inicio ? dia_(p.inicio) : '', modelo: cod,
+    setor: m.setor, cargoPGR: m.cargoPGR, cbo: m.cbo, atividades: m.atividades, riscos: m.riscos, epis: m.epis, treinos: m.treinos,
+    medidas: OSSST_MEDIDAS, proibicoes: OSSST_PROIBICOES, intro, tercTxt, direitos, decl };
+}
+
+function prevOSSST_(u, req) {
+  const d = dadosOSSST_(txt_(req.colaborador));
+  return { ok: true, os: d };
+}
+
+function docOSSST_(nome, ass) {
+  const d = dadosOSSST_(nome);
+  ass = ass || {};
+  const li = a => '<ul style="margin:2px 0 0 16px;padding:0">' + a.map(x => '<li style="margin:1px 0">' + esc_(x) + '</li>').join('') + '</ul>';
+  const assin = (img, nomeL, papel, sub) => '<td style="width:48%;vertical-align:bottom">' + (img ? '<img src="' + img + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
+    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nomeL) + '<br>' + esc_(papel) + '<br><span style="color:#5d6670">' + esc_(sub) + '</span></div></td>';
+  const quando = ass.data ? 'Assinado digitalmente em ' + ass.data : 'Data: ____/____/______';
+  const corpo = cabDoc_('ORDEM DE SERVIÇO DE SST', 'NR-1, item 1.4.1' + (ass.n ? ' · Registro nº ' + ass.n : '')) +
+    (d.terceirizado ? '<div style="border:2px solid #CD0000;padding:4px 8px;margin:0 0 6px;font-weight:bold;font-size:9.5pt">PRESTADOR DE SERVIÇO TERCEIRIZADO' + (d.razao ? ' · ' + esc_(d.razao) : '') + (d.cnpj ? ' · CNPJ ' + esc_(d.cnpj) : '') + '</div>' : '') +
+    '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(d.nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(d.funcao) + '</td></tr>' +
+    '<tr><td class="r">Setor / cargo no PGR</td><td>' + esc_(d.setor) + ' · ' + esc_(d.cargoPGR) + ' (CBO ' + esc_(d.cbo) + ')</td></tr>' +
+    '<tr><td class="r">Vínculo</td><td>' + esc_(d.vincTxt) + '</td></tr>' +
+    (d.terceirizado ? '<tr><td class="r">Empresa contratada</td><td>' + (d.razao ? esc_(d.razao) : '______________________________') + (d.cnpj ? ' · CNPJ ' + esc_(d.cnpj) : '') + '</td></tr>' +
+      '<tr><td class="r">Início da prestação</td><td>' + (d.inicio ? esc_(d.inicio) : '____/____/______') + '</td></tr>' : '') +
+    '<tr><td class="r">Emitida por</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>' +
+    '<div class="decl">' + esc_(d.intro) + ' ' + esc_(d.tercTxt) + '</div>' +
+    '<div class="b"><div class="bt">Descrição das atividades</div><div style="line-height:1.4">' + esc_(d.atividades) + '</div></div>' +
+    '<div class="b"><div class="bt">Riscos ocupacionais</div><table class="lst"><tr><th style="width:13%">Tipo</th><th style="width:27%">Agente</th><th>Fonte ou situação</th><th style="width:25%">Possíveis danos</th></tr>' +
+    d.riscos.map(r => '<tr>' + r.map(c => '<td>' + esc_(c) + '</td>').join('') + '</tr>').join('') + '</table></div>' +
+    '<div class="b"><div class="bt">EPI necessários</div>' + li(d.epis) + '<p style="font-size:8pt;color:#5d6670;margin:3px 0 0">Os EPI entregues, com CA, ficam registrados na ficha de EPI do app Kiton Hub.</p></div>' +
+    '<div class="b"><div class="bt">Medidas de prevenção e procedimentos</div>' + li(d.medidas) + '</div>' +
+    '<div class="b"><div class="bt">É proibido</div>' + li(d.proibicoes) + '</div>' +
+    '<div class="b"><div class="bt">Capacitação e saúde exigidas</div>' + li(d.treinos) + '</div>' +
+    '<div class="b"><div class="bt">Direito de recusa e comunicação de acidentes</div><div style="line-height:1.4">' + esc_(d.direitos) + '</div></div>' +
+    '<div style="page-break-inside:avoid"><div class="decl">' + esc_(d.decl) + '</div>' +
+    '<table style="width:100%;margin-top:14px;font-size:8.5pt"><tr>' + assin(ass.img, d.nome, d.terceirizado ? 'Prestador de serviço' : 'Colaborador', quando) + '<td style="width:4%"></td>' +
+    assin(ass.imgResp, ass.resp || '', 'Responsável pela emissão · ' + EMPRESA.nome, quando) + '</tr></table>' +
+    '<p style="font-size:8pt;color:#5d6670;margin-top:8px">Maringá-PR, ' + (ass.dataExt || '____ de ______________ de ________') + '. Reemitir esta OS sempre que houver mudança de função, de atividades ou de riscos, ou revisão do PGR.</p></div>';
+  return pdfDoc_(corpo, 'OS de SST - ' + nome + (ass.dataIso ? ' - ' + ass.dataIso : '') + '.pdf');
+}
+
+/** Assinatura da OS de SST na tela: gera o PDF assinado e registra como documento atual (C14) na Gestão SST. */
+function assinarOSSST_(u, req) {
+  const nome = txt_(req.colaborador);
+  dadosOSSST_(nome); // valida colaborador e modelo
+  if (!txt_(req.assinatura)) throw new Error('O colaborador precisa assinar a OS.');
+  const proprio = nome === u.nome;
+  if (!proprio && !txt_(req.assinaturaResp)) throw new Error('O responsável pela emissão também precisa assinar.');
+  const agora = new Date();
+  const pastaAss = pasta_(['Kiton Hub', 'OS de SST', nome]);
+  const carimbo = Utilities.formatDate(agora, TZ, 'yyyy-MM-dd HHmm');
+  const idAss = salvarImagem_(pastaAss, req.assinatura, 'image/png', 'Assinatura colaborador ' + carimbo + '.png');
+  const idResp = proprio ? idAss : salvarImagem_(pastaAss, req.assinaturaResp, 'image/png', 'Assinatura responsável ' + carimbo + '.png');
+  const t = ler_(ABA_SST_DOCS);
+  const n = String(proximoNumero_(t, 'Nº'));
+  const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const pdf = docOSSST_(nome, { n, img: imgDrive_(idAss), imgResp: imgDrive_(idResp), resp: u.nome, data: Utilities.formatDate(agora, TZ, 'dd/MM/yyyy HH:mm'),
+    dataIso: Utilities.formatDate(agora, TZ, 'yyyy-MM-dd'), dataExt: Number(Utilities.formatDate(agora, TZ, 'd')) + ' de ' + meses[agora.getMonth()] + ' de ' + agora.getFullYear() });
+  const arq = pasta_(['Kiton Hub - Gestão SST', nome]).createFile(pdf);
+  t.linhas.filter(l => txt_(l.get('Escopo')) === 'Colaborador' && txt_(l.get('Colaborador')) === nome && txt_(l.get('Código do tipo')) === 'C14' && txt_(l.get('Atual')) === 'Sim')
+    .forEach(l => set_(t, l._linha, 'Atual', 'Não'));
+  const tipo = tiposSST_().find(x => x.codigo === 'C14');
+  anexar_(t, { 'Nº': n, 'Escopo': 'Colaborador', 'Colaborador': nome, 'Código do tipo': 'C14', 'Documento': tipo ? tipo.doc : 'Ordem de serviço de SST (NR-1)', 'Emissão': agora, 'Validade': '',
+    'Situação informada': '', 'Arquivo': arq.getId(), 'Tipo do arquivo': 'application/pdf',
+    'Observações': 'Emitida pela Kiton e assinada no app Kiton Hub' + (dadosOSSST_(nome).terceirizado ? ' (prestador terceirizado)' : '') + '. Responsável: ' + u.nome + '.',
+    'Registrado por': u.nome, 'Registrado em': agora, 'Atual': 'Sim' });
+  return { ok: true, n, link: arq.getUrl() };
+}
+
 // ----- documentos para impressão -----
 function cabDoc_(titulo, linha2) {
   return '<table class="cab"><tr><td><img src="data:image/png;base64,' + LOGO_B64 + '" style="width:190px;height:auto"></td>' +
@@ -2225,7 +2387,7 @@ function docPDF_(u, req) {
   const admin = u.perfil === 'Administrador';
   if (doc === 'emprestimo') exigirEmp_(u);
   else if (!admin && (['termo', 'ficha'].indexOf(doc) < 0 || nome !== u.nome)) throw new Error('Você só pode abrir os seus documentos.');
-  const pdf = doc === 'termo' ? docTermo_(nome) : doc === 'ficha' ? docFichaEPI_(nome) : doc === 'epc' ? docLista_('epc') : doc === 'coletivas' ? docLista_('coletivas') : doc === 'emprestimo' ? docEmprestimo_(req.n) : null;
+  const pdf = doc === 'termo' ? docTermo_(nome) : doc === 'ficha' ? docFichaEPI_(nome) : doc === 'epc' ? docLista_('epc') : doc === 'coletivas' ? docLista_('coletivas') : doc === 'emprestimo' ? docEmprestimo_(req.n) : doc === 'ossst' && admin ? docOSSST_(nome) : null;
   if (!pdf) throw new Error('Documento desconhecido.');
   const link = pasta_(['Kiton Hub', 'Documentos emitidos', Utilities.formatDate(new Date(), TZ, 'yyyy-MM')]).createFile(pdf).getUrl();
   return { ok: true, link };
@@ -2493,7 +2655,7 @@ function docsSST_() {
 function pessoasSST_() {
   return ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => {
     const funcao = txt_(l.get('Função'));
-    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)', cnpj: txt_(l.get('CNPJ/MEI')), inicio: data_(l.get('Início da prestação')),
+    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)', cnpj: txt_(l.get('CNPJ/MEI')), razao: txt_(l.get('Razão social do prestador')), inicio: data_(l.get('Início da prestação')),
       grupo: txt_(l.get('Grupo PCMSO')) || (funcao === 'Administrativo' ? 'Administrativo' : 'Operacional e técnico') };
   });
 }
@@ -2699,7 +2861,7 @@ function salvarTipoSST_(u, req) {
 
 function salvarPessoaSST_(u, req) {
   if (SST_VINCULOS.indexOf(req.vinculo) < 0 || SST_GRUPOS.indexOf(req.grupo) < 0) throw new Error('Escolha o vínculo e o grupo.');
-  ['Vínculo', 'Grupo PCMSO', 'CNPJ/MEI', 'Início da prestação'].forEach(c => {
+  ['Vínculo', 'Grupo PCMSO', 'CNPJ/MEI', 'Início da prestação', 'Razão social do prestador'].forEach(c => {
     const t0 = ler_(ABA.colab);
     if (t0.cab[c] === undefined) t0.sh.getRange(1, t0.sh.getLastColumn() + 1).setValue(c);
   });
@@ -2708,7 +2870,7 @@ function salvarPessoaSST_(u, req) {
   if (!l) throw new Error('Colaborador não encontrado.');
   const ini = txt_(req.inicio) ? Utilities.parseDate(txt_(req.inicio).slice(0, 10), TZ, 'yyyy-MM-dd') : '';
   set_(t, l._linha, 'Vínculo', req.vinculo); set_(t, l._linha, 'Grupo PCMSO', req.grupo);
-  set_(t, l._linha, 'CNPJ/MEI', txt_(req.cnpj)); set_(t, l._linha, 'Início da prestação', ini);
+  set_(t, l._linha, 'CNPJ/MEI', txt_(req.cnpj)); set_(t, l._linha, 'Início da prestação', ini); if (req.razao !== undefined) set_(t, l._linha, 'Razão social do prestador', txt_(req.razao));
   return { ok: true };
 }
 

@@ -205,7 +205,7 @@ textarea.campo-txt{min-height:84px;resize:vertical}
 #visor{position:fixed;inset:0;z-index:60;background:#1c1f23;display:flex;flex-direction:column;-webkit-user-select:none;user-select:none}
 #visor.oculto{display:none}.visor-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;color:#fff}
 .visor-cab .icone-btn{color:#fff}.visor-corpo{flex:1;overflow:auto;padding:8px;-webkit-touch-callout:none}
-.decl-app{background:#fff;border-left:4px solid var(--vermelho);border-radius:8px;padding:10px 12px;margin:14px 0 4px;font-size:15px;line-height:1.4}
+.os-lista{margin:4px 0 10px 18px;padding:0;line-height:1.45}.os-lista li{margin:3px 0}.decl-app{background:#fff;border-left:4px solid var(--vermelho);border-radius:8px;padding:10px 12px;margin:14px 0 4px;font-size:15px;line-height:1.4}
 .ver-apr{margin:8px 0 0;min-height:42px;font-size:15px;padding:6px 12px;width:auto}
 .mat .scan{margin:0;min-height:0;padding:0;display:grid;place-items:center}
 .menu-cab .icone-btn{background:#1E2227;border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff}
@@ -1404,21 +1404,66 @@ async function telaPessoaSST(nome, aviso) {
         <label class="rotulo">Grupo (PCMSO)</label>${chips('pGru', est.sst ? est.sst.listas.grupos : ['Operacional e técnico', 'Administrativo'], p.grupo)}
         <div class="grade"><div><label class="rotulo" for="pCnpj">CNPJ / MEI</label><input class="campo-txt" id="pCnpj" value="${esc(p.cnpj || '')}" inputmode="numeric" placeholder="00.000.000/0001-00"></div>
           <div><label class="rotulo" for="pIni">Início da prestação</label><input class="campo-txt" id="pIni" type="date" value="${esc(p.inicioIso || '')}"></div></div>
+        <label class="rotulo" for="pRaz">Razão social do prestador</label><input class="campo-txt" id="pRaz" value="${esc(p.razao || '')}" placeholder="Nome da empresa contratada (PJ ou MEI)">
         <p class="suave" style="margin-top:6px;font-size:14px">Saem no cabeçalho do termo de ferramentas e da ficha de EPI. Use a data do primeiro contrato.</p>
         <button type="button" class="acao leve oculto" id="pSalvar">${ic('ok')} Salvar dados</button></div>
       <p style="margin:10px 0">${resumoSSTtxt(r.resumo)}</p>
       ${Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => linhaDocSST(i)).join('')).join('')}
       ${opc.length ? `<h2>Outros documentos (opcionais)</h2><div class="pessoas">${opc.map(i => `<button type="button" class="pessoa" data-doc="${esc(i.codigo)}">+ ${esc(i.doc)}</button>`).join('')}</div>` : ''}
       <div class="grade" style="margin-top:14px"><button type="button" class="acao leve" id="pPacote" style="margin:0">${ic('os')} Pacote deste colaborador</button>
-        <button type="button" class="acao leve" id="pEpi" style="margin:0">${ic('ferr')} EPI e ferramentas</button></div>`;
+        <button type="button" class="acao leve" id="pEpi" style="margin:0">${ic('ferr')} EPI e ferramentas</button></div>
+      ${p.grupo !== 'Administrativo' ? `<button type="button" class="acao leve" id="pOS" style="margin-top:10px">${ic('os')} Emitir OS de SST</button>` : ''}`;
     const sel = { vinculo: p.vinculo, grupo: p.grupo };
     const mostrar = () => document.getElementById('pSalvar').classList.remove('oculto');
     ligarChips('pVin', v => { sel.vinculo = v; mostrar(); }); ligarChips('pGru', v => { sel.grupo = v; mostrar(); });
-    ['pCnpj', 'pIni'].forEach(id => document.getElementById(id).addEventListener('input', mostrar));
-    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel, cnpj: document.getElementById('pCnpj').value, inicio: document.getElementById('pIni').value }); sujo = false; telaPessoaSST(nome, 'Dados atualizados.'); });
+    ['pCnpj', 'pIni', 'pRaz'].forEach(id => document.getElementById(id).addEventListener('input', mostrar));
+    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel, cnpj: document.getElementById('pCnpj').value, inicio: document.getElementById('pIni').value, razao: document.getElementById('pRaz').value }); sujo = false; telaPessoaSST(nome, 'Dados atualizados.'); });
     document.querySelectorAll('#pBox [data-doc]').forEach(b => b.onclick = () => telaDocSST({ escopo: 'Colaborador', colaborador: nome, codigo: b.dataset.doc }));
     document.getElementById('pPacote').onclick = () => telaPacoteSST([nome]);
     document.getElementById('pEpi').onclick = () => telaColabEPI(nome);
+    const bOS = document.getElementById('pOS'); if (bOS) bOS.onclick = () => telaOSSST(nome);
+  });
+}
+
+async function telaOSSST(nome) {
+  topo('OS de SST');
+  $app.innerHTML = `<h1>Ordem de serviço de SST</h1><p class="suave">${esc(nome)}</p><div id="erro"></div><div id="osBox"><p class="suave">Carregando…</p></div>`;
+  barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button" disabled>${ic('ok')} Registrar assinaturas</button></div>`);
+  document.getElementById('ant').onclick = () => telaPessoaSST(nome);
+  let o = null; const ass = { c: null, nc: 0, r: null, nr: 0 };
+  const proprio = est.usuario && est.usuario.nome === nome;
+  await executar(async () => {
+    o = (await api('prevOSSST', { colaborador: nome })).os;
+    const lis = a => `<ul class="os-lista">${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+    document.getElementById('osBox').innerHTML = `
+      ${o.terceirizado ? `<div class="msg info"><b>Prestador de serviço terceirizado</b>${o.razao ? ' · ' + esc(o.razao) : ''}${o.cnpj ? ' · CNPJ ' + esc(o.cnpj) : ''}${o.razao ? '' : '<br>Informe a razão social do prestador na tela anterior para sair no documento.'}</div>` : ''}
+      <div class="cartao"><div class="apr-lin"><span>Função</span><span>${esc(o.funcao)}</span></div><div class="apr-lin"><span>Setor no PGR</span><span>${esc(o.setor)}</span></div><div class="apr-lin"><span>Vínculo</span><span>${esc(o.vincTxt)}</span></div></div>
+      <div class="decl-app">${esc(o.intro)} ${esc(o.tercTxt)}</div>
+      <h2>Atividades</h2><p>${esc(o.atividades)}</p>
+      <h2>Riscos ocupacionais</h2><div class="cartao">${o.riscos.map(r => `<div class="apr-lin"><span>${esc(r[1])}<small class="suave" style="display:block">${esc(r[0])} · ${esc(r[2])}</small></span></div>`).join('')}</div>
+      <h2>EPI necessários</h2>${lis(o.epis)}
+      <h2>Medidas de prevenção</h2>${lis(o.medidas)}
+      <h2>É proibido</h2>${lis(o.proibicoes)}
+      <h2>Capacitação e saúde</h2>${lis(o.treinos)}
+      <div class="decl-app">${esc(o.direitos)}</div>
+      <div class="decl-app"><b>${esc(o.decl)}</b></div>
+      <label class="rotulo">Assinatura de ${esc(nome)}</label>
+      <div class="assin"><canvas id="cv1"></canvas><button type="button" class="link" id="limpar1">Limpar</button></div>
+      ${proprio ? '' : `<label class="rotulo">Assinatura do responsável pela emissão (${esc(est.usuario ? est.usuario.nome : '')})</label>
+      <div class="assin"><canvas id="cv2"></canvas><button type="button" class="link" id="limpar2">Limpar</button></div>`}
+      <button type="button" class="acao leve" id="osPapel" style="margin-top:12px">${ic('os')} PDF em branco para assinar no papel</button>`;
+    const m1 = () => montarAssinatura(document.getElementById('cv1'), (url, n) => { ass.c = url; ass.nc = n; });
+    m1(); document.getElementById('limpar1').onclick = () => { ass.c = null; ass.nc = 0; m1(); };
+    if (!proprio) { const m2 = () => montarAssinatura(document.getElementById('cv2'), (url, n) => { ass.r = url; ass.nr = n; });
+      m2(); document.getElementById('limpar2').onclick = () => { ass.r = null; ass.nr = 0; m2(); }; }
+    document.getElementById('osPapel').onclick = () => abrirDoc('ossst', nome);
+    document.getElementById('ok').disabled = false;
+  });
+  document.getElementById('ok').onclick = () => executar(async () => {
+    if (!ass.c || ass.nc < 1) throw new Error('Peça para ' + nome + ' assinar no quadro.');
+    if (!proprio && (!ass.r || ass.nr < 1)) throw new Error('O responsável pela emissão também precisa assinar.');
+    const r = await api('assinarOSSST', { colaborador: nome, assinatura: ass.c, assinaturaResp: proprio ? '' : ass.r });
+    sujo = false; telaPessoaSST(nome, `OS de SST assinada e registrada (nº ${r.n}). O PDF está na pasta do colaborador na Gestão SST.`);
   });
 }
 
