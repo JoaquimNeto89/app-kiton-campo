@@ -84,7 +84,7 @@ function rotear_(req) {
   const a = req.acao;
   if (a === 'login') return login_(req);
   if (a === 'nomes') {
-    return { ok: true, nomes: ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => txt_(l.get('Nome'))) };
+    return { ok: true, nomes: ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => txt_(l.get('Nome'))).sort(ordemNome_) };
   }
   const u = autenticar_(req.token);
   if (a === 'trocarPin') return trocarPin_(u, req);
@@ -222,6 +222,10 @@ function anexar_(t, obj) {
   t.sh.appendRow(row);
   return t.sh.getLastRow();
 }
+
+/** Ordem alfabética pelo nome da pessoa, ignorando títulos (Eng., Dr., Dra.). */
+function semTitulo_(n) { return txt_(n).replace(/^(eng|enga|dr|dra|sr|sra)\.?\s+/i, ''); }
+function ordemNome_(a, b) { return semTitulo_(a).localeCompare(semTitulo_(b), 'pt', { sensitivity: 'base' }); }
 
 function txt_(v) { return v === null || v === undefined ? '' : String(v).trim(); }
 
@@ -372,7 +376,7 @@ function inicio_(u) {
   const colabT = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim');
   const colabs = colabT.map(l => txt_(l.get('Nome')));
   // quem trabalha em campo (aparece em "quem vai junto" e nos técnicos da OS); função Administrativo fica de fora
-  const equipeCampo = colabT.filter(l => txt_(l.get('Função')) !== 'Administrativo').map(l => txt_(l.get('Nome')));
+  const equipeCampo = colabT.filter(l => txt_(l.get('Função')) !== 'Administrativo').map(l => txt_(l.get('Nome'))).sort(ordemNome_);
   const clientesInfo = clientes_();
   const clientes = clientesInfo.map(c => c.nome);
   const saidas = ler_(ABA.saidas);
@@ -2016,7 +2020,7 @@ function situacaoTermo_(nome, itens) {
 }
 
 function epiPainel_() {
-  const campo = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim' && txt_(l.get('Função')) !== 'Administrativo');
+  const campo = ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim' && txt_(l.get('Função')) !== 'Administrativo').sort((a, b) => ordemNome_(a.get('Nome'), b.get('Nome')));
   const todas = entregasEPI_();
   const pessoas = campo.map(l => {
     const nome = txt_(l.get('Nome')), itens = itensIndividuais_(nome), eps = todas.filter(e => e.colaborador === nome);
@@ -2670,7 +2674,7 @@ function pessoasSST_() {
     return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)', cnpj: txt_(l.get('CNPJ/MEI')), razao: txt_(l.get('Razão social do prestador')), cpf: txt_(l.get('CPF')), rg: txt_(l.get('RG')), nomeCompleto: txt_(l.get('Nome completo')),
       vencASO: data_(l.get('Venc. ASO')), vencNR10: data_(l.get('Venc. NR-10')), vencNR35: data_(l.get('Venc. NR-35')), inicio: data_(l.get('Início da prestação')),
       grupo: txt_(l.get('Grupo PCMSO')) || (funcao === 'Administrativo' ? 'Administrativo' : 'Operacional e técnico') };
-  });
+  }).sort((a, b) => ordemNome_(a.nome, b.nome));
 }
 
 function exigidoSST_(tipo, p) {

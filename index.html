@@ -506,6 +506,8 @@ async function telaLogin() {
   let escolhido = lerLocal('kc_ultimo_nome') || '';
   try {
     const r = await api('nomes');
+    const semT = n => String(n).replace(/^(eng|enga|dr|dra|sr|sra)\.?\s+/i, '');
+    r.nomes.sort((a, b) => semT(a).localeCompare(semT(b), 'pt', { sensitivity: 'base' }));
     if (!r.nomes.includes(escolhido)) escolhido = '';
     document.getElementById('nomes').innerHTML = `<select class="campo-txt" id="nome" aria-label="Seu nome">
       <option value="" ${escolhido ? '' : 'selected'} disabled>Selecione o seu nome</option>
