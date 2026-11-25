@@ -1404,8 +1404,11 @@ async function telaPessoaSST(nome, aviso) {
         <label class="rotulo">Grupo (PCMSO)</label>${chips('pGru', est.sst ? est.sst.listas.grupos : ['Operacional e técnico', 'Administrativo'], p.grupo)}
         <div class="grade"><div><label class="rotulo" for="pCnpj">CNPJ / MEI</label><input class="campo-txt" id="pCnpj" value="${esc(p.cnpj || '')}" inputmode="numeric" placeholder="00.000.000/0001-00"></div>
           <div><label class="rotulo" for="pIni">Início da prestação</label><input class="campo-txt" id="pIni" type="date" value="${esc(p.inicioIso || '')}"></div></div>
+        <label class="rotulo" for="pNomeC">Nome completo</label><input class="campo-txt" id="pNomeC" value="${esc(p.nomeCompleto || '')}" placeholder="Como no documento de identidade">
+        <div class="grade"><div><label class="rotulo" for="pCpf">CPF</label><input class="campo-txt" id="pCpf" value="${esc(p.cpf || '')}" inputmode="numeric" placeholder="000.000.000-00"></div>
+          <div><label class="rotulo" for="pRg">RG</label><input class="campo-txt" id="pRg" value="${esc(p.rg || '')}" placeholder="Nº e órgão emissor"></div></div>
         <label class="rotulo" for="pRaz">Razão social do prestador</label><input class="campo-txt" id="pRaz" value="${esc(p.razao || '')}" placeholder="Nome da empresa contratada (PJ ou MEI)">
-        <p class="suave" style="margin-top:6px;font-size:14px">Saem no cabeçalho do termo de ferramentas e da ficha de EPI. Use a data do primeiro contrato.</p>
+        <p class="suave" style="margin-top:6px;font-size:14px">Saem no termo de ferramentas, na ficha de EPI, na OS de SST e na relação de colaboradores do pacote. Use a data do primeiro contrato.</p>
         <button type="button" class="acao leve oculto" id="pSalvar">${ic('ok')} Salvar dados</button></div>
       <p style="margin:10px 0">${resumoSSTtxt(r.resumo)}</p>
       ${Object.keys(g).map(c => `<h2>${esc(c)}</h2>` + g[c].map(i => linhaDocSST(i)).join('')).join('')}
@@ -1416,8 +1419,8 @@ async function telaPessoaSST(nome, aviso) {
     const sel = { vinculo: p.vinculo, grupo: p.grupo };
     const mostrar = () => document.getElementById('pSalvar').classList.remove('oculto');
     ligarChips('pVin', v => { sel.vinculo = v; mostrar(); }); ligarChips('pGru', v => { sel.grupo = v; mostrar(); });
-    ['pCnpj', 'pIni', 'pRaz'].forEach(id => document.getElementById(id).addEventListener('input', mostrar));
-    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel, cnpj: document.getElementById('pCnpj').value, inicio: document.getElementById('pIni').value, razao: document.getElementById('pRaz').value }); sujo = false; telaPessoaSST(nome, 'Dados atualizados.'); });
+    ['pCnpj', 'pIni', 'pRaz', 'pNomeC', 'pCpf', 'pRg'].forEach(id => document.getElementById(id).addEventListener('input', mostrar));
+    document.getElementById('pSalvar').onclick = () => executar(async () => { await api('salvarPessoaSST', { colaborador: nome, ...sel, cnpj: document.getElementById('pCnpj').value, inicio: document.getElementById('pIni').value, razao: document.getElementById('pRaz').value, nomeCompleto: document.getElementById('pNomeC').value, cpf: document.getElementById('pCpf').value, rg: document.getElementById('pRg').value }); sujo = false; telaPessoaSST(nome, 'Dados atualizados.'); });
     document.querySelectorAll('#pBox [data-doc]').forEach(b => b.onclick = () => telaDocSST({ escopo: 'Colaborador', colaborador: nome, codigo: b.dataset.doc }));
     document.getElementById('pPacote').onclick = () => telaPacoteSST([nome]);
     document.getElementById('pEpi').onclick = () => telaColabEPI(nome);
@@ -1636,21 +1639,27 @@ function telaPacoteSST(pre) {
   topo('Gestão SST');
   const pessoas = (est.sst && est.sst.pessoas) || [];
   $app.innerHTML = `<h1>Pacote de documentos</h1><div id="erro"></div>
-    <p class="suave">Gera um PDF único com capa e os documentos atuais, na ordem. Exames complementares e documentos pessoais nunca entram.</p>
+    <p class="suave">Gera um PDF único com a relação de colaboradores, a capa e os documentos atuais, na ordem. Exames complementares e documentos pessoais nunca entram.</p>
     <label class="rotulo" for="kCli">Para quem (opcional)</label><input class="campo-txt" id="kCli" placeholder="Ex.: Integração de segurança - Cliente X">
     <label class="linha" style="font-weight:500"><input type="checkbox" id="kEmp" checked style="width:22px;height:22px"> Documentos gerais da empresa</label>
+    <label class="linha" style="font-weight:500"><input type="checkbox" id="kRel" checked style="width:22px;height:22px"> Relação de colaboradores (para a portaria)</label>
+    <div id="kRelBox"><div class="grade"><div><label class="rotulo" for="kServ">Serviço</label><input class="campo-txt" id="kServ" placeholder="Ex.: Engenharia reversa da estufa"></div>
+      <div><label class="rotulo" for="kPer">Período</label><input class="campo-txt" id="kPer" placeholder="Ex.: 07 a 09/12/2026"></div></div>
+      <label class="linha" style="font-weight:500"><input type="checkbox" id="kN35" style="width:22px;height:22px"> Mostrar NR-35 (serviço com trabalho em altura)</label></div>
     <label class="rotulo">Colaboradores</label>
     ${pessoas.map(p => `<label class="linha" style="font-weight:500"><input type="checkbox" data-pp="${esc(p.nome)}" ${pre.includes(p.nome) ? 'checked' : ''} style="width:22px;height:22px"> ${esc(p.nome)}</label>`).join('')}
     <p class="suave" id="kProg"></p>`;
   barra(`<div class="dentro"><button class="acao voltar" id="ant" type="button" aria-label="Voltar">${ic('voltar')}</button><button class="acao" id="ok" type="button">${ic('os')} Gerar PDF</button></div>`);
   document.getElementById('ant').onclick = () => pre.length === 1 ? telaPessoaSST(pre[0]) : telaAdmin('seg', 'painel');
+  document.getElementById('kRel').onchange = e => document.getElementById('kRelBox').classList.toggle('oculto', !e.target.checked);
   document.getElementById('ok').onclick = () => executar(async () => {
     const sel = [...document.querySelectorAll('[data-pp]')].filter(c => c.checked).map(c => c.dataset.pp);
     const emp = document.getElementById('kEmp').checked;
     if (!emp && !sel.length) throw new Error('Marque a empresa ou pelo menos um colaborador.');
     const prog = t => { document.getElementById('kProg').textContent = t; };
     prog('Preparando a capa…');
-    const r = await api('pacoteSST', { empresa: emp, pessoas: sel, cliente: document.getElementById('kCli').value });
+    const r = await api('pacoteSST', { empresa: emp, pessoas: sel, cliente: document.getElementById('kCli').value, relacao: document.getElementById('kRel').checked,
+      servico: document.getElementById('kServ').value, periodo: document.getElementById('kPer').value, nr35: document.getElementById('kN35').checked });
     if (!window.PDFLib) await carregarScript('lib/pdf-lib.min.js');
     const { PDFDocument } = PDFLib;
     const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));

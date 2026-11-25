@@ -2212,6 +2212,17 @@ const OSSST_PROIBICOES = [
   'Fumar ou usar chama aberta fora das áreas permitidas.'
 ];
 
+/** CBO pela função cadastrada (quando a função tem CBO próprio). */
+function cboFuncao_(funcao) {
+  const f = txt_(funcao).toLowerCase();
+  if (/controle e automa/.test(f)) return '2021-10';
+  if (/engenheiro eletricista/.test(f)) return '2143-05';
+  if (/engenheiro mec/.test(f)) return '2144-05';
+  if (/ajudante|auxiliar t/.test(f)) return '3003-05';
+  if (/eletricista/.test(f)) return '9511-05';
+  return '';
+}
+
 function modeloOSSST_(funcao) {
   const f = txt_(funcao).toLowerCase();
   if (!f || f === 'administrativo') return null;
@@ -2225,6 +2236,7 @@ function dadosOSSST_(nome) {
   const cod = modeloOSSST_(p.funcao);
   if (!cod) throw new Error('A função de ' + nome + ' (' + (p.funcao || 'não informada') + ') não tem modelo de OS de SST.');
   const m = OSSST_MODELOS[cod];
+  const cboF = cboFuncao_(p.funcao) || m.cbo;
   const terc = p.vinculo === 'Contrato (prestador)';
   const clt = p.vinculo === 'CLT';
   const vincTxt = terc ? 'Prestador de serviço terceirizado' : clt ? 'Empregado (CLT)' : 'Sócio / administração';
@@ -2241,8 +2253,8 @@ function dadosOSSST_(nome) {
     'Acidentes, incidentes e quase-acidentes devem ser comunicados imediatamente ao responsável da Kiton e ao responsável do cliente.';
   const decl = 'Declaro ter recebido, lido e compreendido esta Ordem de Serviço, ter sido informado sobre os riscos das minhas atividades e as medidas de prevenção, e ter recebido os EPI necessários, registrados na minha ficha de EPI. ' +
     'Comprometo-me a cumprir as orientações aqui descritas, as normas regulamentadoras aplicáveis e os procedimentos dos clientes. ' + consequencia;
-  return { nome, funcao: p.funcao, vinculo: p.vinculo, vincTxt, terceirizado: terc, razao: p.razao, cnpj: p.cnpj, inicio: p.inicio ? dia_(p.inicio) : '', modelo: cod,
-    setor: m.setor, cargoPGR: m.cargoPGR, cbo: m.cbo, atividades: m.atividades, riscos: m.riscos, epis: m.epis, treinos: m.treinos,
+  return { nome, nomeCompleto: p.nomeCompleto || nome, funcao: p.funcao, vinculo: p.vinculo, vincTxt, terceirizado: terc, razao: p.razao, cnpj: p.cnpj, inicio: p.inicio ? dia_(p.inicio) : '', modelo: cod,
+    setor: m.setor, cargoPGR: m.cargoPGR, cbo: cboF, atividades: m.atividades, riscos: m.riscos, epis: m.epis, treinos: m.treinos,
     medidas: OSSST_MEDIDAS, proibicoes: OSSST_PROIBICOES, intro, tercTxt, direitos, decl };
 }
 
@@ -2260,8 +2272,8 @@ function docOSSST_(nome, ass) {
   const quando = ass.data ? 'Assinado digitalmente em ' + ass.data : 'Data: ____/____/______';
   const corpo = cabDoc_('ORDEM DE SERVIÇO DE SST', 'NR-1, item 1.4.1' + (ass.n ? ' · Registro nº ' + ass.n : '')) +
     (d.terceirizado ? '<div style="border:2px solid #CD0000;padding:4px 8px;margin:0 0 6px;font-weight:bold;font-size:9.5pt">PRESTADOR DE SERVIÇO TERCEIRIZADO</div>' : '') +
-    '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(d.nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(d.funcao) + '</td></tr>' +
-    '<tr><td class="r">Setor / cargo no PGR</td><td>' + esc_(d.setor) + ' · ' + esc_(d.cargoPGR) + ' (CBO ' + esc_(d.cbo) + ')</td></tr>' +
+    '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(d.nomeCompleto) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(d.funcao) + '</td></tr>' +
+    '<tr><td class="r">CBO</td><td>' + esc_(d.cbo) + '</td></tr><tr><td class="r">Setor / cargo de referência no PGR</td><td>' + esc_(d.setor) + ' · ' + esc_(d.cargoPGR) + '</td></tr>' +
     '<tr><td class="r">Vínculo</td><td>' + esc_(d.vincTxt) + '</td></tr>' +
     (d.terceirizado ? '<tr><td class="r">Empresa contratada</td><td>' + (d.razao ? esc_(d.razao) : '______________________________') + (d.cnpj ? ' · CNPJ ' + esc_(d.cnpj) : '') + '</td></tr>' +
       '<tr><td class="r">Início da prestação</td><td>' + (d.inicio ? esc_(d.inicio) : '____/____/______') + '</td></tr>' : '') +
@@ -2276,7 +2288,7 @@ function docOSSST_(nome, ass) {
     '<div class="b"><div class="bt">Capacitação e saúde exigidas</div>' + li(d.treinos) + '</div>' +
     '<div class="b"><div class="bt">Direito de recusa e comunicação de acidentes</div><div style="line-height:1.4">' + esc_(d.direitos) + '</div></div>' +
     '<div style="page-break-inside:avoid"><div class="decl">' + esc_(d.decl) + '</div>' +
-    '<table style="width:100%;margin-top:14px;font-size:8.5pt"><tr>' + assin(ass.img, d.nome, d.terceirizado ? 'Prestador de serviço' : 'Colaborador', quando) + '<td style="width:4%"></td>' +
+    '<table style="width:100%;margin-top:14px;font-size:8.5pt"><tr>' + assin(ass.img, d.nomeCompleto, d.terceirizado ? 'Prestador de serviço' : 'Colaborador', quando) + '<td style="width:4%"></td>' +
     assin(ass.imgResp, ass.resp || '', 'Responsável pela emissão · ' + EMPRESA.nome, quando) + '</tr></table>' +
     '<p style="font-size:8pt;color:#5d6670;margin-top:8px">Maringá-PR, ' + (ass.dataExt || '____ de ______________ de ________') + '. Reemitir esta OS sempre que houver mudança de função, de atividades ou de riscos, ou revisão do PGR.</p></div>';
   return pdfDoc_(corpo, 'OS de SST - ' + nome + (ass.dataIso ? ' - ' + ass.dataIso : '') + '.pdf');
@@ -2655,7 +2667,8 @@ function docsSST_() {
 function pessoasSST_() {
   return ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => {
     const funcao = txt_(l.get('Função'));
-    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)', cnpj: txt_(l.get('CNPJ/MEI')), razao: txt_(l.get('Razão social do prestador')), inicio: data_(l.get('Início da prestação')),
+    return { nome: txt_(l.get('Nome')), funcao, vinculo: txt_(l.get('Vínculo')) || 'Contrato (prestador)', cnpj: txt_(l.get('CNPJ/MEI')), razao: txt_(l.get('Razão social do prestador')), cpf: txt_(l.get('CPF')), rg: txt_(l.get('RG')), nomeCompleto: txt_(l.get('Nome completo')),
+      vencASO: data_(l.get('Venc. ASO')), vencNR10: data_(l.get('Venc. NR-10')), vencNR35: data_(l.get('Venc. NR-35')), inicio: data_(l.get('Início da prestação')),
       grupo: txt_(l.get('Grupo PCMSO')) || (funcao === 'Administrativo' ? 'Administrativo' : 'Operacional e técnico') };
   });
 }
@@ -2752,7 +2765,7 @@ function sstDocs_(u, req) {
   const p = escopo === 'Empresa' ? null : pessoasSST_().find(x => x.nome === nome) || { nome, vinculo: '', grupo: '' };
   const tipos = tiposSST_();
   const it = itensSST_(tipos, docsSST_(), escopo, p).filter(i => admin || i.atual || i.exigido);
-  const pOut = p ? Object.assign({}, p, { inicio: p.inicio ? dia_(p.inicio) : '', inicioIso: p.inicio ? Utilities.formatDate(p.inicio, TZ, 'yyyy-MM-dd') : '' }) : null;
+  const pOut = p ? Object.assign({}, p, { vencASO: dia_(p.vencASO), vencNR10: dia_(p.vencNR10), vencNR35: dia_(p.vencNR35), inicio: p.inicio ? dia_(p.inicio) : '', inicioIso: p.inicio ? Utilities.formatDate(p.inicio, TZ, 'yyyy-MM-dd') : '' }) : null;
   return { ok: true, escopo, pessoa: pOut, itens: it.filter(i => i.tipo.ativo || i.atual || i.hist.length).map(i => itemOut_(i, true)), resumo: resumoSST_(it) };
 }
 
@@ -2861,7 +2874,7 @@ function salvarTipoSST_(u, req) {
 
 function salvarPessoaSST_(u, req) {
   if (SST_VINCULOS.indexOf(req.vinculo) < 0 || SST_GRUPOS.indexOf(req.grupo) < 0) throw new Error('Escolha o vínculo e o grupo.');
-  ['Vínculo', 'Grupo PCMSO', 'CNPJ/MEI', 'Início da prestação', 'Razão social do prestador'].forEach(c => {
+  ['Vínculo', 'Grupo PCMSO', 'CNPJ/MEI', 'Início da prestação', 'Razão social do prestador', 'CPF', 'RG', 'Nome completo'].forEach(c => {
     const t0 = ler_(ABA.colab);
     if (t0.cab[c] === undefined) t0.sh.getRange(1, t0.sh.getLastColumn() + 1).setValue(c);
   });
@@ -2871,6 +2884,9 @@ function salvarPessoaSST_(u, req) {
   const ini = txt_(req.inicio) ? Utilities.parseDate(txt_(req.inicio).slice(0, 10), TZ, 'yyyy-MM-dd') : '';
   set_(t, l._linha, 'Vínculo', req.vinculo); set_(t, l._linha, 'Grupo PCMSO', req.grupo);
   set_(t, l._linha, 'CNPJ/MEI', txt_(req.cnpj)); set_(t, l._linha, 'Início da prestação', ini); if (req.razao !== undefined) set_(t, l._linha, 'Razão social do prestador', txt_(req.razao));
+  if (req.cpf !== undefined) set_(t, l._linha, 'CPF', txt_(req.cpf));
+  if (req.rg !== undefined) set_(t, l._linha, 'RG', txt_(req.rg));
+  if (req.nomeCompleto !== undefined) set_(t, l._linha, 'Nome completo', txt_(req.nomeCompleto));
   return { ok: true };
 }
 
@@ -2895,8 +2911,29 @@ function pacoteSST_(u, req) {
     '<div class="b"><div class="bt">Documentos anexados a este pacote, na ordem</div><table class="lst"><tr><th>#</th><th>Titular</th><th>Documento</th><th>Validade</th></tr>' +
     linhasCapa.map((r, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc_(r[0]) + '</td><td>' + esc_(r[1]) + '</td><td style="color:' + cor(r[3]) + '">' + esc_(r[2]) + '</td></tr>').join('') + '</table></div>' +
     '<p style="font-size:8pt;color:#555">Documentos de saúde ocupacional (exames complementares) não são compartilhados, conforme a LGPD. A aptidão consta no ASO de cada colaborador.</p>';
-  const capa = pdfDoc_(corpo, 'Capa.pdf');
+  const rel = req.relacao && (req.pessoas || []).length ? relacaoColab_(u, req) + '<div class="quebra"></div>' : '';
+  const capa = pdfDoc_(rel + corpo, 'Capa.pdf');
   return { ok: true, capa: Utilities.base64Encode(capa.getBytes()), lista };
+}
+
+/** Relação de colaboradores para portaria de cliente (primeira página do pacote). */
+function relacaoColab_(u, req) {
+  const ps = pessoasSST_(), nr35 = !!req.nr35;
+  const val = d => { if (!d) return '<span style="color:#b42318">Não informado</span>'; const v = dia_(d); return diasAte_(d) < 0 ? '<span style="color:#b42318;font-weight:bold">Vencido em ' + v + '</span>' : esc_(v); };
+  const linhas = (req.pessoas || []).map(n => ps.find(p => p.nome === txt_(n))).filter(Boolean);
+  const vinc = p => p.vinculo === 'Contrato (prestador)' ? 'Prestador de serviço terceirizado' + (p.razao || p.cnpj ? '<br><span style="font-size:7.5pt;color:#5d6670">' + esc_(p.razao || '') + (p.cnpj ? ', CNPJ ' + esc_(p.cnpj) : '') + '</span>' : '')
+    : p.vinculo === 'CLT' ? 'Empregado (CLT)' : 'Sócio';
+  return cabDoc_('RELAÇÃO DE COLABORADORES', txt_(req.cliente) || 'Acesso de terceiros') +
+    '<table class="d"><tr><td class="r">Empresa prestadora</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr>' +
+    '<tr><td class="r">Endereço</td><td>' + esc_(EMPRESA.endereco) + '</td></tr>' +
+    (txt_(req.servico) ? '<tr><td class="r">Serviço</td><td>' + esc_(req.servico) + '</td></tr>' : '') +
+    (txt_(req.periodo) ? '<tr><td class="r">Período previsto</td><td>' + esc_(req.periodo) + '</td></tr>' : '') +
+    '<tr><td class="r">Responsável</td><td>' + esc_(u.nome) + ' · ' + esc_(EMPRESA.fone) + '</td></tr></table>' +
+    '<table class="lst"><tr><th>Nº</th><th>Nome completo</th><th>CPF</th><th>RG</th><th>Função</th><th>Vínculo com a Kiton</th><th>ASO até</th><th>NR-10 até</th>' + (nr35 ? '<th>NR-35 até</th>' : '') + '</tr>' +
+    linhas.map((p, i) => '<tr><td>' + (i + 1) + '</td><td><b>' + esc_(p.nomeCompleto || p.nome) + '</b></td><td style="white-space:nowrap">' + (esc_(p.cpf) || '-') + '</td><td style="white-space:nowrap">' + (esc_(p.rg) || '-') + '</td><td>' + esc_(p.funcao) + '</td><td>' + vinc(p) +
+      '</td><td>' + val(p.vencASO) + '</td><td>' + val(p.vencNR10) + '</td>' + (nr35 ? '<td>' + val(p.vencNR35) + '</td>' : '') + '</tr>').join('') + '</table>' +
+    '<p style="font-size:8pt;color:#5d6670;line-height:1.45">Os prestadores de serviço terceirizados atuam sob coordenação da Kiton, por contrato de prestação de serviços, e recebem da Kiton a ordem de serviço de SST, os EPI e as orientações de segurança. Validades conforme o cadastro da Gestão SST em ' + Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy') + '.</p>' +
+    '<div style="margin-top:36px;width:300px;border-top:1px solid #1c1f23;padding-top:3px;font-size:8.5pt">' + esc_(u.nome) + '<br>' + esc_(EMPRESA.nome) + '</div>';
 }
 
 function meusDocsSST_(u) {
