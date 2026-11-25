@@ -1,7 +1,7 @@
 # Kiton Hub
 
 App de campo da Kiton Engenharia Integrada: registro de saídas (veículo, ferramentas e EPC), retornos, conferência e fechamento do mês.
-Os dados ficam na planilha **App Kiton Campo | Base de Dados**, no Google Drive da Kiton.
+Os dados ficam na planilha **Kiton Hub | Base de Dados**, no Google Drive da Kiton.
 
 ## Como funciona
 
@@ -11,7 +11,7 @@ Os dados ficam na planilha **App Kiton Campo | Base de Dados**, no Google Drive 
 
 ## Publicar o Apps Script (uma vez)
 
-1. Abra a planilha **App Kiton Campo | Base de Dados** com a conta da Kiton.
+1. Abra a planilha **Kiton Hub | Base de Dados** com a conta da Kiton.
 2. Menu **Extensões › Apps Script**.
 3. Apague o conteúdo do arquivo `Código.gs`, cole o conteúdo de `apps-script/Code.gs` e salve.
 4. Na barra de cima, escolha a função `testarConfiguracao` e clique em **Executar**. Autorize o acesso quando o Google pedir (Avançado › Acessar projeto).
