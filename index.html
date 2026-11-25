@@ -506,15 +506,15 @@ async function telaLogin() {
   let escolhido = lerLocal('kc_ultimo_nome') || '';
   try {
     const r = await api('nomes');
-    const desenha = () => {
-      document.getElementById('nomes').innerHTML = r.nomes.map(n => `<button type="button" class="linha ${n === escolhido ? 'sel' : ''}" data-n="${esc(n)}">${ic('pessoas')}${esc(n)}${n === escolhido ? `<span class="fim">${ic('ok')}</span>` : ''}</button>`).join('');
-      document.querySelectorAll('#nomes [data-n]').forEach(b => b.onclick = () => { escolhido = b.dataset.n; desenha(); document.getElementById('pin').focus(); });
-    };
-    desenha();
+    if (!r.nomes.includes(escolhido)) escolhido = '';
+    document.getElementById('nomes').innerHTML = `<select class="campo-txt" id="nome" aria-label="Seu nome">
+      <option value="" ${escolhido ? '' : 'selected'} disabled>Selecione o seu nome</option>
+      ${r.nomes.map(n => `<option value="${esc(n)}" ${n === escolhido ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+    document.getElementById('nome').onchange = e => { escolhido = e.target.value; document.getElementById('pin').focus(); };
   } catch (e) { erroTela(e.message); }
   const entrar = () => executar(async () => {
     const pin = document.getElementById('pin').value;
-    if (!escolhido) throw new Error('Toque no seu nome.');
+    if (!escolhido) throw new Error('Selecione o seu nome.');
     if (pin.length !== 6) throw new Error('O PIN tem 6 números.');
     const r = await api('login', { nome: escolhido, pin });
     est.token = r.token; est.usuario = r.usuario; guardar('kc_token', r.token); guardar('kc_ultimo_nome', escolhido);
