@@ -81,6 +81,7 @@ function doGet() {
 }
 
 function rotear_(req) {
+  invalidarLer_(); CACHE_LISTAS = null; CACHE_ATIVO = true;
   const a = req.acao;
   if (a === 'login') return login_(req);
   if (a === 'nomes') {
@@ -169,7 +170,8 @@ function rotear_(req) {
 function comTrava_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
-  try { return fn(); } finally { lock.releaseLock(); }
+  const antes = CACHE_ATIVO; CACHE_ATIVO = false; invalidarLer_();
+  try { return fn(); } finally { CACHE_ATIVO = antes; invalidarLer_(); lock.releaseLock(); }
 }
 
 function exigirAdmin_(u) {
@@ -192,7 +194,18 @@ function aba_(nome) {
 }
 
 /** Lê a aba inteira. Retorna {sh, cab (nome -> índice 0), linhas: [{_linha, valores, get(nome)}]} */
+/** Cache de leitura por execução: requisições só de consulta leem cada aba uma vez. Ações que gravam (comTrava_) leem sempre da planilha. */
+let CACHE_LER = {}, CACHE_ATIVO = true;
+function invalidarLer_(nome) { if (nome) delete CACHE_LER[nome]; else CACHE_LER = {}; }
+
 function ler_(nome) {
+  if (CACHE_ATIVO && CACHE_LER[nome]) return CACHE_LER[nome];
+  const t = lerPlanilha_(nome);
+  if (CACHE_ATIVO) CACHE_LER[nome] = t;
+  return t;
+}
+
+function lerPlanilha_(nome) {
   const sh = aba_(nome);
   const dados = sh.getDataRange().getValues();
   const cab = {};
@@ -212,10 +225,12 @@ function col_(t, nome) {
 }
 
 function set_(t, linha, nome, valor) {
+  invalidarLer_(t.sh.getName ? t.sh.getName() : '');
   t.sh.getRange(linha, col_(t, nome)).setValue(valor);
 }
 
 function anexar_(t, obj) {
+  invalidarLer_(t.sh.getName ? t.sh.getName() : '');
   const n = Object.keys(t.cab).length;
   const row = new Array(n).fill('');
   Object.keys(obj).forEach(k => { if (t.cab[k] !== undefined) row[t.cab[k]] = obj[k]; });
@@ -373,9 +388,9 @@ function resetarPin_(req) {
 
 // ---------- tela inicial ----------
 
+let CACHE_LISTAS = null;
 function lista_(coluna) {
-  const sh = aba_(ABA.listas);
-  const dados = sh.getDataRange().getValues();
+  const dados = CACHE_LISTAS || (CACHE_LISTAS = aba_(ABA.listas).getDataRange().getValues());
   const i = dados[0].findIndex(h => txt_(h) === coluna);
   if (i < 0) return [];
   return dados.slice(1).map(r => txt_(r[i])).filter(Boolean);

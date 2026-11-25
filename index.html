@@ -334,15 +334,15 @@ const primeiroNome = n => String(n || '').replace(/^Eng\.\s*/, '').split(' ')[0]
 const barra = html => { $barra.innerHTML = html ? `<div class="barra">${html}</div>` : ''; };
 const topo = (sub) => { telaAtual = sub || 'Entrar'; sujo = false; document.getElementById('marca').innerHTML = `Kiton Hub${sub ? `<span>${esc(sub)}</span>` : ''}`; };
 
-async function api(acao, dados = {}) {
+async function api(acao, dados = {}, opc = {}) {
   if (!window.API_URL || API_URL.indexOf('http') !== 0) throw new Error('O endereço do Apps Script ainda não foi configurado (config.js).');
   let r;
-  carregando(true, ACOES_GRAVAM.test(acao) ? 'Salvando…' : /^(doc|pdf|pacote)/i.test(acao) ? 'Gerando documento…' : acao === 'login' ? 'Entrando…' : 'Carregando…');
+  if (!opc.silencioso) carregando(true, ACOES_GRAVAM.test(acao) ? 'Salvando…' : /^(doc|pdf|pacote)/i.test(acao) ? 'Gerando documento…' : acao === 'login' ? 'Entrando…' : 'Carregando…');
   try {
     r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao, token: est.token, ...dados }) });
-  } catch (e) { carregando(false); throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'); }
+  } catch (e) { if (!opc.silencioso) carregando(false); throw new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'); }
   let j;
-  try { j = await r.json(); } finally { carregando(false); }
+  try { j = await r.json(); } finally { if (!opc.silencioso) carregando(false); }
   if (!j.ok) {
     if (j.erro === 'SESSAO_INVALIDA') { sair(); throw new Error('Sua sessão expirou. Entre de novo.'); }
     if (j.erro === 'TROCAR_PIN') { telaTrocarPin(); throw new Error('Crie o seu PIN para continuar.'); }
@@ -367,7 +367,7 @@ function erroTela(t) {
   if (box) { box.innerHTML = msg('erro', t); box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } else alert(t);
 }
 function sair() {
-  est.token = null; est.usuario = null; est.dados = null; guardar('kc_token', null); telaLogin();
+  est.token = null; est.usuario = null; est.dados = null; guardar('kc_token', null); guardar('kc_inicio', null); telaLogin();
 }
 // logo e nome no topo levam à tela inicial; em tela com formulário preenchido, confirma antes
 document.getElementById('irInicio').onclick = () => {
@@ -524,7 +524,9 @@ async function telaLogin() {
   barra(`<div class="dentro"><button class="acao" id="entrar" type="button">Entrar</button></div>`);
   let escolhido = lerLocal('kc_ultimo_nome') || '';
   try {
-    const r = await api('nomes');
+    let r = null; try { r = JSON.parse(lerLocal('kc_nomes') || 'null'); } catch (e) {}
+    const novo = api('nomes', {}, { silencioso: !!r }).then(x => { guardar('kc_nomes', JSON.stringify(x)); return x; });
+    if (!r) r = await novo; else { const antes = JSON.stringify([...r.nomes].sort()); novo.then(x => { const pin = document.getElementById('pin'); if (telaAtual === 'Entrar' && pin && !pin.value && JSON.stringify([...x.nomes].sort()) !== antes) telaLogin(); }).catch(() => {}); }
     const semT = n => String(n).replace(/^(eng|enga|dr|dra|sr|sra)\.?\s+/i, '');
     r.nomes.sort((a, b) => semT(a).localeCompare(semT(b), 'pt', { sensitivity: 'base' }));
     if (!r.nomes.includes(escolhido)) escolhido = '';
@@ -579,8 +581,18 @@ function boasVindas() {
   document.getElementById('bvOk').focus();
 }
 const semTituloNome = n => String(n || '').replace(/^(eng|enga|dr|dra|sr|sra)\.?\s+/i, '');
+/** Ao abrir o app, mostra na hora a última tela inicial salva no aparelho e atualiza em segundo plano. */
+function abrirApp() {
+  let c = null; try { c = JSON.parse(lerLocal('kc_inicio') || 'null'); } catch (e) {}
+  if (!c || !c.usuario) return carregarInicio();
+  est.dados = c; est.usuario = c.usuario; telaInicio();
+  api('inicio', {}, { silencioso: true }).then(r => {
+    est.dados = r; est.usuario = r.usuario; guardar('kc_inicio', JSON.stringify(r));
+    if (telaAtual === r.usuario.nome && !sujo) telaInicio();
+  }).catch(e => { if (!est.token) return; });
+}
 async function carregarInicio() {
-  await executar(async () => { const r = await api('inicio'); est.dados = r; est.usuario = r.usuario; telaInicio(); });
+  await executar(async () => { const r = await api('inicio'); est.dados = r; est.usuario = r.usuario; guardar('kc_inicio', JSON.stringify(r)); telaInicio(); });
   if (mostrarBoasVindas && est.usuario) { mostrarBoasVindas = false; boasVindas(); }
 }
 function telaInicio() {
@@ -3239,7 +3251,7 @@ async function adminPresenca(box) {
 
 // ---------- partida ----------
 est.token = lerLocal('kc_token');
-est.token ? carregarInicio() : telaLogin();
+est.token ? abrirApp() : telaLogin();
 </script>
 </body>
 </html>
