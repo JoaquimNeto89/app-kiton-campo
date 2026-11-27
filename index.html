@@ -1277,12 +1277,14 @@ async function telaGerarLink(nome) {
     const r = await api('gerarLinkAssinatura', { colaborador: nome, base: location.origin + location.pathname });
     const primeiro = semTituloNome(nome).split(' ')[0];
     const oque = [r.epi ? 'a sua ficha de EPI' : '', r.termo ? 'o termo de responsabilidade das ferramentas' : ''].filter(Boolean).join(' e ');
-    const texto = `Olá, ${primeiro}! Aqui é da Kiton Engenharia Integrada. Segue o link para você conferir e assinar ${oque}:\n${r.link}\n\nO link é pessoal, vale até ${r.expira} e só pode ser usado uma vez.` +
+    const texto = `Olá, ${primeiro}! Aqui é o KAI, o assistente inteligente da Kiton Engenharia Integrada. Segue o link para você conferir e assinar ${oque}:\n${r.link}\n\nO link é pessoal, vale até ${r.expira} e só pode ser usado uma vez.` +
       (r.temCPF ? ' Para confirmar, o sistema vai pedir os 3 primeiros dígitos do seu CPF.' : '');
     document.getElementById('lBox').innerHTML = `${msg('ok', `Link criado. Vale até ${esc(r.expira)} e só pode ser usado uma vez. Um link anterior para ${esc(nome)}, se houver, deixou de valer.`)}
       ${r.temCPF ? '' : msg('erro', 'Este colaborador não tem CPF no cadastro, então o link não pede confirmação. Cadastre o CPF em Gestão SST para mais segurança.')}
       <label class="rotulo">Mensagem</label><div class="decl-app" style="white-space:pre-wrap;word-break:break-all">${esc(texto)}</div>
-      <a class="acao" id="lWpp" style="text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">${ic('ok')} Enviar pelo WhatsApp</a>
+      ${/Android/i.test(navigator.userAgent) ? `<a class="acao" style="text-decoration:none" href="intent://send?text=${encodeURIComponent(texto)}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url=${encodeURIComponent('https://wa.me/?text=' + encodeURIComponent(texto))};end">${ic('ok')} Enviar pelo WhatsApp Business</a>
+      <a class="acao leve" style="text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">Enviar pelo WhatsApp comum</a>` :
+      `<a class="acao" id="lWpp" style="text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">${ic('ok')} Enviar pelo WhatsApp</a>`}
       <button type="button" class="acao leve" id="lCopiar">${ic('os')} Copiar mensagem</button>
       <p class="suave" style="margin-top:10px">Envie só para a própria pessoa. Quem tiver o link consegue abrir a página de assinatura.</p>`;
     document.getElementById('lCopiar').onclick = async () => {

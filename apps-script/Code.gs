@@ -2255,6 +2255,12 @@ function assinarPorLink_(req) {
   if (pend.termo.length) { assinarTermo_({ nome: 'Link de assinatura, enviado por ' + v.criadoPor }, { colaborador: v.nome, assinatura: req.assinatura, geo: req.geo }); feito.push('Termo de ferramentas (' + pend.termo.length + ' itens)'); }
   const lk = ler_(ABA_LINKS), l2 = lk.linhas.find(x => txt_(x.get('Token (cifrado)')) === hashToken_(req.token));
   set_(lk, l2._linha, 'Situação', 'Usado'); set_(lk, l2._linha, 'Usado em', new Date()); set_(lk, l2._linha, 'Resultado', feito.join('; ') + '. ' + nota + (req.ua ? ' Aparelho: ' + txt_(req.ua).slice(0, 120) : ''));
+  try {
+    const quando = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm');
+    MailApp.sendEmail(EMAIL_KITON, 'Assinatura recebida | ' + v.nome + ' | Kiton Hub',
+      v.nome + ' assinou pelo link em ' + quando + ':\n- ' + feito.join('\n- ') + '\n\n' + nota + '\nOs PDFs estão no app (Gestão SST > EPI e ferramentas > ' + v.nome + ').',
+      { name: 'Kiton Hub', replyTo: EMAIL_KITON });
+  } catch (e) { /* aviso por e-mail é opcional */ }
   return { ok: true, feito };
 }
 
