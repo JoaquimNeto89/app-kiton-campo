@@ -20,3 +20,11 @@ console.log('termos',sheets['Termos de ferramentas'].length,JSON.stringify(sheet
 console.log('links',JSON.stringify(sheets['Links de assinatura'][1]));
 console.log('invalido',JSON.stringify(call({acao:'linkAssinatura',token:'abc'})));
 console.log('nao-admin',JSON.stringify(call({acao:'gerarLinkAssinatura',token:'x',colaborador:'Eng. Henrique Treumann'})));
+// escopo: só termo
+sheets['EPI - Entregas'].push(['2',new Date(),'Eng. Henrique Treumann','EPI-CAP-001','Capacete','29638','U',1,'Regularização','Eng. Joaquim Neto','','','Aguardando assinatura','','','','','']);
+sheets['Termos de ferramentas'].splice(1);
+const g2=call({acao:'gerarLinkAssinatura',token:adm,colaborador:'Eng. Henrique Treumann',docs:['termo']});console.log('g2',g2.ok,g2.erro,g2.epi,g2.termo);
+const t2=g2.link.split('#assinar=')[1];const i2=call({acao:'linkAssinatura',token:t2});console.log('i2',i2.epi.length,i2.termo.length);
+console.log('a2',JSON.stringify(call({acao:'assinarPorLink',token:t2,assinatura:png,cpf3:'025'})));
+console.log('epi ainda aguardando?',sheets['EPI - Entregas'][2][12]);
+const g3=call({acao:'gerarLinkAssinatura',token:adm,colaborador:'Eng. Henrique Treumann',docs:['termo']});console.log('g3 (termo ja assinado)',g3.ok,g3.erro);

@@ -2184,7 +2184,7 @@ function assinarTermo_(u, req) {
 
 // ----- Assinatura por link (sem login): EPI e ferramentas já entregues, enviado pela administração por WhatsApp -----
 const ABA_LINKS = 'Links de assinatura';
-CAB[ABA_LINKS] = ['Nº', 'Colaborador', 'Token (cifrado)', 'Criado em', 'Criado por', 'Expira em', 'Situação', 'Tentativas', 'Usado em', 'Resultado'];
+CAB[ABA_LINKS] = ['Nº', 'Colaborador', 'Token (cifrado)', 'Criado em', 'Criado por', 'Expira em', 'Situação', 'Tentativas', 'Usado em', 'Resultado', 'Documentos'];
 const LINK_DIAS = 7, LINK_TENTATIVAS = 5;
 
 function hashToken_(tk) { return b64_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'link:' + tk, Utilities.Charset.UTF_8)); }
@@ -2200,20 +2200,27 @@ function pendentesAssinatura_(nome) {
   return { epi, termo };
 }
 
+/** Documentos que o link cobre: 'epi', 'termo' ou os dois (vazio = os dois, links antigos). */
+function docsDoLink_(l) { const d = txt_(l.get('Documentos')); return d ? d.split(',') : ['epi', 'termo']; }
+
 function gerarLinkAssinatura_(u, req) {
   const nome = txt_(req.colaborador);
   const p = pessoasSST_().find(x => x.nome === nome);
   if (!p) throw new Error('Colaborador não encontrado.');
   const pend = pendentesAssinatura_(nome);
   if (!pend.epi.length && !pend.termo.length) throw new Error(nome + ' não tem ficha de EPI nem termo de ferramentas pendente de assinatura.');
+  const pedidos = (Array.isArray(req.docs) && req.docs.length ? req.docs : ['epi', 'termo']).filter(d => (d === 'epi' && pend.epi.length) || (d === 'termo' && pend.termo.length));
+  if (!pedidos.length) throw new Error('Escolha pelo menos um documento pendente para enviar.');
+  const shL = aba_(ABA_LINKS), cabL = shL.getRange(1, 1, 1, shL.getLastColumn()).getValues()[0].map(String);
+  if (cabL.indexOf('Documentos') < 0) { shL.getRange(1, cabL.length + 1).setValue('Documentos'); invalidarLer_(ABA_LINKS); }
   const t = ler_(ABA_LINKS);
   t.linhas.filter(l => txt_(l.get('Colaborador')) === nome && txt_(l.get('Situação')) === 'Ativo').forEach(l => set_(t, l._linha, 'Situação', 'Substituído'));
   const tk = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
   const agora = new Date(), expira = new Date(agora.getTime() + LINK_DIAS * 864e5);
   anexar_(t, { 'Nº': proximoNumero_(t, 'Nº'), 'Colaborador': nome, 'Token (cifrado)': hashToken_(tk), 'Criado em': agora, 'Criado por': u.nome,
-    'Expira em': expira, 'Situação': 'Ativo', 'Tentativas': 0 });
+    'Expira em': expira, 'Situação': 'Ativo', 'Tentativas': 0, 'Documentos': pedidos.join(',') });
   const base = /^https:\/\/[^\s#?]+$/.test(txt_(req.base)) ? txt_(req.base) : 'https://hub.kitonengenharia.com.br/';
-  return { ok: true, link: base + '#assinar=' + tk, expira: Utilities.formatDate(expira, TZ, 'dd/MM/yyyy'), epi: pend.epi.length, termo: pend.termo.length, temCPF: digitosCPF_(p.cpf).length === 11 };
+  return { ok: true, link: base + '#assinar=' + tk, expira: Utilities.formatDate(expira, TZ, 'dd/MM/yyyy'), epi: pedidos.indexOf('epi') >= 0 ? pend.epi.length : 0, termo: pedidos.indexOf('termo') >= 0 ? pend.termo.length : 0, temCPF: digitosCPF_(p.cpf).length === 11 };
 }
 
 function linkValido_(tk) {
@@ -2226,14 +2233,14 @@ function linkValido_(tk) {
   if (sit !== 'Ativo') throw new Error('Este link não vale mais (' + sit.toLowerCase() + '). Peça um novo link à Kiton.');
   const exp = data_(l.get('Expira em'));
   if (exp && exp < new Date()) { set_(t, l._linha, 'Situação', 'Expirado'); throw new Error('Este link expirou. Peça um novo link à Kiton.'); }
-  return { t, l, nome: txt_(l.get('Colaborador')), criadoPor: txt_(l.get('Criado por')) };
+  return { t, l, nome: txt_(l.get('Colaborador')), criadoPor: txt_(l.get('Criado por')), docs: docsDoLink_(l) };
 }
 
 function linkAssinatura_(req) {
   const v = linkValido_(req.token);
   const p = pessoasSST_().find(x => x.nome === v.nome) || {};
   const pend = pendentesAssinatura_(v.nome);
-  return { ok: true, nome: p.nomeCompleto || v.nome, epi: pend.epi, termo: pend.termo, pedeCPF: digitosCPF_(p.cpf).length === 11 };
+  return { ok: true, nome: p.nomeCompleto || v.nome, epi: v.docs.indexOf('epi') >= 0 ? pend.epi : [], termo: v.docs.indexOf('termo') >= 0 ? pend.termo : [], pedeCPF: digitosCPF_(p.cpf).length === 11 };
 }
 
 function assinarPorLink_(req) {
@@ -2248,6 +2255,9 @@ function assinarPorLink_(req) {
   }
   if (!txt_(req.assinatura)) throw new Error('Assine no quadro antes de confirmar.');
   const pend = pendentesAssinatura_(v.nome);
+  if (v.docs.indexOf('epi') < 0) pend.epi = [];
+  if (v.docs.indexOf('termo') < 0) pend.termo = [];
+  if (!pend.epi.length && !pend.termo.length) throw new Error('Não há mais nada pendente neste link.');
   const como = { nome: v.criadoPor }; // quem entregou (administração que gerou o link)
   const nota = 'Assinado pelo próprio colaborador por link, sem login' + (cpf.length === 11 ? ', com confirmação do CPF' : '') + '.';
   const feito = [];

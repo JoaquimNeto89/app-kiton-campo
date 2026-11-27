@@ -1268,13 +1268,20 @@ function telaEpiForm(c) {
 }
 
 /** Administração: gera o link pessoal de assinatura (EPI e ferramentas já entregues) e abre o WhatsApp com a mensagem pronta. */
-async function telaGerarLink(nome) {
+async function telaGerarLink(nome, pend) {
+  pend = pend || { epi: 1, termo: 1 };
   topo('Link de assinatura');
-  $app.innerHTML = `<h1>Link de assinatura</h1><p class="suave">${esc(nome)}</p><div id="erro"></div><div id="lBox"><p class="suave">Gerando…</p></div>`;
+  const op = (k, t, n) => n ? `<label class="linha" style="font-weight:500"><input type="checkbox" data-doc="${k}" checked style="width:22px;height:22px"> ${t} (${n} itens)</label>` : '';
+  $app.innerHTML = `<h1>Link de assinatura</h1><p class="suave">${esc(nome)}</p><div id="erro"></div><div id="lBox">
+    <label class="rotulo">O que enviar para assinar</label>
+    ${op('epi', 'Ficha de EPI', pend.epi)}${op('termo', 'Termo de responsabilidade das ferramentas', pend.termo)}
+    <button type="button" class="acao" id="lGerar">${ic('ok')} Gerar link</button></div>`;
   barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Voltar</button></div>`);
   document.getElementById('ant').onclick = () => telaColabEPI(nome);
-  await executar(async () => {
-    const r = await api('gerarLinkAssinatura', { colaborador: nome, base: location.origin + location.pathname });
+  document.getElementById('lGerar').onclick = () => executar(async () => {
+    const docs = [...document.querySelectorAll('#lBox [data-doc]')].filter(c => c.checked).map(c => c.dataset.doc);
+    if (!docs.length) throw new Error('Marque pelo menos um documento.');
+    const r = await api('gerarLinkAssinatura', { colaborador: nome, docs, base: location.origin + location.pathname });
     const primeiro = semTituloNome(nome).split(' ')[0];
     const oque = [r.epi ? 'a sua ficha de EPI' : '', r.termo ? 'o termo de responsabilidade das ferramentas' : ''].filter(Boolean).join(' e ');
     const texto = `Olá, ${primeiro}! Aqui é o KAI, o assistente inteligente da Kiton Engenharia Integrada. Segue o link para você conferir e assinar ${oque}:\n${r.link}\n\nO link é pessoal, vale até ${r.expira} e só pode ser usado uma vez.` +
@@ -1367,7 +1374,7 @@ async function telaColabEPI(nome, aviso) {
     document.getElementById('cEntregar').onclick = () => telaEntregarEpi(nome);
     const at = document.getElementById('cAssTermo'); if (at) at.onclick = () => telaAssinarTermo(nome, r.itens);
     const af = document.getElementById('cAssFicha'); if (af) af.onclick = () => telaAssinarFichaEpi(nome, r.aguardando);
-    const lk = document.getElementById('cLink'); if (lk) lk.onclick = () => telaGerarLink(nome);
+    const lk = document.getElementById('cLink'); if (lk) lk.onclick = () => telaGerarLink(nome, { epi: r.aguardando.length, termo: /Pendente|Desatualizado/.test(r.termo) ? r.itens.length : 0 });
     document.querySelectorAll('[data-dev]').forEach(b => b.onclick = () => executar(async () => {
       const obs = prompt('Devolução do EPI. Observação (opcional):');
       if (obs === null) return;
