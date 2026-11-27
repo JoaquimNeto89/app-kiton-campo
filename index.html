@@ -1322,15 +1322,23 @@ async function telaAssinarLink(token) {
     ${info.pedeCPF ? `<label class="rotulo" for="aCpf">3 primeiros dígitos do seu CPF</label><input class="campo-txt" id="aCpf" inputmode="numeric" maxlength="3" autocomplete="off" style="max-width:140px">` : ''}
     <label class="rotulo">Sua assinatura</label>
     <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>
+    <p class="suave" style="font-size:13px">Para validar a assinatura, a data, o aparelho e a sua localização são registrados. Permita o acesso à localização quando o celular pedir.</p>
     <button type="button" class="acao" id="aOk">${ic('ok')} Assinar e enviar</button>`}`;
   if (!info.epi.length && !info.termo.length) return;
+  let geoP = localizacao(), semGeoOk = false; // pede a permissão já ao abrir a página
   const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
   montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
   document.getElementById('aOk').onclick = () => executar(async () => {
     const cpf = document.getElementById('aCpf');
     if (cpf && !/^\d{3}$/.test(cpf.value.trim())) throw new Error('Informe os 3 primeiros dígitos do seu CPF.');
     if (!assinatura || tracos < 1) throw new Error('Assine no quadro antes de enviar.');
-    const r = await api('assinarPorLink', { token, assinatura, cpf3: cpf ? cpf.value.trim() : '', ua: navigator.userAgent });
+    let geo = await geoP;
+    if (!geo) { geoP = localizacao(); geo = await geoP; }
+    if (!geo && !semGeoOk) {
+      semGeoOk = true; document.getElementById('aOk').innerHTML = ic('ok') + ' Assinar sem localização';
+      throw new Error('Não foi possível obter sua localização. Ative a localização do celular e permita o acesso para este site, depois toque de novo. Se não conseguir, toque em "Assinar sem localização".');
+    }
+    const r = await api('assinarPorLink', { token, assinatura, cpf3: cpf ? cpf.value.trim() : '', ua: navigator.userAgent, geo });
     history.replaceState(null, '', location.pathname);
     $app.innerHTML = `<h1>Assinatura registrada</h1>${msg('ok', 'Obrigado! Os documentos foram assinados e enviados para a Kiton.')}
       <div class="cartao">${r.feito.map(f => `<div class="apr-lin"><span>${esc(f)}</span><span>${ic('ok')}</span></div>`).join('')}</div>
@@ -1434,7 +1442,8 @@ function telaAssinarFichaEpi(nome, itens) {
   document.getElementById('ant').onclick = () => telaColabEPI(nome);
   document.getElementById('ok').onclick = () => executar(async () => {
     if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');
-    const r = await api('assinarFichaEpi', { colaborador: nome, assinatura });
+    const geo = await localizacao();
+    const r = await api('assinarFichaEpi', { colaborador: nome, assinatura, geo, ua: navigator.userAgent });
     sujo = false; await recarregarDados(); telaColabEPI(nome, `Ficha assinada (${r.itens} itens). Toque em "Imprimir ficha de EPI" para gerar o PDF.`);
   });
 }
@@ -1456,7 +1465,7 @@ function telaAssinarTermo(nome, itens) {
   document.getElementById('ok').onclick = () => executar(async () => {
     if (!assinatura || tracos < 1) throw new Error('Peça para o colaborador assinar no quadro.');
     const geo = await localizacao();
-    await api('assinarTermo', { colaborador: nome, assinatura, geo });
+    await api('assinarTermo', { colaborador: nome, assinatura, geo, ua: navigator.userAgent });
     sujo = false; await recarregarDados(); telaColabEPI(nome, 'Termo assinado. O PDF já sai com a assinatura.');
   });
 }
@@ -1591,7 +1600,8 @@ async function telaOSSST(nome) {
   document.getElementById('ok').onclick = () => executar(async () => {
     if (!ass.c || ass.nc < 1) throw new Error('Peça para ' + nome + ' assinar no quadro.');
     if (!proprio && (!ass.r || ass.nr < 1)) throw new Error('O responsável pela emissão também precisa assinar.');
-    const r = await api('assinarOSSST', { colaborador: nome, assinatura: ass.c, assinaturaResp: proprio ? '' : ass.r });
+    const geo = await localizacao();
+    const r = await api('assinarOSSST', { colaborador: nome, assinatura: ass.c, assinaturaResp: proprio ? '' : ass.r, geo });
     sujo = false; telaPessoaSST(nome, `OS de SST assinada e registrada (nº ${r.n}). O PDF está na pasta do colaborador na Gestão SST.`);
   });
 }

@@ -28,3 +28,10 @@ const t2=g2.link.split('#assinar=')[1];const i2=call({acao:'linkAssinatura',toke
 console.log('a2',JSON.stringify(call({acao:'assinarPorLink',token:t2,assinatura:png,cpf3:'025'})));
 console.log('epi ainda aguardando?',sheets['EPI - Entregas'][2][12]);
 const g3=call({acao:'gerarLinkAssinatura',token:adm,colaborador:'Eng. Henrique Treumann',docs:['termo']});console.log('g3 (termo ja assinado)',g3.ok,g3.erro);
+console.log('SST docs C29/C30:', JSON.stringify((sheets['SST - Documentos']||[]).filter(r=>['C29','C30'].includes(r[3])).map(r=>[r[2],r[3],r[4],r[8],r[10]])));
+console.log('tipos:', JSON.stringify((sheets['SST - Tipos de documento']||[]).filter(r=>['C29','C30'].includes(r[0])).map(r=>r.slice(0,4))));
+const {mails,drive}=L;console.log('mails:', JSON.stringify(mails.map(m=>[m.to,m.s,m.anexo,m.body.slice(0,200)])));
+const pdfs=Object.entries(drive).filter(([k,v])=>/assinado/.test(v.name||''));console.log('pdfs',pdfs.map(([k,v])=>v.name));
+const h=pdfs.length?Buffer.from(pdfs[0][1].bytes).toString('utf8'):'';console.log('registro no pdf?',/Registro eletrônico/.test(h), /Não autorizada/.test(h));
+// assinatura com geo
+const g4=call({acao:'gerarLinkAssinatura',token:adm,colaborador:'Eng. Henrique Treumann',docs:['epi']});console.log('g4',g4.ok,g4.erro);
