@@ -1267,6 +1267,68 @@ function telaEpiForm(c) {
   });
 }
 
+/** Administração: gera o link pessoal de assinatura (EPI e ferramentas já entregues) e abre o WhatsApp com a mensagem pronta. */
+async function telaGerarLink(nome) {
+  topo('Link de assinatura');
+  $app.innerHTML = `<h1>Link de assinatura</h1><p class="suave">${esc(nome)}</p><div id="erro"></div><div id="lBox"><p class="suave">Gerando…</p></div>`;
+  barra(`<div class="dentro"><button class="acao leve" id="ant" type="button">${ic('voltar')} Voltar</button></div>`);
+  document.getElementById('ant').onclick = () => telaColabEPI(nome);
+  await executar(async () => {
+    const r = await api('gerarLinkAssinatura', { colaborador: nome, base: location.origin + location.pathname });
+    const primeiro = semTituloNome(nome).split(' ')[0];
+    const oque = [r.epi ? 'a sua ficha de EPI' : '', r.termo ? 'o termo de responsabilidade das ferramentas' : ''].filter(Boolean).join(' e ');
+    const texto = `Olá, ${primeiro}! Aqui é da Kiton Engenharia Integrada. Segue o link para você conferir e assinar ${oque}:\n${r.link}\n\nO link é pessoal, vale até ${r.expira} e só pode ser usado uma vez.` +
+      (r.temCPF ? ' Para confirmar, o sistema vai pedir os 3 primeiros dígitos do seu CPF.' : '');
+    document.getElementById('lBox').innerHTML = `${msg('ok', `Link criado. Vale até ${esc(r.expira)} e só pode ser usado uma vez. Um link anterior para ${esc(nome)}, se houver, deixou de valer.`)}
+      ${r.temCPF ? '' : msg('erro', 'Este colaborador não tem CPF no cadastro, então o link não pede confirmação. Cadastre o CPF em Gestão SST para mais segurança.')}
+      <label class="rotulo">Mensagem</label><div class="decl-app" style="white-space:pre-wrap;word-break:break-all">${esc(texto)}</div>
+      <a class="acao" id="lWpp" style="text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">${ic('ok')} Enviar pelo WhatsApp</a>
+      <button type="button" class="acao leve" id="lCopiar">${ic('os')} Copiar mensagem</button>
+      <p class="suave" style="margin-top:10px">Envie só para a própria pessoa. Quem tiver o link consegue abrir a página de assinatura.</p>`;
+    document.getElementById('lCopiar').onclick = async () => {
+      try { await navigator.clipboard.writeText(texto); document.getElementById('erro').innerHTML = msg('ok', 'Mensagem copiada.'); }
+      catch (e) { document.getElementById('erro').innerHTML = msg('erro', 'Não foi possível copiar. Use o botão do WhatsApp.'); }
+    };
+  });
+}
+
+/** Página pública aberta pelo link: o colaborador confere e assina, sem login. */
+async function telaAssinarLink(token) {
+  topo('Assinatura');
+  barra('');
+  $app.innerHTML = `<h1>Assinatura de documentos</h1><div id="erro"></div><div id="aBox"><p class="suave">Carregando…</p></div>`;
+  let info = null, assinatura = null, tracos = 0;
+  try { info = await api('linkAssinatura', { token }); }
+  catch (e) { document.getElementById('aBox').innerHTML = msg('erro', esc(e.message)); return; }
+  const total = info.termo.reduce((t, i) => t + (i.valor || 0), 0);
+  document.getElementById('aBox').innerHTML = `<p>Olá, <b>${esc(info.nome)}</b>. Confira os itens abaixo e assine no final.</p>
+    ${info.epi.length ? `<h2>Ficha de EPI (${info.epi.length} itens)</h2>
+      <div class="cartao">${info.epi.map(e => `<div class="apr-lin"><span>${esc(e.desc)}<small class="suave" style="display:block">${e.ca ? 'CA ' + esc(e.ca) : 'Uniforme'}${e.tamanho ? ' · tam. ' + esc(e.tamanho) : ''}${e.serie ? ' · série/lote ' + esc(e.serie) : ''}</small></span><span>${esc(e.qtd)}</span></div>`).join('')}</div>
+      <div class="decl-app">Declaro ter recebido gratuitamente os EPI relacionados acima, com CA válido, e ter sido orientado quanto ao uso, guarda e conservação, conforme a NR-6. Comprometo-me a usá-los apenas para a finalidade a que se destinam e a comunicar qualquer alteração que os torne impróprios para uso.</div>` : ''}
+    ${info.termo.length ? `<h2>Ferramentas de uso individual (${info.termo.length} itens)</h2>
+      <div class="cartao">${info.termo.map(i => `<div class="apr-lin"><span>${esc(i.desc)}<small class="suave" style="display:block">${esc(i.pat)}${i.serie ? ' · série ' + esc(i.serie) : ''}</small></span><span>${reais(i.valor)}</span></div>`).join('')}
+        <div class="apr-lin"><b>Total</b><b>${reais(total)}</b></div></div>
+      <div class="decl-app">Declaro ter recebido da Kiton Engenharia Integrada as ferramentas e equipamentos relacionados acima, em bom estado, para uso exclusivo nas atividades da empresa. Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no encerramento do contrato. Estou ciente de que danos por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, conforme o contrato vigente.</div>` : ''}
+    ${!info.epi.length && !info.termo.length ? msg('info', 'Não há nada pendente de assinatura.') : `
+    ${info.pedeCPF ? `<label class="rotulo" for="aCpf">3 primeiros dígitos do seu CPF</label><input class="campo-txt" id="aCpf" inputmode="numeric" maxlength="3" autocomplete="off" style="max-width:140px">` : ''}
+    <label class="rotulo">Sua assinatura</label>
+    <div class="assin"><canvas id="cv"></canvas><button type="button" class="link" id="limpar">Limpar</button></div>
+    <button type="button" class="acao" id="aOk">${ic('ok')} Assinar e enviar</button>`}`;
+  if (!info.epi.length && !info.termo.length) return;
+  const montar = () => montarAssinatura(document.getElementById('cv'), (url, n) => { assinatura = url; tracos = n; });
+  montar(); document.getElementById('limpar').onclick = () => { assinatura = null; tracos = 0; montar(); };
+  document.getElementById('aOk').onclick = () => executar(async () => {
+    const cpf = document.getElementById('aCpf');
+    if (cpf && !/^\d{3}$/.test(cpf.value.trim())) throw new Error('Informe os 3 primeiros dígitos do seu CPF.');
+    if (!assinatura || tracos < 1) throw new Error('Assine no quadro antes de enviar.');
+    const r = await api('assinarPorLink', { token, assinatura, cpf3: cpf ? cpf.value.trim() : '', ua: navigator.userAgent });
+    history.replaceState(null, '', location.pathname);
+    $app.innerHTML = `<h1>Assinatura registrada</h1>${msg('ok', 'Obrigado! Os documentos foram assinados e enviados para a Kiton.')}
+      <div class="cartao">${r.feito.map(f => `<div class="apr-lin"><span>${esc(f)}</span><span>${ic('ok')}</span></div>`).join('')}</div>
+      <p class="suave">Você já pode fechar esta página.</p>`;
+  });
+}
+
 async function telaColabEPI(nome, aviso) {
   topo(nome);
   $app.innerHTML = `<h1>${esc(nome)}</h1><div id="erro">${aviso ? msg('ok', aviso) : ''}</div><div id="cBox"><p class="suave">Carregando…</p></div>`;
@@ -1287,6 +1349,7 @@ async function telaColabEPI(nome, aviso) {
       ${r.aguardando.length ? `<h2>Ficha de EPI aguardando assinatura</h2>
         <div class="cartao">${r.aguardando.map(e => `<div class="apr-lin"><span>${esc(e.desc)}<small class="suave" style="display:block">${e.ca ? 'CA ' + esc(e.ca) : 'Uniforme'}${e.tamanho ? ' · tam. ' + esc(e.tamanho) : ''}${e.serie ? ' · série/lote ' + esc(e.serie) : ''}</small></span><span>${esc(e.qtd)}</span></div>`).join('')}</div>
         <button type="button" class="acao" id="cAssFicha">${ic('ok')} Colher assinatura da ficha (${r.aguardando.length} itens)</button>` : ''}
+      ${r.aguardando.length || /Pendente|Desatualizado/.test(r.termo) ? `<button type="button" class="acao leve" id="cLink">${ic('os')} Enviar link para assinar pelo WhatsApp</button>` : ''}
       <h2>EPI em uso</h2>
       ${r.avisos.length ? msg('erro', r.avisos.map(a => a.desc + ': ' + a.texto).join('. ')) : ''}
       ${r.episEmUso.length ? r.episEmUso.map(e => `<div class="cartao"><div class="t">${esc(e.desc)}<span class="pat">CA ${esc(e.ca)}</span></div>
@@ -1302,6 +1365,7 @@ async function telaColabEPI(nome, aviso) {
     document.getElementById('cEntregar').onclick = () => telaEntregarEpi(nome);
     const at = document.getElementById('cAssTermo'); if (at) at.onclick = () => telaAssinarTermo(nome, r.itens);
     const af = document.getElementById('cAssFicha'); if (af) af.onclick = () => telaAssinarFichaEpi(nome, r.aguardando);
+    const lk = document.getElementById('cLink'); if (lk) lk.onclick = () => telaGerarLink(nome);
     document.querySelectorAll('[data-dev]').forEach(b => b.onclick = () => executar(async () => {
       const obs = prompt('Devolução do EPI. Observação (opcional):');
       if (obs === null) return;
@@ -3251,7 +3315,7 @@ async function adminPresenca(box) {
 
 // ---------- partida ----------
 est.token = lerLocal('kc_token');
-est.token ? abrirApp() : telaLogin();
+{ const mLink = /^#assinar=([a-f0-9]{64})$/.exec(location.hash); mLink ? telaAssinarLink(mLink[1]) : est.token ? abrirApp() : telaLogin(); }
 </script>
 </body>
 </html>

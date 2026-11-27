@@ -84,6 +84,8 @@ function rotear_(req) {
   invalidarLer_(); CACHE_LISTAS = null; CACHE_ATIVO = true;
   const a = req.acao;
   if (a === 'login') return login_(req);
+  if (a === 'linkAssinatura') return linkAssinatura_(req);
+  if (a === 'assinarPorLink') return comTrava_(() => assinarPorLink_(req));
   if (a === 'nomes') {
     return { ok: true, nomes: ler_(ABA.colab).linhas.filter(l => txt_(l.get('Ativo')) === 'Sim').map(l => txt_(l.get('Nome'))).sort(ordemNome_) };
   }
@@ -130,6 +132,7 @@ function rotear_(req) {
     case 'assinarFichaEpi': exigirAdmin_(u); return comTrava_(() => assinarFichaEpi_(u, req));
     case 'devolverEpi': exigirAdmin_(u); return comTrava_(() => devolverEpi_(u, req));
     case 'assinarTermo': exigirAdmin_(u); return comTrava_(() => assinarTermo_(u, req));
+    case 'gerarLinkAssinatura': exigirAdmin_(u); return comTrava_(() => gerarLinkAssinatura_(u, req));
     case 'docPDF': return docPDF_(u, req);
     case 'prevOSSST': exigirAdmin_(u); return prevOSSST_(u, req);
     case 'assinarOSSST': exigirAdmin_(u); return comTrava_(() => assinarOSSST_(u, req));
@@ -2149,6 +2152,7 @@ function assinarFichaEpi_(u, req) {
   linhas.forEach(l => {
     const c = cat[txt_(l.get('Código EPI'))] || {};
     set_(t, l._linha, 'Data', agora); set_(t, l._linha, 'Assinatura', ass); set_(t, l._linha, 'Situação', 'Em uso'); set_(t, l._linha, 'Entregue por', u.nome);
+    if (txt_(req.nota)) set_(t, l._linha, 'Observações', [txt_(l.get('Observações')), txt_(req.nota)].filter(Boolean).join(' | '));
     if (c.trocaDias) set_(t, l._linha, 'Próxima troca', new Date(agora.getTime() + c.trocaDias * 864e5));
   });
   return { ok: true, itens: linhas.length };
@@ -2176,6 +2180,82 @@ function assinarTermo_(u, req) {
   anexar_(t, { 'Nº': n, 'Data': agora, 'Colaborador': nome, 'Itens': chaveItens_(itens), 'Quantidade de itens': itens.length,
     'Valor total (R$)': itens.reduce((s, i) => s + i.valor, 0), 'Assinatura': ass, 'Registrado por': u.nome, 'Lat.': g ? g.lat : '', 'Long.': g ? g.lng : '' });
   return { ok: true, n };
+}
+
+// ----- Assinatura por link (sem login): EPI e ferramentas já entregues, enviado pela administração por WhatsApp -----
+const ABA_LINKS = 'Links de assinatura';
+CAB[ABA_LINKS] = ['Nº', 'Colaborador', 'Token (cifrado)', 'Criado em', 'Criado por', 'Expira em', 'Situação', 'Tentativas', 'Usado em', 'Resultado'];
+const LINK_DIAS = 7, LINK_TENTATIVAS = 5;
+
+function hashToken_(tk) { return b64_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'link:' + tk, Utilities.Charset.UTF_8)); }
+function digitosCPF_(cpf) { return txt_(cpf).replace(/\D/g, ''); }
+
+/** O que o colaborador tem para assinar: EPI aguardando e termo de ferramentas pendente ou desatualizado. */
+function pendentesAssinatura_(nome) {
+  const epi = entregasEPI_(nome).filter(e => e.situacao === 'Aguardando assinatura')
+    .map(e => ({ desc: e.desc, ca: e.ca, tamanho: e.tamanho, qtd: e.qtd, serie: e.serie }));
+  const itens = itensIndividuais_(nome);
+  const st = situacaoTermo_(nome, itens);
+  const termo = /Pendente|Desatualizado/.test(st) ? itens.map(i => ({ pat: i.pat, desc: i.desc, serie: i.serie, valor: i.valor })) : [];
+  return { epi, termo };
+}
+
+function gerarLinkAssinatura_(u, req) {
+  const nome = txt_(req.colaborador);
+  const p = pessoasSST_().find(x => x.nome === nome);
+  if (!p) throw new Error('Colaborador não encontrado.');
+  const pend = pendentesAssinatura_(nome);
+  if (!pend.epi.length && !pend.termo.length) throw new Error(nome + ' não tem ficha de EPI nem termo de ferramentas pendente de assinatura.');
+  const t = ler_(ABA_LINKS);
+  t.linhas.filter(l => txt_(l.get('Colaborador')) === nome && txt_(l.get('Situação')) === 'Ativo').forEach(l => set_(t, l._linha, 'Situação', 'Substituído'));
+  const tk = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  const agora = new Date(), expira = new Date(agora.getTime() + LINK_DIAS * 864e5);
+  anexar_(t, { 'Nº': proximoNumero_(t, 'Nº'), 'Colaborador': nome, 'Token (cifrado)': hashToken_(tk), 'Criado em': agora, 'Criado por': u.nome,
+    'Expira em': expira, 'Situação': 'Ativo', 'Tentativas': 0 });
+  const base = /^https:\/\/[^\s#?]+$/.test(txt_(req.base)) ? txt_(req.base) : 'https://hub.kitonengenharia.com.br/';
+  return { ok: true, link: base + '#assinar=' + tk, expira: Utilities.formatDate(expira, TZ, 'dd/MM/yyyy'), epi: pend.epi.length, termo: pend.termo.length, temCPF: digitosCPF_(p.cpf).length === 11 };
+}
+
+function linkValido_(tk) {
+  if (!/^[a-f0-9]{64}$/.test(txt_(tk))) throw new Error('Link inválido. Peça um novo link à Kiton.');
+  const t = ler_(ABA_LINKS), h = hashToken_(tk);
+  const l = t.linhas.find(x => txt_(x.get('Token (cifrado)')) === h);
+  if (!l) throw new Error('Link inválido. Peça um novo link à Kiton.');
+  const sit = txt_(l.get('Situação'));
+  if (sit === 'Usado') throw new Error('Este link já foi usado. As assinaturas já estão registradas.');
+  if (sit !== 'Ativo') throw new Error('Este link não vale mais (' + sit.toLowerCase() + '). Peça um novo link à Kiton.');
+  const exp = data_(l.get('Expira em'));
+  if (exp && exp < new Date()) { set_(t, l._linha, 'Situação', 'Expirado'); throw new Error('Este link expirou. Peça um novo link à Kiton.'); }
+  return { t, l, nome: txt_(l.get('Colaborador')), criadoPor: txt_(l.get('Criado por')) };
+}
+
+function linkAssinatura_(req) {
+  const v = linkValido_(req.token);
+  const p = pessoasSST_().find(x => x.nome === v.nome) || {};
+  const pend = pendentesAssinatura_(v.nome);
+  return { ok: true, nome: p.nomeCompleto || v.nome, epi: pend.epi, termo: pend.termo, pedeCPF: digitosCPF_(p.cpf).length === 11 };
+}
+
+function assinarPorLink_(req) {
+  const v = linkValido_(req.token);
+  const p = pessoasSST_().find(x => x.nome === v.nome) || {};
+  const cpf = digitosCPF_(p.cpf);
+  if (cpf.length === 11 && digitosCPF_(req.cpf3) !== cpf.slice(0, 3)) {
+    const n = (Number(v.l.get('Tentativas')) || 0) + 1;
+    set_(v.t, v.l._linha, 'Tentativas', n);
+    if (n >= LINK_TENTATIVAS) { set_(v.t, v.l._linha, 'Situação', 'Bloqueado'); throw new Error('Link bloqueado por tentativas incorretas. Peça um novo link à Kiton.'); }
+    throw new Error('Os 3 primeiros dígitos do CPF não conferem. Tentativas restantes: ' + (LINK_TENTATIVAS - n) + '.');
+  }
+  if (!txt_(req.assinatura)) throw new Error('Assine no quadro antes de confirmar.');
+  const pend = pendentesAssinatura_(v.nome);
+  const como = { nome: v.criadoPor }; // quem entregou (administração que gerou o link)
+  const nota = 'Assinado pelo próprio colaborador por link, sem login' + (cpf.length === 11 ? ', com confirmação do CPF' : '') + '.';
+  const feito = [];
+  if (pend.epi.length) { const r = assinarFichaEpi_(como, { colaborador: v.nome, assinatura: req.assinatura, nota }); feito.push('Ficha de EPI (' + r.itens + ' itens)'); }
+  if (pend.termo.length) { assinarTermo_({ nome: 'Link de assinatura, enviado por ' + v.criadoPor }, { colaborador: v.nome, assinatura: req.assinatura, geo: req.geo }); feito.push('Termo de ferramentas (' + pend.termo.length + ' itens)'); }
+  const lk = ler_(ABA_LINKS), l2 = lk.linhas.find(x => txt_(x.get('Token (cifrado)')) === hashToken_(req.token));
+  set_(lk, l2._linha, 'Situação', 'Usado'); set_(lk, l2._linha, 'Usado em', new Date()); set_(lk, l2._linha, 'Resultado', feito.join('; ') + '. ' + nota + (req.ua ? ' Aparelho: ' + txt_(req.ua).slice(0, 120) : ''));
+  return { ok: true, feito };
 }
 
 // ----- Ordem de serviço de SST (NR-1, item 1.4.1 "c"), emitida em nome da Kiton e assinada no app -----
