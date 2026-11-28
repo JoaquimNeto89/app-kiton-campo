@@ -2577,7 +2577,7 @@ function cabDoc_(titulo, linha2) {
 }
 function pdfDoc_(corpo, nomeArq, paisagem) {
   const html = '<html><head><meta charset="utf-8"><style>' + (paisagem ? estiloPDF_().replace('@page{size:A4;', '@page{size:A4 landscape;') : estiloPDF_()) +
-    'table.lst{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:8.5pt}table.lst th,table.lst td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;vertical-align:middle}' +
+    'table.lst{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:8.5pt}table.lst th,table.lst td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;vertical-align:middle}table.cen th,table.cen td{text-align:center}table.cen td.esq{text-align:left}' +
     'table.lst tr{page-break-inside:avoid}table.lst thead{display:table-header-group}table.lst th{font-weight:bold;border-bottom:2px solid #1c1f23;background:#f3f4f6}table.lst img{height:26px}.decl{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4;font-size:8.8pt;margin:6px 0}' +
     '.assbox{margin-top:14px;width:60%;border-top:1px solid #1c1f23;padding-top:3px;font-size:8.5pt}.assbox img{height:55px;display:block;margin-bottom:2px}' +
     '</style></head><body>' + envolverPDF_(corpo) + '</body></html>';
@@ -2603,10 +2603,10 @@ function docTermo_(nome, extra) {
   const base = p && p.vinculo === 'Contrato (prestador)' ? 'conforme o contrato de prestação de serviço vigente' : 'conforme a legislação aplicável e o acordo vigente';
   const corpo = cabDoc_('TERMO DE RESPONSABILIDADE', 'Ferramentas de uso individual') + dadosColab_(nome) +
     '<div class="bt" style="margin-top:8px">Ferramentas e equipamentos sob responsabilidade do ' + (p && p.vinculo === 'Contrato (prestador)' ? 'prestador de serviço' : 'colaborador') + '</div>' +
-    '<table class="lst"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:17%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:13%">Identificação</th><th style="width:7%">Estado</th><th style="width:10%;text-align:right">Valor (R$)</th></tr></thead><tbody>' +
-    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td><td>' + esc_(i.estado) + '</td><td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('')
+    '<table class="lst cen"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:17%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:13%">Identificação</th><th style="width:7%">Estado</th><th style="width:10%">Valor (R$)</th></tr></thead><tbody>' +
+    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td class="esq">' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td><td>' + esc_(i.estado) + '</td><td>' + brl(i.valor) + '</td></tr>').join('')
       : '<tr><td colspan="7">Nenhum item cadastrado.</td></tr>') +
-    '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th style="text-align:right">' + brl(total) + '</th></tr></tbody></table>' +
+    '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th>' + brl(total) + '</th></tr></tbody></table>' +
     '<div style="page-break-inside:avoid"><div class="decl">Declaro ter recebido da ' + esc_(EMPRESA.nome) + ' as ferramentas e equipamentos relacionados acima, em bom estado de conservação e funcionamento, para uso exclusivo nas atividades executadas para a empresa. ' +
     'Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar imediatamente qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no encerramento da prestação de serviços. ' +
     'Estou ciente de que danos causados por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, ' + base + '.</div>' +
@@ -2621,8 +2621,8 @@ function docFichaEPI_(nome, extra) {
   const corpo = cabDoc_('FICHA DE CONTROLE DE EPI', 'Conforme NR-6') + dadosColab_(nome) +
     '<div class="decl">Declaro ter recebido gratuitamente os Equipamentos de Proteção Individual (EPI) relacionados abaixo, com Certificado de Aprovação (CA) válido, e ter sido orientado e treinado quanto ao uso adequado, guarda e conservação. ' +
     'Comprometo-me a usá-los apenas para a finalidade a que se destinam, responsabilizar-me pela guarda e conservação, comunicar qualquer alteração que os torne impróprios para uso e cumprir as determinações da empresa sobre o uso adequado, ciente de que a recusa injustificada ao uso constitui ato faltoso.</div>' +
-    '<div style="margin:8px 0 6px"><div class="bt" style="page-break-after:avoid">Registro de entregas</div><table class="lst"><thead><tr><th>Data</th><th>EPI</th><th>CA</th><th>Tam.</th><th>Qtd.</th><th>Motivo</th><th>Situação</th><th>Assinatura</th></tr></thead><tbody>' +
-    (eps.length ? eps.map(e => '<tr><td>' + (e.situacao === 'Aguardando assinatura' ? '' : esc_(e.data)) + '</td><td>' + esc_(e.desc) + (e.serie ? '<br><span style="color:#5d6670">Série/lote: ' + esc_(e.serie) + '</span>' : '') + '</td><td>' + esc_(e.ca || 'Uniforme') + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
+    '<div style="margin:8px 0 6px"><div class="bt" style="page-break-after:avoid">Registro de entregas</div><table class="lst cen"><thead><tr><th>Data</th><th>EPI</th><th>CA</th><th>Tam.</th><th>Qtd.</th><th>Motivo</th><th>Situação</th><th>Assinatura</th></tr></thead><tbody>' +
+    (eps.length ? eps.map(e => '<tr><td>' + (e.situacao === 'Aguardando assinatura' ? '' : esc_(e.data)) + '</td><td class="esq">' + esc_(e.desc) + (e.serie ? '<br><span style="color:#5d6670">Série/lote: ' + esc_(e.serie) + '</span>' : '') + '</td><td>' + esc_(e.ca || 'Uniforme') + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
       (e.assinatura ? '<img src="' + imgDrive_(e.assinatura) + '">' : '') + '</td></tr>').join('') : '<tr><td colspan="8">Nenhuma entrega registrada.</td></tr>') + '</tbody></table></div>' +
     '<p style="font-size:8pt;color:#5d6670">As assinaturas foram coletadas na tela do aparelho no momento de cada entrega, pelo app Kiton Hub.</p>';
   return pdfDoc_(corpo + (extra || ''), 'Ficha de EPI - ' + nomeDoc_(nome) + '.pdf', true);
@@ -2633,10 +2633,10 @@ function docLista_(tipo) {
   const itens = ler_(ABA.itens).linhas.filter(l => txt_(l.get('Patrimônio')) && txt_(l.get('Situação')) !== 'Baixado' &&
     (tipo === 'epc' ? txt_(l.get('Tipo')) === 'EPC' : (txt_(l.get('Uso')) || 'Coletivo') === 'Coletivo' && txt_(l.get('Tipo')) !== 'EPC'));
   const corpo = cabDoc_(titulo, itens.length + ' itens') +
-    '<table class="lst"><tr><th>Patrimônio</th><th>Descrição</th><th>Tipo</th><th>Marca / modelo</th><th>Nº de série</th><th>Nº pintado</th><th>Estado</th>' + (tipo === 'epc' ? '' : '<th>Calibração</th>') + '</tr>' +
+    '<table class="lst cen"><tr><th>Patrimônio</th><th>Descrição</th><th>Tipo</th><th>Marca / modelo</th><th>Nº de série</th><th>Nº pintado</th><th>Estado</th>' + (tipo === 'epc' ? '' : '<th>Calibração</th>') + '</tr>' +
     itens.map(l => {
       const st = txt_(l.get('Status da calibração')), val = dia_(l.get('Validade da calibração'));
-      return '<tr><td>' + esc_(l.get('Patrimônio')) + '</td><td>' + esc_(l.get('Descrição')) + '</td><td>' + esc_(l.get('Tipo')) + '</td><td>' + esc_(l.get('Marca / modelo')) + '</td><td>' + esc_(l.get('Nº de série')) +
+      return '<tr><td>' + esc_(l.get('Patrimônio')) + '</td><td class="esq">' + esc_(l.get('Descrição')) + '</td><td>' + esc_(l.get('Tipo')) + '</td><td>' + esc_(l.get('Marca / modelo')) + '</td><td>' + esc_(l.get('Nº de série')) +
         '</td><td>' + esc_(l.get('Nº pintado / gravado')) + '</td><td>' + esc_(l.get('Estado')) + '</td>' + (tipo === 'epc' ? '' : '<td>' + (txt_(l.get('Tipo')) === 'Instrumento' ? esc_(st === 'Válido' ? 'Válida até ' + val : st || 'Sem calibração') : 'Não requer') + '</td>') + '</tr>';
     }).join('') + '</table>';
   return pdfDoc_(corpo, (tipo === 'epc' ? 'Lista de EPC' : 'Lista de ferramentas coletivas') + ' - ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd') + '.pdf');
