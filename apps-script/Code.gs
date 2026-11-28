@@ -2573,7 +2573,7 @@ function cabDoc_(titulo, linha2) {
 function pdfDoc_(corpo, nomeArq, paisagem) {
   const html = '<html><head><meta charset="utf-8"><style>' + (paisagem ? estiloPDF_().replace('@page{size:A4;', '@page{size:A4 landscape;') : estiloPDF_()) +
     'table.lst{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:8.5pt}table.lst th,table.lst td{border:1px solid #9aa3ad;padding:3px 5px;text-align:left;vertical-align:middle}' +
-    'table.lst th{font-weight:bold;border-bottom:2px solid #1c1f23;background:#f3f4f6}table.lst img{height:26px}.decl{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4;font-size:8.8pt;margin:6px 0}' +
+    'table.lst tr{page-break-inside:avoid}table.lst thead{display:table-header-group}table.lst th{font-weight:bold;border-bottom:2px solid #1c1f23;background:#f3f4f6}table.lst img{height:26px}.decl{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4;font-size:8.8pt;margin:6px 0}' +
     '.assbox{margin-top:14px;width:60%;border-top:1px solid #1c1f23;padding-top:3px;font-size:8.5pt}.assbox img{height:55px;display:block;margin-bottom:2px}' +
     '</style></head><body>' + envolverPDF_(corpo) + '</body></html>';
   return Utilities.newBlob(html, 'text/html', 'doc.html').getAs('application/pdf').setName(nomeArq);
@@ -2616,9 +2616,9 @@ function docFichaEPI_(nome, extra) {
   const corpo = cabDoc_('FICHA DE CONTROLE DE EPI', 'Conforme NR-6') + dadosColab_(nome) +
     '<div class="decl">Declaro ter recebido gratuitamente os Equipamentos de Proteção Individual (EPI) relacionados abaixo, com Certificado de Aprovação (CA) válido, e ter sido orientado e treinado quanto ao uso adequado, guarda e conservação. ' +
     'Comprometo-me a usá-los apenas para a finalidade a que se destinam, responsabilizar-me pela guarda e conservação, comunicar qualquer alteração que os torne impróprios para uso e cumprir as determinações da empresa sobre o uso adequado, ciente de que a recusa injustificada ao uso constitui ato faltoso.</div>' +
-    '<div class="b"><div class="bt">Registro de entregas</div><table class="lst"><tr><th>Data</th><th>EPI</th><th>CA</th><th>Tam.</th><th>Qtd.</th><th>Motivo</th><th>Situação</th><th>Assinatura</th></tr>' +
+    '<div style="margin:8px 0 6px"><div class="bt" style="page-break-after:avoid">Registro de entregas</div><table class="lst"><thead><tr><th>Data</th><th>EPI</th><th>CA</th><th>Tam.</th><th>Qtd.</th><th>Motivo</th><th>Situação</th><th>Assinatura</th></tr></thead><tbody>' +
     (eps.length ? eps.map(e => '<tr><td>' + (e.situacao === 'Aguardando assinatura' ? '' : esc_(e.data)) + '</td><td>' + esc_(e.desc) + (e.serie ? '<br><span style="color:#5d6670">Série/lote: ' + esc_(e.serie) + '</span>' : '') + '</td><td>' + esc_(e.ca || 'Uniforme') + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
-      (e.assinatura ? '<img src="' + imgDrive_(e.assinatura) + '">' : '') + '</td></tr>').join('') : '<tr><td colspan="8">Nenhuma entrega registrada.</td></tr>') + '</table></div>' +
+      (e.assinatura ? '<img src="' + imgDrive_(e.assinatura) + '">' : '') + '</td></tr>').join('') : '<tr><td colspan="8">Nenhuma entrega registrada.</td></tr>') + '</tbody></table></div>' +
     '<p style="font-size:8pt;color:#5d6670">As assinaturas foram coletadas na tela do aparelho no momento de cada entrega, pelo app Kiton Hub.</p>';
   return pdfDoc_(corpo + (extra || ''), 'Ficha de EPI - ' + nome + '.pdf', true);
 }
