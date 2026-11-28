@@ -2303,7 +2303,7 @@ function garantirTiposAssinados_() {
 /** Bloco "registro eletrônico" que vai no fim do PDF arquivado. */
 function registroAssinaturaHtml_(reg, quando) {
   const g = reg.geo, temGeo = g && g.lat !== undefined && g.lat !== null && g.lat !== '';
-  const lin = (k, v) => '<tr><td style="width:24%;color:#5d6670">' + k + '</td><td>' + v + '</td></tr>';
+  const lin = (k, v) => '<tr><td style="width:24%;color:#5d6670;font-size:8pt;padding:1px 0">' + k + '</td><td style="font-size:8pt;padding:1px 0">' + v + '</td></tr>';
   return '<div style="page-break-inside:avoid;margin-top:12px;border:1px solid #9aa3ad;padding:6px 8px;font-size:8pt">' +
     '<div style="font-weight:bold;margin-bottom:3px">Registro eletrônico da assinatura</div><table style="width:100%;border-collapse:collapse">' +
     lin('Data e hora', esc_(Utilities.formatDate(quando, TZ, 'dd/MM/yyyy HH:mm:ss')) + ' (horário de Brasília)') +
