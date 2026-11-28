@@ -2501,7 +2501,7 @@ function dadosOSSST_(nome) {
     'Acidentes, incidentes e quase-acidentes devem ser comunicados imediatamente ao responsável da Kiton e ao responsável do cliente.';
   const decl = 'Declaro ter recebido, lido e compreendido esta Ordem de Serviço, ter sido informado sobre os riscos das minhas atividades e as medidas de prevenção, e ter recebido os EPI necessários, registrados na minha ficha de EPI. ' +
     'Comprometo-me a cumprir as orientações aqui descritas, as normas regulamentadoras aplicáveis e os procedimentos dos clientes. ' + consequencia;
-  return { nome, nomeCompleto: p.nomeCompleto || nome, funcao: p.funcao, vinculo: p.vinculo, vincTxt, terceirizado: terc, razao: p.razao, cnpj: p.cnpj, inicio: p.inicio ? dia_(p.inicio) : '', modelo: cod,
+  return { nome, nomeCompleto: semTitulo_(p.nomeCompleto || nome), cpf: p.cpf, funcao: p.funcao, vinculo: p.vinculo, vincTxt, terceirizado: terc, razao: p.razao, cnpj: p.cnpj, inicio: p.inicio ? dia_(p.inicio) : '', modelo: cod,
     setor: m.setor, cargoPGR: m.cargoPGR, cbo: cboF, atividades: m.atividades, riscos: m.riscos, epis: m.epis, treinos: m.treinos,
     medidas: OSSST_MEDIDAS, proibicoes: OSSST_PROIBICOES, intro, tercTxt, direitos, decl };
 }
@@ -2520,7 +2520,7 @@ function docOSSST_(nome, ass) {
   const quando = ass.data ? 'Assinado digitalmente em ' + ass.data : 'Data: ____/____/______';
   const corpo = cabDoc_('ORDEM DE SERVIÇO DE SST', 'NR-1, item 1.4.1' + (ass.n ? ' · Registro nº ' + ass.n : '')) +
     (d.terceirizado ? '<div style="border:2px solid #CD0000;padding:4px 8px;margin:0 0 6px;font-weight:bold;font-size:9.5pt">PRESTADOR DE SERVIÇO TERCEIRIZADO</div>' : '') +
-    '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(d.nomeCompleto) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(d.funcao) + '</td></tr>' +
+    '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(d.nomeCompleto) + '</td></tr>' + (d.cpf ? '<tr><td class="r">CPF</td><td>' + esc_(d.cpf) + '</td></tr>' : '') + '<tr><td class="r">Função</td><td>' + esc_(d.funcao) + '</td></tr>' +
     '<tr><td class="r">CBO</td><td>' + esc_(d.cbo) + '</td></tr><tr><td class="r">Setor / cargo de referência no PGR</td><td>' + esc_(d.setor) + ' · ' + esc_(d.cargoPGR) + '</td></tr>' +
     '<tr><td class="r">Vínculo</td><td>' + esc_(d.vincTxt) + '</td></tr>' +
     (d.terceirizado ? '<tr><td class="r">Empresa contratada</td><td>' + (d.razao ? esc_(d.razao) : '______________________________') + (d.cnpj ? ' · CNPJ ' + esc_(d.cnpj) : '') + '</td></tr>' +
@@ -2587,7 +2587,7 @@ function dadosColab_(nome) {
   const p = (function () { try { return pessoasSST_().find(x => x.nome === nome); } catch (e) { return null; } })() || {};
   const ck = v => '<span style="font-family:DejaVu Sans,Arial,sans-serif;font-size:11pt">' + (p.vinculo === v ? '&#9746;' : '&#9744;') + '</span> ';
   const prest = p.vinculo === 'Contrato (prestador)';
-  return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nomeDoc_(nome)) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
+  return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nomeDoc_(nome)) + '</td></tr>' + (p.cpf ? '<tr><td class="r">CPF</td><td>' + esc_(p.cpf) + '</td></tr>' : '') + '<tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
     '<tr><td class="r">Vínculo</td><td>' + ck('CLT') + 'CLT &nbsp;&nbsp; ' + ck('Contrato (prestador)') + 'Prestador de serviço &nbsp;&nbsp; ' + ck('Sócio / administração') + 'Sócio</td></tr>' +
     (prest || p.cnpj ? '<tr><td class="r">CNPJ / MEI</td><td>' + (p.cnpj ? esc_(p.cnpj) : '______________________________') + '</td></tr>' : '') +
     '<tr><td class="r">' + (prest ? 'Início da prestação de serviços' : 'Início') + '</td><td>' + (p.inicio ? esc_(dia_(p.inicio)) : '____/____/______') + '</td></tr>' +
