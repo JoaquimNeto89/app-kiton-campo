@@ -3304,7 +3304,7 @@ function estiloPDF_() {
     '.cab{width:100%;border-collapse:collapse;border-bottom:3px solid #CD0000;margin-bottom:8px}.cab td{vertical-align:middle;padding:0 0 6px}' +
     '.emp{font-size:8pt;color:#5d6670}.num{text-align:right}.num b{display:block;font-size:15pt}.num span{font-size:8.5pt;color:#5d6670}' +
     'table.d{width:100%;border-collapse:collapse;margin:2px 0 6px}table.d td{padding:3px 6px;border-bottom:1px solid #e6e9ed;vertical-align:top}' +
-    'td.r{width:150px;color:#5d6670;font-size:8.5pt}' +
+    'td.r{width:210px;white-space:nowrap;color:#5d6670;font-size:8.5pt}' +
     '.b{margin:8px 0 6px;page-break-inside:avoid}.bt{font-weight:bold;font-size:10pt;color:#000000;border-bottom:2px solid #CD0000;padding:0 0 2px 0;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}' +
     '.bc{border:1px solid #9aa3ad;padding:6px 8px;line-height:1.4}' +
     '.quebra{page-break-before:always}.apt{font-weight:bold;font-size:11pt;border-top:2px solid #1c1f23;padding-top:5px;margin:6px 0 4px}' +
