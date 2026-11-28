@@ -2585,14 +2585,25 @@ function pdfDoc_(corpo, nomeArq, paisagem) {
     '</style></head><body>' + envolverPDF_(corpo) + '</body></html>';
   return Utilities.newBlob(html, 'text/html', 'doc.html').getAs('application/pdf').setName(nomeArq);
 }
+/** Contrato de prestação de serviço atual do colaborador (Gestão SST, tipo C16). */
+function contratoVigente_(nome) {
+  try {
+    const l = ler_(ABA_SST_DOCS).linhas.filter(x => txt_(x.get('Colaborador')) === nome && txt_(x.get('Código do tipo')) === 'C16' && txt_(x.get('Atual')) === 'Sim').pop();
+    return l ? { de: dia_(l.get('Emissão')), ate: dia_(l.get('Validade')) } : null;
+  } catch (e) { return null; }
+}
 function dadosColab_(nome) {
   const p = (function () { try { return pessoasSST_().find(x => x.nome === nome); } catch (e) { return null; } })() || {};
-  const ck = v => '<span style="font-family:DejaVu Sans,Arial,sans-serif;font-size:11pt">' + (p.vinculo === v ? '&#9746;' : '&#9744;') + '</span> ';
   const prest = p.vinculo === 'Contrato (prestador)';
+  let vinc;
+  if (prest) {
+    const c = contratoVigente_(nome);
+    vinc = 'Terceirizado' + (c ? ' (contrato vigente de ' + c.de + (c.ate ? ' a ' + c.ate : '') + ')' : ' (contrato de prestação de serviço)');
+  } else if (p.vinculo === 'Sócio / administração') vinc = 'Sócio administrador';
+  else vinc = 'Empregado (CLT)' + (p.inicio ? ', admitido em ' + dia_(p.inicio) : '');
   return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nomeDoc_(nome)) + '</td></tr>' + (p.cpf ? '<tr><td class="r">CPF</td><td>' + esc_(p.cpf) + '</td></tr>' : '') + '<tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
-    '<tr><td class="r">Vínculo</td><td>' + ck('CLT') + 'CLT &nbsp;&nbsp; ' + ck('Contrato (prestador)') + 'Prestador de serviço &nbsp;&nbsp; ' + ck('Sócio / administração') + 'Sócio</td></tr>' +
-    (prest || p.cnpj ? '<tr><td class="r">CNPJ / MEI</td><td>' + (p.cnpj ? esc_(p.cnpj) : '______________________________') + '</td></tr>' : '') +
-    '<tr><td class="r">' + (prest ? 'Início da prestação de serviços' : 'Início') + '</td><td>' + (p.inicio ? esc_(dia_(p.inicio)) : '____/____/______') + '</td></tr>' +
+    '<tr><td class="r">Vínculo</td><td>' + esc_(vinc) + '</td></tr>' +
+    (prest || p.cnpj ? '<tr><td class="r">Empresa contratada</td><td>' + (p.razao ? esc_(p.razao) + ' · ' : '') + 'CNPJ ' + (p.cnpj ? esc_(p.cnpj) : '______________________________') + '</td></tr>' : '') +
     '<tr><td class="r">Contratante</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>';
 }
 function docTermo_(nome, extra) {
