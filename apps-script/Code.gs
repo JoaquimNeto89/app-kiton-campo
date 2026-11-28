@@ -2346,6 +2346,19 @@ function arquivarAssinados_(nome, docs, reg) {
   } catch (e) { console.error('arquivarAssinados_: ' + e.message); return []; }
 }
 
+/** Pelo editor: reenvia ao e-mail da Kiton, num só e-mail, as cópias assinadas atuais (fichas de EPI e termos). */
+function reenviarCopiasAssinadas() {
+  const t = ler_(ABA_SST_DOCS);
+  const ls = t.linhas.filter(l => ['C29', 'C30'].indexOf(txt_(l.get('Código do tipo'))) >= 0 && txt_(l.get('Atual')) === 'Sim');
+  const anexos = [], lista = [];
+  ls.forEach(l => { try { const f = DriveApp.getFileById(txt_(l.get('Arquivo'))); anexos.push(f.getBlob()); lista.push('- ' + txt_(l.get('Colaborador')) + ': ' + txt_(l.get('Documento')) + ' (' + f.getUrl() + ')'); } catch (e) { } });
+  if (!anexos.length) return 'nada';
+  MailApp.sendEmail(EMAIL_KITON, 'Cópias assinadas (paisagem) | Kiton Hub',
+    'Segue o reenvio das cópias assinadas, já no formato paisagem:\n' + lista.join('\n') + '\n\nOs arquivos também estão na pasta de cada colaborador no Drive (Kiton Hub - Gestão SST) e na Gestão SST do app.',
+    { name: 'Kiton Hub', attachments: anexos });
+  return anexos.length;
+}
+
 /** Uso único, pelo editor: refaz em paisagem as cópias arquivadas automaticamente (sem novo e-mail) e manda o arquivo antigo para a lixeira. */
 function refazerCopiasPaisagem() {
   const t = ler_(ABA_SST_DOCS), lk = ler_(ABA_LINKS);
