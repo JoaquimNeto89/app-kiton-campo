@@ -1991,8 +1991,10 @@ function itensIndividuais_(nome) {
   }));
 }
 /** Como o item está marcado fisicamente: etiqueta com o código, número pintado ou sem marcação. */
+/** Marca / modelo sempre no mesmo padrão nos documentos (maiúsculas). */
+function marcaTxt_(v) { return txt_(v).toUpperCase(); }
 function identTxt_(i) {
-  if (i.marcacao === 'Etiqueta') return 'Etiqueta ' + i.pat;
+  if (i.marcacao === 'Etiqueta') return 'Etiqueta';
   if (i.marcacao === 'Sem marcação') return 'Sem marcação';
   return i.ident ? 'Pintado nº ' + i.ident : 'Sem marcação';
 }
@@ -2603,8 +2605,8 @@ function docTermo_(nome, extra) {
   const base = p && p.vinculo === 'Contrato (prestador)' ? 'conforme o contrato de prestação de serviço vigente' : 'conforme a legislação aplicável e o acordo vigente';
   const corpo = cabDoc_('TERMO DE RESPONSABILIDADE', 'Ferramentas de uso individual') + dadosColab_(nome) +
     '<div class="bt" style="margin-top:8px">Ferramentas e equipamentos sob responsabilidade do ' + (p && p.vinculo === 'Contrato (prestador)' ? 'prestador de serviço' : 'colaborador') + '</div>' +
-    '<table class="lst cen"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:17%">Marca / modelo</th><th style="width:11%">Nº de série</th><th style="width:13%">Identificação</th><th style="width:7%">Estado</th><th style="width:10%">Valor (R$)</th></tr></thead><tbody>' +
-    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td class="esq">' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td><td>' + esc_(i.estado) + '</td><td>' + brl(i.valor) + '</td></tr>').join('')
+    '<table class="lst cen"><thead><tr><th style="width:11%">Código</th><th>Descrição</th><th style="width:17%">Marca / modelo</th><th style="width:10%">Nº de série</th><th style="width:9%">Identificação</th><th style="width:6%">Estado</th><th style="width:8%">Valor (R$)</th></tr></thead><tbody>' +
+    (itens.length ? itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td class="esq">' + esc_(i.desc) + '</td><td>' + esc_(marcaTxt_(i.marca)) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td><td>' + esc_(i.estado) + '</td><td>' + brl(i.valor) + '</td></tr>').join('')
       : '<tr><td colspan="7">Nenhum item cadastrado.</td></tr>') +
     '<tr><th colspan="6">Total (' + itens.length + ' itens)</th><th>' + brl(total) + '</th></tr></tbody></table>' +
     '<div style="page-break-inside:avoid"><div class="decl">Declaro ter recebido da ' + esc_(EMPRESA.nome) + ' as ferramentas e equipamentos relacionados acima, em bom estado de conservação e funcionamento, para uso exclusivo nas atividades executadas para a empresa. ' +
@@ -2636,7 +2638,7 @@ function docLista_(tipo) {
     '<table class="lst cen"><tr><th>Patrimônio</th><th>Descrição</th><th>Tipo</th><th>Marca / modelo</th><th>Nº de série</th><th>Nº pintado</th><th>Estado</th>' + (tipo === 'epc' ? '' : '<th>Calibração</th>') + '</tr>' +
     itens.map(l => {
       const st = txt_(l.get('Status da calibração')), val = dia_(l.get('Validade da calibração'));
-      return '<tr><td>' + esc_(l.get('Patrimônio')) + '</td><td class="esq">' + esc_(l.get('Descrição')) + '</td><td>' + esc_(l.get('Tipo')) + '</td><td>' + esc_(l.get('Marca / modelo')) + '</td><td>' + esc_(l.get('Nº de série')) +
+      return '<tr><td>' + esc_(l.get('Patrimônio')) + '</td><td class="esq">' + esc_(l.get('Descrição')) + '</td><td>' + esc_(l.get('Tipo')) + '</td><td>' + esc_(marcaTxt_(l.get('Marca / modelo'))) + '</td><td>' + esc_(l.get('Nº de série')) +
         '</td><td>' + esc_(l.get('Nº pintado / gravado')) + '</td><td>' + esc_(l.get('Estado')) + '</td>' + (tipo === 'epc' ? '' : '<td>' + (txt_(l.get('Tipo')) === 'Instrumento' ? esc_(st === 'Válido' ? 'Válida até ' + val : st || 'Sem calibração') : 'Não requer') + '</td>') + '</tr>';
     }).join('') + '</table>';
   return pdfDoc_(corpo, (tipo === 'epc' ? 'Lista de EPC' : 'Lista de ferramentas coletivas') + ' - ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd') + '.pdf');
@@ -2821,9 +2823,9 @@ function docEmprestimo_(n) {
     (outra ? '<tr><td class="r">Retirado por</td><td>' + esc_(e.retiradoPor) + ' · documento ' + esc_(e.docRetirada) + '</td></tr>' : '') +
     '<tr><td class="r">Data do empréstimo</td><td>' + esc_(e.data) + '</td></tr><tr><td class="r">Devolução prevista</td><td><b>' + esc_(e.previsao) + '</b></td></tr>' +
     '<tr><td class="r">Comodante</td><td>' + esc_(EMPRESA.nome) + ' · CNPJ ' + esc_(EMPRESA.cnpj) + '</td></tr></table>' +
-    '<div class="bt" style="margin-top:8px">Itens emprestados</div><table class="lst"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:18%">Marca / modelo</th><th style="width:12%">Nº de série</th><th style="width:14%">Identificação</th>' +
+    '<div class="bt" style="margin-top:8px">Itens emprestados</div><table class="lst cen"><thead><tr><th style="width:14%">Código</th><th>Descrição</th><th style="width:18%">Marca / modelo</th><th style="width:12%">Nº de série</th><th style="width:14%">Identificação</th>' +
     (e.resultado.length ? '<th style="width:12%">Devolução</th>' : '') + '<th style="width:11%;text-align:right">Valor de reposição (R$)</th></tr></thead><tbody>' +
-    e.itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td>' + esc_(i.desc) + '</td><td>' + esc_(i.marca) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td>' +
+    e.itens.map(i => '<tr><td style="white-space:nowrap">' + esc_(i.pat) + '</td><td class="esq">' + esc_(i.desc) + '</td><td>' + esc_(marcaTxt_(i.marca)) + '</td><td>' + esc_(i.serie) + '</td><td>' + esc_(identTxt_(i)) + '</td>' +
       (e.resultado.length ? '<td>' + esc_(res[i.pat] || '') + '</td>' : '') + '<td style="text-align:right">' + brl(i.valor) + '</td></tr>').join('') +
     '<tr><th colspan="' + (e.resultado.length ? 6 : 5) + '">Total (' + e.itens.length + ' itens)</th><th style="text-align:right">' + brl(e.total) + '</th></tr></tbody></table>' +
     '<div style="page-break-inside:avoid"><div class="decl">Declaro ter recebido em empréstimo, a título gratuito, os itens relacionados acima, em bom estado de conservação e funcionamento, ' +
