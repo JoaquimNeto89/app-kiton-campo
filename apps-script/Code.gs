@@ -2318,9 +2318,10 @@ function arquivarAssinados_(nome, docs, reg) {
     const extra = registroAssinaturaHtml_(reg, quando);
     const carimbo = Utilities.formatDate(quando, TZ, 'yyyy-MM-dd HHmm');
     const pasta = pasta_(['Kiton Hub - Gestão SST', nome]);
-    const t = ler_(ABA_SST_DOCS), tipos = tiposSST_();
+    const tipos = tiposSST_();
     const saida = [], anexos = [];
     docs.forEach(d => {
+      const t = ler_(ABA_SST_DOCS); // relido a cada documento para não repetir o Nº
       const cod = d === 'ficha' ? 'C29' : 'C30';
       const pdf = (d === 'ficha' ? docFichaEPI_(nome, extra) : docTermo_(nome, extra))
         .setName((d === 'ficha' ? 'Ficha de EPI' : 'Termo de ferramentas') + ' - ' + nome + ' - assinado ' + carimbo + '.pdf');
