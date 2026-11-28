@@ -243,6 +243,11 @@ function anexar_(t, obj) {
 
 /** Ordem alfabética pelo nome da pessoa, ignorando títulos (Eng., Dr., Dra.). */
 function semTitulo_(n) { return txt_(n).replace(/^(eng|enga|dr|dra|sr|sra)\.?\s+/i, ''); }
+/** Nome para documentos e arquivos: o nome completo cadastrado, sem título (Eng., Dr.). */
+function nomeDoc_(nome) {
+  try { const p = pessoasSST_().find(x => x.nome === nome); if (p && p.nomeCompleto) return semTitulo_(p.nomeCompleto); } catch (e) { }
+  return semTitulo_(nome);
+}
 function ordemNome_(a, b) { return semTitulo_(a).localeCompare(semTitulo_(b), 'pt', { sensitivity: 'base' }); }
 
 function txt_(v) { return v === null || v === undefined ? '' : String(v).trim(); }
@@ -2324,7 +2329,7 @@ function arquivarAssinados_(nome, docs, reg) {
       const t = ler_(ABA_SST_DOCS); // relido a cada documento para não repetir o Nº
       const cod = d === 'ficha' ? 'C29' : 'C30';
       const pdf = (d === 'ficha' ? docFichaEPI_(nome, extra) : docTermo_(nome, extra))
-        .setName((d === 'ficha' ? 'Ficha de EPI' : 'Termo de ferramentas') + ' - ' + nome + ' - assinado ' + carimbo + '.pdf');
+        .setName((d === 'ficha' ? 'Ficha de EPI' : 'Termo de ferramentas') + ' - ' + nomeDoc_(nome) + ' - assinado ' + carimbo + '.pdf');
       const arq = pasta.createFile(pdf);
       t.linhas.filter(l => txt_(l.get('Colaborador')) === nome && txt_(l.get('Código do tipo')) === cod && txt_(l.get('Atual')) === 'Sim').forEach(l => set_(t, l._linha, 'Atual', 'Não'));
       const tipo = tipos.find(x => x.codigo === cod);
@@ -2335,8 +2340,8 @@ function arquivarAssinados_(nome, docs, reg) {
       anexos.push(pdf); saida.push({ doc: d, link: arq.getUrl() });
     });
     try {
-      MailApp.sendEmail(EMAIL_KITON, 'Assinatura recebida | ' + nome + ' | Kiton Hub',
-        nome + ' assinou em ' + Utilities.formatDate(quando, TZ, 'dd/MM/yyyy HH:mm') + ':\n' +
+      MailApp.sendEmail(EMAIL_KITON, 'Assinatura recebida | ' + nomeDoc_(nome) + ' | Kiton Hub',
+        nomeDoc_(nome) + ' assinou em ' + Utilities.formatDate(quando, TZ, 'dd/MM/yyyy HH:mm') + ':\n' +
         saida.map(x => '- ' + (x.doc === 'ficha' ? 'Ficha de EPI' : 'Termo de ferramentas') + ': ' + x.link).join('\n') +
         '\n\nMeio: ' + (reg.via || 'App Kiton Hub') + '\n' + (reg.anterior ? '' : (geoTxt_(reg.geo) || 'Localização não autorizada no aparelho.') + '\n') +
         '\nAs cópias assinadas estão anexas, na pasta do colaborador no Drive (Kiton Hub - Gestão SST) e na Gestão SST do app.',
@@ -2370,7 +2375,7 @@ function refazerCopiasPaisagem() {
     const reg = { via: obs.split('. ')[0], cpf: /CPF/.test(res), aparelho: res.split('Aparelho: ')[1] || '', anterior: /anterior/.test(obs) };
     const extra = registroAssinaturaHtml_(reg, quando);
     const pdf = (cod === 'C29' ? docFichaEPI_(nome, extra) : docTermo_(nome, extra))
-      .setName((cod === 'C29' ? 'Ficha de EPI' : 'Termo de ferramentas') + ' - ' + nome + ' - assinado ' + Utilities.formatDate(quando, TZ, 'yyyy-MM-dd HHmm') + '.pdf');
+      .setName((cod === 'C29' ? 'Ficha de EPI' : 'Termo de ferramentas') + ' - ' + nomeDoc_(nome) + ' - assinado ' + Utilities.formatDate(quando, TZ, 'yyyy-MM-dd HHmm') + '.pdf');
     const antigo = txt_(l.get('Arquivo'));
     const arq = pasta_(['Kiton Hub - Gestão SST', nome]).createFile(pdf);
     set_(t, l._linha, 'Arquivo', arq.getId());
@@ -2534,7 +2539,7 @@ function docOSSST_(nome, ass) {
     '<table style="width:100%;margin-top:14px;font-size:8.5pt"><tr>' + assin(ass.img, d.nomeCompleto, d.terceirizado ? 'Prestador de serviço' : 'Colaborador', quando) + '<td style="width:4%"></td>' +
     assin(ass.imgResp, ass.resp || '', 'Responsável pela emissão · ' + EMPRESA.nome, quando) + '</tr></table>' +
     '<p style="font-size:8pt;color:#5d6670;margin-top:8px">Maringá-PR, ' + (ass.dataExt || '____ de ______________ de ________') + '. Reemitir esta OS sempre que houver mudança de função, de atividades ou de riscos, ou revisão do PGR.</p></div>';
-  return pdfDoc_(corpo, 'OS de SST - ' + nome + (ass.dataIso ? ' - ' + ass.dataIso : '') + '.pdf');
+  return pdfDoc_(corpo, 'OS de SST - ' + nomeDoc_(nome) + (ass.dataIso ? ' - ' + ass.dataIso : '') + '.pdf');
 }
 
 /** Assinatura da OS de SST na tela: gera o PDF assinado e registra como documento atual (C14) na Gestão SST. */
@@ -2582,7 +2587,7 @@ function dadosColab_(nome) {
   const p = (function () { try { return pessoasSST_().find(x => x.nome === nome); } catch (e) { return null; } })() || {};
   const ck = v => '<span style="font-family:DejaVu Sans,Arial,sans-serif;font-size:11pt">' + (p.vinculo === v ? '&#9746;' : '&#9744;') + '</span> ';
   const prest = p.vinculo === 'Contrato (prestador)';
-  return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nome) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
+  return '<table class="d"><tr><td class="r">Nome</td><td>' + esc_(nomeDoc_(nome)) + '</td></tr><tr><td class="r">Função</td><td>' + esc_(funcaoDe_(nome) || '-') + '</td></tr>' +
     '<tr><td class="r">Vínculo</td><td>' + ck('CLT') + 'CLT &nbsp;&nbsp; ' + ck('Contrato (prestador)') + 'Prestador de serviço &nbsp;&nbsp; ' + ck('Sócio / administração') + 'Sócio</td></tr>' +
     (prest || p.cnpj ? '<tr><td class="r">CNPJ / MEI</td><td>' + (p.cnpj ? esc_(p.cnpj) : '______________________________') + '</td></tr>' : '') +
     '<tr><td class="r">' + (prest ? 'Início da prestação de serviços' : 'Início') + '</td><td>' + (p.inicio ? esc_(dia_(p.inicio)) : '____/____/______') + '</td></tr>' +
@@ -2606,9 +2611,9 @@ function docTermo_(nome, extra) {
     'Comprometo-me a utilizá-los corretamente, zelar pela guarda e conservação, comunicar imediatamente qualquer dano, perda ou extravio e devolvê-los quando solicitado ou no encerramento da prestação de serviços. ' +
     'Estou ciente de que danos causados por mau uso, perda ou extravio poderão ser ressarcidos pelo valor de reposição, ' + base + '.</div>' +
     '<table style="width:100%;margin-top:16px;font-size:8.5pt"><tr><td style="width:48%;vertical-align:bottom">' + (ass ? '<img src="' + ass + '" style="height:55px;display:block;margin-bottom:2px">' : '<div style="height:46px"></div>') +
-    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nome) + ' | ' + (p && p.vinculo === 'Contrato (prestador)' ? 'Prestador de serviço' : 'Colaborador') + '<br>' + (valido ? 'Assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : 'Data: ____/____/______') + '</div></td><td style="width:4%"></td>' +
+    '<div style="border-top:1px solid #1c1f23;padding-top:3px">' + esc_(nomeDoc_(nome)) + ' | ' + (p && p.vinculo === 'Contrato (prestador)' ? 'Prestador de serviço' : 'Colaborador') + '<br>' + (valido ? 'Assinado digitalmente em ' + esc_(t.data) + ' (termo nº ' + esc_(t.n) + ')' : 'Data: ____/____/______') + '</div></td><td style="width:4%"></td>' +
     '<td style="width:48%;vertical-align:bottom"><div style="height:46px"></div><div style="border-top:1px solid #1c1f23;padding-top:3px">Responsável pela entrega e conferência<br>' + esc_(EMPRESA.nome) + '</div></td></tr></table></div>';
-  return pdfDoc_(corpo + (extra || ''), 'Termo de ferramentas - ' + nome + '.pdf', true);
+  return pdfDoc_(corpo + (extra || ''), 'Termo de ferramentas - ' + nomeDoc_(nome) + '.pdf', true);
 }
 
 function docFichaEPI_(nome, extra) {
@@ -2620,7 +2625,7 @@ function docFichaEPI_(nome, extra) {
     (eps.length ? eps.map(e => '<tr><td>' + (e.situacao === 'Aguardando assinatura' ? '' : esc_(e.data)) + '</td><td>' + esc_(e.desc) + (e.serie ? '<br><span style="color:#5d6670">Série/lote: ' + esc_(e.serie) + '</span>' : '') + '</td><td>' + esc_(e.ca || 'Uniforme') + '</td><td>' + esc_(e.tamanho) + '</td><td>' + esc_(e.qtd) + '</td><td>' + esc_(e.motivo) + '</td><td>' + esc_(e.situacao) + '</td><td>' +
       (e.assinatura ? '<img src="' + imgDrive_(e.assinatura) + '">' : '') + '</td></tr>').join('') : '<tr><td colspan="8">Nenhuma entrega registrada.</td></tr>') + '</tbody></table></div>' +
     '<p style="font-size:8pt;color:#5d6670">As assinaturas foram coletadas na tela do aparelho no momento de cada entrega, pelo app Kiton Hub.</p>';
-  return pdfDoc_(corpo + (extra || ''), 'Ficha de EPI - ' + nome + '.pdf', true);
+  return pdfDoc_(corpo + (extra || ''), 'Ficha de EPI - ' + nomeDoc_(nome) + '.pdf', true);
 }
 
 function docLista_(tipo) {
